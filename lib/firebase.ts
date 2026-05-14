@@ -1,7 +1,6 @@
-import { initializeApp, FirebaseApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { initializeApp, FirebaseApp, getApp } from 'firebase/app';
+import { Auth, getAuth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
-import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
 // Firebase configuration from environment variables
 // These values are securely stored in .env.local (never commit to git)
@@ -25,18 +24,25 @@ if (missingFields.length > 0) {
   throw new Error('Firebase configuration is incomplete. Please check your .env.local file.');
 }
 
-// Initialize Firebase
+// Initialize Firebase (prevent duplicate initialization)
 let firebaseApp: FirebaseApp | null = null;
 try {
-  firebaseApp = initializeApp(firebaseConfig);
-  console.log('✅ Firebase initialized successfully');
+  // Check if Firebase app already exists
+  try {
+    firebaseApp = getApp();
+    console.log('✅ Firebase app already initialized, reusing existing instance');
+  } catch (err) {
+    // App doesn't exist, initialize it
+    firebaseApp = initializeApp(firebaseConfig);
+    console.log('✅ Firebase initialized successfully');
+  }
 } catch (error) {
   console.error('❌ Firebase initialization error:', error);
   throw error;
 }
 
 // Initialize Firebase Authentication
-let auth;
+let auth: Auth;
 try {
   auth = getAuth(firebaseApp);
   console.log('✅ Firebase Auth initialized');

@@ -5,16 +5,23 @@ import {
   StyleSheet,
   TextInput,
   Pressable,
-  Dimensions,
-  StatusBar,
   Animated,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
 import { OTPVerification } from './OTPVerification';
 import { DriverDetailsScreen } from './DriverDetailsScreen';
+import { VehicleDetailsScreen } from './VehicleDetailsScreen';
+import { BankDetailsScreen } from './BankDetailsScreen';
+import { DocumentsVerificationScreen } from './DocumentsVerificationScreen';
+import {
+  storeOnboardingData,
+  getVerificationStatus,
+  OnboardingData,
+} from '@/lib/firestoreOnboardingService'; // Real Firebase Firestore
 
-const { width, height } = Dimensions.get('window');
+import { sendOTP } from '@/lib/firebaseAuthService'; // Real Firebase Auth
 
 interface MobileNumberVerificationProps {
   onVerify?: (mobileNumber: string) => void;
@@ -29,6 +36,19 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
   const [isLoading, setIsLoading] = useState(false);
   const [showOTP, setShowOTP] = useState(false);
   const [showDriverDetails, setShowDriverDetails] = useState(false);
+  const [showVehicleDetails, setShowVehicleDetails] = useState(false);
+  const [showBankDetails, setShowBankDetails] = useState(false);
+  const [showVerification, setShowVerification] = useState(false);
+
+  // Collect data from all screens
+  const [driverData, setDriverData] = useState<any>(null);
+  const [vehicleData, setVehicleData] = useState<any>(null);
+  const [bankData, setBankData] = useState<any>(null);
+  
+  // Firebase UID after OTP verification
+  const [firebaseUid, setFirebaseUid] = useState<string | null>(null);
+  const [firebaseIdToken, setFirebaseIdToken] = useState<string | null>(null);
+
   const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -49,26 +69,92 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
 
   const handleVerifyAndContinue = async () => {
     if (!isValidMobileNumber(mobileNumber)) {
-      alert('Please enter a valid 10-digit mobile number');
+      Alert.alert('Invalid Mobile Number', 'Please enter a valid 10-digit mobile number');
       return;
     }
 
     setIsLoading(true);
     try {
+      // Send OTP via Firebase
+      const phoneNumberWithCode = `+91${mobileNumber}`;
+      console.log('🔄 Sending OTP to:', phoneNumberWithCode);
+      
+      await sendOTP(phoneNumberWithCode);
+      
+      console.log('✅ OTP sent successfully, showing verification screen');
       // Show OTP verification screen
       setShowOTP(true);
-    } catch (error) {
-      console.error('Error verifying mobile number:', error);
-      alert('An error occurred. Please try again.');
+    } catch (error: any) {
+      console.error('❌ Error sending OTP:', error);
+      
+      // Show user-friendly error message
+      let errorMessage = 'Failed to send verification code. Please try again.';
+      
+      if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert(
+        'Verification Failed',
+        errorMessage,
+        [
+          {
+            text: 'Retry',
+            onPress: () => {
+              // User can retry by tapping the button again
+            },
+          },
+          {
+            text: 'Check Number',
+            onPress: () => {
+              // Focus on the input field for user to check
+              setMobileNumber('');
+            },
+          },
+        ]
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleOTPVerify = (otp: string) => {
-    // OTP verified successfully, show driver details screen
-    console.log('OTP verified:', otp);
-    setShowDriverDetails(true);
+  const handleOTPVerify = async (result: { uid: string; phoneNumber: string; idToken: string; otp: string }) => {
+    // OTP verified successfully with Firebase
+    console.log('✅ OTP verified with Firebase');
+    console.log('User UID:', result.uid);
+    console.log('Phone Number:', result.phoneNumber);
+    console.log('ID Token:', result.idToken.substring(0, 20) + '...');
+
+    try {
+      setIsLoading(false);
+      
+      // Store Firebase UID for later use
+      setFirebaseUid(result.uid);
+      setFirebaseIdToken(result.idToken);
+      
+      console.log('✅ Firebase UID stored in state');
+
+      const verificationStatus = await getVerificationStatus(result.uid, result.idToken);
+
+      if (verificationStatus?.status === 'verified') {
+        console.log('✅ Existing driver already verified, going to app');
+        onVerify?.(result.phoneNumber);
+        return;
+      }
+
+      if (verificationStatus?.status === 'pending') {
+        console.log('⏳ Existing driver verification pending, showing review screen');
+        setShowVerification(true);
+        setShowOTP(false);
+        return;
+      }
+
+      // New drivers and rejected drivers should complete or re-upload onboarding.
+      setShowDriverDetails(true);
+    } catch (error) {
+      console.error('Error processing OTP verification:', error);
+      Alert.alert('Error', 'Failed to process verification. Please try again.');
+    }
   };
 
   const handleChangeNumber = () => {
@@ -77,16 +163,138 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
   };
 
   const handleDriverDetailsSubmit = (data: any) => {
-    // Driver details submitted, complete the onboarding
+    // Store driver details and move to vehicle details
     console.log('Driver details submitted:', data);
-    // Call onVerify with all data
+    setDriverData(data);
+    setShowVehicleDetails(true);
+  };
+
+  const handleVehicleDetailsSubmit = (vehicleData: any) => {
+    // Store vehicle details and move to bank details
+    console.log('Vehicle details submitted:', vehicleData);
+    setVehicleData(vehicleData);
+    setShowBankDetails(true);
+  };
+
+  const handleBankDetailsSubmit = async (bankData: any) => {
+    // All data collected - store to Firestore
+    console.log('Bank details submitted:', bankData);
+    setBankData(bankData);
+
+    setIsLoading(true);
+    try {
+      if (!firebaseUid) {
+        Alert.alert('Error', 'Firebase UID not found. Please try again from the beginning.');
+        setIsLoading(false);
+        return;
+      }
+
+      // Prepare complete onboarding data
+      const onboardingData: Omit<
+        OnboardingData,
+        'createdAt' | 'updatedAt' | 'submittedAt'
+      > = {
+        phoneNumber: `+91${mobileNumber}`,
+        
+        // Driver details
+        fullName: driverData?.fullName || '',
+        photoUri: driverData?.photoUri || '',
+        drivingLicenseUri: driverData?.drivingLicenseUri || '',
+        identityProofUri: driverData?.identityProofUri || '',
+
+        // Vehicle details
+        vehicleNumber: vehicleData?.vehicleNumber || '',
+        vehicleType: vehicleData?.vehicleType || '',
+        vehicleCapacity: vehicleData?.vehicleCapacity || '',
+        bodyType: vehicleData?.bodyType || '',
+        rcBookUri: vehicleData?.rcBook || '',
+        insuranceUri: vehicleData?.insurance || '',
+        vehiclePhotoUris: vehicleData?.vehiclePhotos || [],
+
+        // Bank details
+        bankName: bankData?.bankName || '',
+        accountNumber: bankData?.accountNumber || '',
+        ifscCode: bankData?.ifscCode || '',
+        upiId: bankData?.upiId || '',
+
+        // Initial verification status
+        verificationStatus: 'pending',
+      };
+
+      console.log(`📝 Storing onboarding data to Firestore using UID: ${firebaseUid}`);
+
+      // Store to Firestore using Firebase UID
+      const result = await storeOnboardingData(
+        firebaseUid,
+        `+91${mobileNumber}`,
+        onboardingData,
+        firebaseIdToken || undefined
+      );
+
+      if (!result.success) {
+        Alert.alert('Error', result.error || 'Failed to store onboarding data');
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('✅ Onboarding data stored successfully to Firestore');
+
+      // Show verification screen
+      setShowVerification(true);
+      setShowBankDetails(false);
+    } catch (error) {
+      console.error('❌ Error storing onboarding data:', error);
+      Alert.alert(
+        'Error',
+        'Failed to complete onboarding. Please try again.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerificationComplete = () => {
+    // All verified and user can access the app
+    console.log('✅ User verified, accessing app');
     if (onVerify) {
       onVerify(`+91${mobileNumber}`);
     }
   };
 
+  const handleRetryUpload = () => {
+    // User wants to re-upload documents (go back to driver details)
+    setShowVerification(false);
+    setShowBankDetails(false);
+    setShowVehicleDetails(false);
+    setShowDriverDetails(true);
+  };
+
   return (
-    showDriverDetails ? (
+    showVerification ? (
+      <DocumentsVerificationScreen
+        uid={firebaseUid || undefined}
+        phoneNumber={`+91${mobileNumber}`}
+        idToken={firebaseIdToken || undefined}
+        onVerificationComplete={handleVerificationComplete}
+        onRetryUpload={handleRetryUpload}
+      />
+    ) : showBankDetails ? (
+      <BankDetailsScreen
+        onContinue={handleBankDetailsSubmit}
+        onBack={() => {
+          setShowBankDetails(false);
+          setShowVehicleDetails(true);
+        }}
+      />
+    ) : showVehicleDetails ? (
+      <VehicleDetailsScreen
+        onContinue={handleVehicleDetailsSubmit}
+        onBack={() => {
+          setShowVehicleDetails(false);
+          setShowDriverDetails(true);
+        }}
+      />
+    ) : showDriverDetails ? (
       <DriverDetailsScreen
         onContinue={handleDriverDetailsSubmit}
         onBack={() => {
@@ -108,58 +316,58 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
           { opacity: fadeAnim, paddingTop: insets.top },
         ]}
       >
-      {/* Status Bar */}
-      <View style={styles.statusBar}>
-      </View>
-
-      {/* Main Content */}
-      <View style={styles.contentContainer}>
-        {/* Title and Description */}
-        <View style={styles.headerContainer}>
-          <Text style={styles.title}>Enter Your Mobile Number</Text>
-          <Text style={styles.description}>
-            We'll send a one-time verification code to confirm your number.
-          </Text>
+        {/* Status Bar */}
+        <View style={styles.statusBar}>
         </View>
 
-        {/* Mobile Number Input */}
-        <View style={styles.inputContainer}>
-          {/* Country Code Box */}
-          <View style={styles.countryCodeBox}>
-            <Text style={styles.countryCodeLabel}>IND</Text>
-            <Text style={styles.countryCode}>+91</Text>
+        {/* Main Content */}
+        <View style={styles.contentContainer}>
+          {/* Title and Description */}
+          <View style={styles.headerContainer}>
+            <Text style={styles.title}>Enter Your Mobile Number</Text>
+            <Text style={styles.description}>
+              We'll send a one-time verification code to confirm your number.
+            </Text>
           </View>
 
           {/* Mobile Number Input */}
-          <TextInput
-            style={styles.mobileNumberInput}
-            placeholder="Mobile Number"
-            placeholderTextColor={Colors.neutral700}
-            keyboardType="number-pad"
-            maxLength={10}
-            value={mobileNumber}
-            onChangeText={setMobileNumber}
-            editable={!isLoading}
-          />
+          <View style={styles.inputContainer}>
+            {/* Country Code Box */}
+            <View style={styles.countryCodeBox}>
+              <Text style={styles.countryCodeLabel}>IND</Text>
+              <Text style={styles.countryCode}>+91</Text>
+            </View>
+
+            {/* Mobile Number Input */}
+            <TextInput
+              style={styles.mobileNumberInput}
+              placeholder="Mobile Number"
+              placeholderTextColor={Colors.neutral700}
+              keyboardType="number-pad"
+              maxLength={10}
+              value={mobileNumber}
+              onChangeText={setMobileNumber}
+              editable={!isLoading}
+            />
+          </View>
+
+          {/* Verify & Continue Button */}
+          <Pressable
+            style={[styles.verifyButton, isLoading && styles.verifyButtonDisabled]}
+            onPress={handleVerifyAndContinue}
+            disabled={isLoading}
+          >
+            <Text style={styles.verifyButtonText}>
+              {isLoading ? 'Verifying...' : 'Verify & Continue'}
+            </Text>
+          </Pressable>
         </View>
 
-        {/* Verify & Continue Button */}
-        <Pressable
-          style={[styles.verifyButton, isLoading && styles.verifyButtonDisabled]}
-          onPress={handleVerifyAndContinue}
-          disabled={isLoading}
-        >
-          <Text style={styles.verifyButtonText}>
-            {isLoading ? 'Verifying...' : 'Verify & Continue'}
-          </Text>
-        </Pressable>
-      </View>
-
-      {/* Navigation Handle (Bottom) */}
-      <View style={styles.navigationHandle}>
-        <View style={styles.handleBar} />
-      </View>
-    </Animated.View>
+        {/* Navigation Handle (Bottom) */}
+        <View style={styles.navigationHandle}>
+          <View style={styles.handleBar} />
+        </View>
+      </Animated.View>
     )
   );
 };

@@ -14,15 +14,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
 
-// SVG Icons
-const RetryIcon = () => (
-  <Text style={{ fontSize: 12, color: '#d00416', fontWeight: 'bold' }}>↻</Text>
-);
-
-const CloseIcon = () => (
-  <Text style={{ fontSize: 16, color: 'white', fontWeight: 'bold' }}>✕</Text>
-);
-
 interface DriverDetailsScreenProps {
   onContinue?: (data: DriverDetailsData) => void;
   onBack?: () => void;
@@ -72,7 +63,7 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
   ) => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -258,7 +249,7 @@ const DocumentUploadItem: React.FC<DocumentUploadItemProps> = ({
         <Text style={styles.documentDescription}>{description}</Text>
         {hasError && (
           <View style={styles.errorContainer}>
-            <RetryIcon />
+            <Text style={styles.retryIcon}>↻</Text>
             <Text style={styles.errorText}>Upload again</Text>
           </View>
         )}
@@ -274,7 +265,7 @@ const DocumentUploadItem: React.FC<DocumentUploadItemProps> = ({
               onPress={onRemove}
               disabled={isLoading}
             >
-              <CloseIcon />
+              <Text style={styles.removeButtonIcon}>✕</Text>
             </Pressable>
           </View>
         ) : (
@@ -322,16 +313,16 @@ const styles = StyleSheet.create({
     color: '#1c1c1c',
     fontWeight: '400',
   },
-headerTitle: {
-  fontSize: 30,
-  fontWeight: '600',
-  color: '#1c1c1c',
-  fontFamily: 'Poppins',
-  lineHeight: 32,
-  textAlign: 'center',
+  headerTitle: {
+    fontSize: 30,
+    fontWeight: '600',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+    lineHeight: 32,
+    textAlign: 'center',
     flex: -1,
-  alignSelf: 'center',
-},
+    alignSelf: 'center',
+  },
   // Content Wrapper
   contentWrapper: {
     flex: 1,
@@ -415,24 +406,24 @@ headerTitle: {
 
   // Document Item
   documentItem: {
-    flexDirection: 'row',
     gap: 12,
-    paddingHorizontal: 8,
     paddingVertical: 12,
+    paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#d2d2d2',
+    flexDirection: 'row',
     alignItems: 'flex-start',
   },
   documentInfo: {
-    flex: 1,
     gap: 4,
+    flex: 1,
   },
   documentTitle: {
     fontSize: 18,
     fontWeight: '500',
     color: '#1c1c1c',
     fontFamily: 'Poppins',
-    lineHeight: 20,
+    lineHeight: 18,
   },
   documentDescription: {
     fontSize: 12,
@@ -446,6 +437,12 @@ headerTitle: {
     gap: 4,
     alignItems: 'center',
     marginTop: 4,
+  },
+  retryIcon: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#d00416',
+    fontFamily: 'Poppins',
   },
   errorText: {
     fontSize: 12,
@@ -504,6 +501,12 @@ headerTitle: {
     alignItems: 'center',
     zIndex: 10,
   },
+  removeButtonIcon: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'white',
+    fontFamily: 'Poppins',
+  },
 
   // Continue Button
   continueButton: {
@@ -512,7 +515,7 @@ headerTitle: {
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 24,
+    marginTop: 40,
     marginBottom: 24,
   },
   continueButtonDisabled: {
@@ -524,6 +527,7 @@ headerTitle: {
     color: 'white',
     fontFamily: 'Poppins',
     lineHeight: 20,
+    letterSpacing: -0.5,
   },
 
   // Navigation Handle
@@ -541,3 +545,5 @@ headerTitle: {
     borderRadius: 12,
   },
 });
+
+export default DriverDetailsScreen;

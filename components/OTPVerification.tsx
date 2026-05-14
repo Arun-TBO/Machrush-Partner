@@ -7,15 +7,18 @@ import {
   Pressable,
   Dimensions,
   Animated,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
+
+import { verifyOTP, resendOTP } from '@/lib/firebaseAuthService'; // Real Firebase
 
 const { width } = Dimensions.get('window');
 
 interface OTPVerificationProps {
   mobileNumber: string;
-  onVerify?: (otp: string) => void;
+  onVerify?: (result: { uid: string; phoneNumber: string; idToken: string; otp: string }) => void;
   onChangeNumber?: () => void;
   onResendOTP?: () => void;
 }
@@ -26,14 +29,14 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
   onChangeNumber,
   onResendOTP,
 }) => {
-  const [otp, setOtp] = useState(['', '', '', '']);
+  const [otp, setOtp] = useState(['', '', '', '', '', '']); // 6-digit OTP
   const [isLoading, setIsLoading] = useState(false);
   const [resendCount, setResendCount] = useState(0);
   const [canResend, setCanResend] = useState(true);
   const [resendTimer, setResendTimer] = useState(0);
   const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const inputRefs = useRef<(TextInput | null)[]>([null, null, null, null]);
+  const inputRefs = useRef<(TextInput | null)[]>([null, null, null, null, null, null]);
 
   // Fade in animation on mount
   useEffect(() => {
@@ -71,7 +74,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
     setOtp(newOtp);
 
     // Move to next field
-    if (value && index < 3) {
+    if (value && index < 5) { // 6 fields total (0-5)
       inputRefs.current[index + 1]?.focus();
     }
   };
@@ -83,22 +86,43 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
   };
 
   const otpString = otp.join('');
-  const isOtpComplete = otpString.length === 4;
+  const isOtpComplete = otpString.length === 6; // 6-digit OTP
 
   const handleVerifyAndContinue = async () => {
     if (!isOtpComplete) {
-      alert('Please enter a valid 4-digit OTP');
+      Alert.alert('Invalid OTP', 'Please enter the complete 6-digit verification code');
       return;
     }
 
     setIsLoading(true);
     try {
+      console.log('🔐 Verifying OTP with Firebase:', otpString);
+      
+      // Verify OTP with Firebase
+      const result = await verifyOTP(otpString);
+      
+      console.log('✅ OTP verified successfully');
+      console.log('User UID:', result.uid);
+      console.log('Phone Number:', result.phoneNumber);
+      
+      // Call the parent's onVerify callback with complete result
       if (onVerify) {
-        onVerify(otpString);
+        onVerify({
+          uid: result.uid,
+          phoneNumber: result.phoneNumber,
+          idToken: result.idToken,
+          otp: otpString,
+        });
       }
-    } catch (error) {
-      console.error('Error verifying OTP:', error);
-      alert('An error occurred. Please try again.');
+    } catch (error: any) {
+      console.error('❌ Error verifying OTP:', error);
+      Alert.alert(
+        'Verification Failed',
+        error.message || 'Invalid OTP. Please check and try again.'
+      );
+      // Clear OTP input on error
+      setOtp(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
     } finally {
       setIsLoading(false);
     }
@@ -107,12 +131,30 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
   const handleResendOTP = async () => {
     setCanResend(false);
     setResendCount(resendCount + 1);
-    // Reset OTP
-    setOtp(['', '', '', '']);
-    inputRefs.current[0]?.focus();
-
-    if (onResendOTP) {
-      onResendOTP();
+    
+    try {
+      console.log('📱 Resending OTP...');
+      
+      // Call resendOTP function from Firebase service
+      await resendOTP();
+      
+      console.log('✅ OTP resent successfully');
+      
+      // Reset OTP input
+      setOtp(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
+      
+      if (onResendOTP) {
+        onResendOTP();
+      }
+    } catch (error: any) {
+      console.error('❌ Error resending OTP:', error);
+      Alert.alert(
+        'Resend Failed',
+        error.message || 'Failed to resend OTP. Please try again.'
+      );
+      // Allow user to try again
+      setCanResend(true);
     }
   };
 
@@ -135,7 +177,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
           <Text style={styles.title}>Verify Your
             {'\n'}Number</Text>
           <View style={styles.descriptionContainer}>
-            <Text style={styles.description}>4-digit code sent to </Text>
+            <Text style={styles.description}>6-digit code sent to </Text>
             <Pressable onPress={onChangeNumber}>
               <Text style={styles.phoneNumberLink}>{mobileNumber}</Text>
             </Pressable>

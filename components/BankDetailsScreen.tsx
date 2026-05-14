@@ -1,0 +1,433 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  Pressable,
+  ScrollView,
+  Modal,
+  FlatList,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Colors, Spacing, Radius } from '@/lib/theme';
+
+interface BankDetailsScreenProps {
+  onContinue?: (bankData: BankDetailsData) => void;
+  onBack?: () => void;
+}
+
+interface BankDetailsData {
+  bankName: string;
+  accountNumber: string;
+  ifscCode: string;
+  upiId: string;
+}
+
+const BANK_LIST = [
+  'HDFC Bank',
+  'ICICI Bank',
+  'Axis Bank',
+  'State Bank of India',
+  'Kotak Mahindra Bank',
+  'IndusInd Bank',
+  'IDBI Bank',
+  'Punjab National Bank',
+  'Bank of Baroda',
+  'Canara Bank',
+];
+
+export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
+  onContinue,
+  onBack,
+}) => {
+  const [bankName, setBankName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [ifscCode, setIfscCode] = useState('');
+  const [upiId, setUpiId] = useState('');
+  const [showBankModal, setShowBankModal] = useState(false);
+
+  const insets = useSafeAreaInsets();
+
+  const handleBankSelect = (bank: string) => {
+    setBankName(bank);
+    setShowBankModal(false);
+  };
+
+  const isFormValid = bankName && accountNumber && ifscCode;
+
+  const handleContinue = () => {
+    if (!isFormValid) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    // Validate IFSC code format (11 characters)
+    if (ifscCode.length !== 11) {
+      alert('IFSC code must be 11 characters long');
+      return;
+    }
+
+    // Validate account number (should be numeric)
+    if (!/^\d+$/.test(accountNumber)) {
+      alert('Account number must contain only digits');
+      return;
+    }
+
+    if (onContinue) {
+      onContinue({
+        bankName,
+        accountNumber,
+        ifscCode: ifscCode.toUpperCase(),
+        upiId,
+      });
+    }
+  };
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Top Navigation */}
+      <View style={styles.topNav}>
+        <Pressable style={styles.backButton} onPress={onBack}>
+          <Text style={styles.backIcon}>←</Text>
+        </Pressable>
+        <Text style={styles.navTitle}>Onboarding</Text>
+        <View style={{ width: 48 }} />
+      </View>
+
+      {/* Main Content */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header Section */}
+        <View style={styles.headerSection}>
+          <Text style={styles.title}>Bank details</Text>
+          <Text style={styles.subtitle}>Add your bank details to get paid</Text>
+        </View>
+
+        {/* Bank Name Dropdown */}
+        <View style={styles.inputSection}>
+          <Text style={styles.inputLabel}>Bank name</Text>
+          <Pressable
+            style={styles.dropdownButton}
+            onPress={() => setShowBankModal(true)}
+          >
+            <Text
+              style={[
+                styles.dropdownText,
+                { color: bankName ? Colors.neutral900 : Colors.neutral800 },
+              ]}
+            >
+              {bankName || 'Select Bank'}
+            </Text>
+            <Text style={styles.dropdownIcon}>▼</Text>
+          </Pressable>
+        </View>
+
+        {/* Account Number */}
+        <View style={styles.inputSection}>
+          <Text style={styles.inputLabel}>Account number</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder="Enter account number"
+            placeholderTextColor={Colors.neutral800}
+            value={accountNumber}
+            onChangeText={setAccountNumber}
+            keyboardType="number-pad"
+          />
+        </View>
+
+        {/* IFSC Code */}
+        <View style={styles.inputSection}>
+          <Text style={styles.inputLabel}>IFSC code</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder="e.g. HDFC0001234"
+            placeholderTextColor={Colors.neutral800}
+            value={ifscCode}
+            onChangeText={setIfscCode}
+            maxLength={11}
+          />
+          <Text style={styles.helperText}>
+            Find IFSC code on the first page of your passbook or on a cheque leaf. It is an
+            11-character code.
+          </Text>
+        </View>
+
+        {/* UPI ID (Optional) */}
+        <View style={styles.inputSection}>
+          <Text style={styles.inputLabel}>UPI ID (optional)</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder="name2465@okhdfcbank"
+            placeholderTextColor={Colors.neutral800}
+            value={upiId}
+            onChangeText={setUpiId}
+          />
+        </View>
+
+        {/* Continue Button */}
+        <Pressable
+          style={[styles.continueButton, !isFormValid && styles.buttonDisabled]}
+          onPress={handleContinue}
+          disabled={!isFormValid}
+        >
+          <Text style={styles.buttonText}>Continue</Text>
+        </Pressable>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+
+      {/* Bank Selection Modal */}
+      <Modal
+        visible={showBankModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowBankModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowBankModal(false)}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Bank</Text>
+              <Pressable onPress={() => setShowBankModal(false)}>
+                <Text style={styles.closeIcon}>✕</Text>
+              </Pressable>
+            </View>
+
+            <FlatList
+              data={BANK_LIST}
+              keyExtractor={(item) => item}
+              scrollEnabled={false}
+              renderItem={({ item }) => (
+                <Pressable
+                  style={styles.modalOption}
+                  onPress={() => handleBankSelect(item)}
+                >
+                  <Text style={styles.modalOptionText}>{item}</Text>
+                </Pressable>
+              )}
+            />
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Navigation Handle */}
+      <View style={styles.navigationHandle}>
+        <View style={styles.handleBar} />
+      </View>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.neutral100,
+  },
+
+  // Top Navigation
+  topNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    height: 64,
+    backgroundColor: Colors.neutral100,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  backButton: {
+    width: 48,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backIcon: {
+    fontSize: 24,
+    color: Colors.neutral900,
+  },
+  navTitle: {
+    fontSize: 20,
+    fontWeight: '500',
+    color: Colors.neutral900,
+    fontFamily: 'Poppins',
+  },
+
+  // Scroll View
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.lg,
+    paddingBottom: Spacing.xl,
+  },
+
+  // Header Section
+  headerSection: {
+    marginBottom: Spacing.lg,
+  },
+  title: {
+    fontSize: 40,
+    fontWeight: '500',
+    color: Colors.neutral900,
+    fontFamily: 'Poppins',
+    marginBottom: Spacing.sm,
+  },
+  subtitle: {
+    fontSize: 16,
+    fontWeight: '400',
+    color: Colors.neutral800,
+    fontFamily: 'Poppins',
+    lineHeight: 24,
+  },
+
+  // Input Section
+  inputSection: {
+    marginBottom: Spacing.lg,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: '400',
+    color: Colors.neutral800,
+    fontFamily: 'Poppins',
+    marginBottom: Spacing.md,
+    lineHeight: 24,
+  },
+  textInput: {
+    backgroundColor: Colors.neutral100,
+    borderWidth: 1,
+    borderColor: Colors.neutral600,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    fontSize: 16,
+    fontWeight: '400',
+    color: Colors.neutral900,
+    fontFamily: 'Poppins',
+    lineHeight: 24,
+    height: 56,
+  },
+
+  // Dropdown
+  dropdownButton: {
+    backgroundColor: Colors.neutral100,
+    borderWidth: 1,
+    borderColor: Colors.neutral600,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    height: 56,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dropdownText: {
+    fontSize: 16,
+    fontWeight: '400',
+    fontFamily: 'Poppins',
+    lineHeight: 24,
+    flex: 1,
+  },
+  dropdownIcon: {
+    fontSize: 12,
+    color: Colors.neutral800,
+  },
+
+  // Helper Text
+  helperText: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: Colors.neutral600,
+    fontFamily: 'Poppins',
+    lineHeight: 18,
+    marginTop: Spacing.sm,
+  },
+
+  // Continue Button
+  continueButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.lg,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: Colors.neutral100,
+    fontFamily: 'Poppins',
+  },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: Colors.neutral100,
+    borderTopLeftRadius: Radius.lg,
+    borderTopRightRadius: Radius.lg,
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.lg,
+    maxHeight: '70%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.neutral300,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: Colors.neutral900,
+    fontFamily: 'Poppins',
+  },
+  closeIcon: {
+    fontSize: 24,
+    color: Colors.neutral800,
+  },
+  modalOption: {
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.neutral200,
+  },
+  modalOptionText: {
+    fontSize: 16,
+    fontWeight: '400',
+    color: Colors.neutral900,
+    fontFamily: 'Poppins',
+  },
+
+  // Navigation Handle
+  navigationHandle: {
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: Spacing.sm,
+  },
+  handleBar: {
+    width: 108,
+    height: 4,
+    backgroundColor: Colors.neutral900,
+    borderRadius: 12,
+  },
+});
+
+export default BankDetailsScreen;
