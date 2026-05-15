@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,8 +11,6 @@ import {
   FlatList,
   SafeAreaView,
   Animated,
-  useRef,
-  useEffect,
   Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -117,7 +115,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
       setIsLoading(true);
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsMultiple: true,
+        allowsMultipleSelection: true,
         quality: 0.8,
       });
 

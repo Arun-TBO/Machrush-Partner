@@ -21,12 +21,12 @@ const getRecaptchaVerifier = (): RecaptchaVerifier => {
     try {
       recaptchaVerifier = new RecaptchaVerifier(
         auth,
-        {
+        ({
           size: 'invisible',
           callback: (token: string) => {
             console.log('✅ reCAPTCHA verification successful');
           },
-        }
+        } as any)
       );
     } catch (error) {
       console.warn('⚠️ reCAPTCHA initialization warning:', error);

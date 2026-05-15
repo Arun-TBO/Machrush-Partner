@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -43,7 +44,6 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
   // Collect data from all screens
   const [driverData, setDriverData] = useState<any>(null);
   const [vehicleData, setVehicleData] = useState<any>(null);
-  const [bankData, setBankData] = useState<any>(null);
   
   // Firebase UID after OTP verification
   const [firebaseUid, setFirebaseUid] = useState<string | null>(null);
@@ -60,7 +60,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
       duration: 400,
       useNativeDriver: true,
     }).start();
-  }, []);
+  }, [fadeAnim]);
 
   const isValidMobileNumber = (number: string) => {
     // Valid Indian mobile number: 10 digits
@@ -131,10 +131,36 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
       // Store Firebase UID for later use
       setFirebaseUid(result.uid);
       setFirebaseIdToken(result.idToken);
+      await AsyncStorage.multiSet([
+        ['firebaseUid', result.uid],
+        ['firebasePhoneNumber', result.phoneNumber || `+91${mobileNumber}`],
+        ['firebaseIdToken', result.idToken],
+      ]);
       
       console.log('✅ Firebase UID stored in state');
 
-      const verificationStatus = await getVerificationStatus(result.uid, result.idToken);
+      const lookupIds = Array.from(
+        new Set(
+          [
+            result.uid,
+            result.phoneNumber,
+            `+91${mobileNumber}`,
+            mobileNumber,
+            result.phoneNumber?.replace(/^\+91/, ''),
+          ].filter(Boolean)
+        )
+      ) as string[];
+
+      console.log('Checking existing driver with:', lookupIds);
+
+      let verificationStatus = null;
+      for (const lookupId of lookupIds) {
+        verificationStatus = await getVerificationStatus(lookupId, result.idToken);
+        if (verificationStatus) {
+          console.log(`Existing driver found using: ${lookupId}`);
+          break;
+        }
+      }
 
       if (verificationStatus?.status === 'verified') {
         console.log('✅ Existing driver already verified, going to app');
@@ -149,7 +175,13 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
         return;
       }
 
-      // New drivers and rejected drivers should complete or re-upload onboarding.
+      console.log(
+        verificationStatus?.status === 'rejected'
+          ? 'Existing driver rejected, starting re-upload onboarding'
+          : 'New driver, starting onboarding'
+      );
+
+      setShowOTP(false);
       setShowDriverDetails(true);
     } catch (error) {
       console.error('Error processing OTP verification:', error);
@@ -179,7 +211,6 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
   const handleBankDetailsSubmit = async (bankData: any) => {
     // All data collected - store to Firestore
     console.log('Bank details submitted:', bankData);
-    setBankData(bankData);
 
     setIsLoading(true);
     try {
@@ -326,7 +357,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
           <View style={styles.headerContainer}>
             <Text style={styles.title}>Enter Your Mobile Number</Text>
             <Text style={styles.description}>
-              We'll send a one-time verification code to confirm your number.
+              We&apos;ll send a one-time verification code to confirm your number.
             </Text>
           </View>
 
