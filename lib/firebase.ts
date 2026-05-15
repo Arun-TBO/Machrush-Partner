@@ -1,6 +1,7 @@
 import { initializeApp, FirebaseApp, getApp } from 'firebase/app';
 import { Auth, getAuth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
+import { FirebaseStorage, getStorage } from 'firebase/storage';
 
 // Firebase configuration from environment variables
 // These values are securely stored in .env.local (never commit to git)
@@ -31,7 +32,7 @@ try {
   try {
     firebaseApp = getApp();
     console.log('✅ Firebase app already initialized, reusing existing instance');
-  } catch (err) {
+  } catch {
     // App doesn't exist, initialize it
     firebaseApp = initializeApp(firebaseConfig);
     console.log('✅ Firebase initialized successfully');
@@ -61,4 +62,14 @@ try {
   throw error;
 }
 
-export { firebaseApp, auth, db };
+// Initialize Firebase Storage
+let storage: FirebaseStorage;
+try {
+  storage = getStorage(firebaseApp);
+  console.log('âœ… Firebase Storage initialized');
+} catch (error) {
+  console.error('âŒ Firebase Storage initialization error:', error);
+  throw error;
+}
+
+export { firebaseApp, auth, db, storage };

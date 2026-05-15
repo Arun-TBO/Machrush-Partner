@@ -7,9 +7,12 @@ import {
   where,
   getDocs,
   updateDoc,
+  addDoc,
   Timestamp,
 } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { Platform } from 'react-native';
+import { auth, db, storage } from './firebase';
 
 export interface OnboardingData {
   // Personal Info
@@ -41,12 +44,305 @@ export interface OnboardingData {
   rejectionReason?: string;
   rejectedDocuments?: string[];
   verificationNotes?: string;
+  profilePhotoUrl?: string;
 
   // Metadata
   createdAt: Timestamp;
   updatedAt: Timestamp;
   submittedAt?: Timestamp;
 }
+
+export interface DriverReportData {
+  category: string;
+  issueType: string;
+  description: string;
+  imageUris: string[];
+}
+
+type VerificationStatus = 'pending' | 'verified' | 'rejected';
+
+const getApiBaseUrl = () => {
+  return (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
+};
+
+const getApiErrorMessage = (responseBody: unknown, fallback: string) => {
+  if (
+    responseBody &&
+    typeof responseBody === 'object' &&
+    'error' in responseBody
+  ) {
+    const error = (responseBody as { error?: unknown }).error;
+
+    if (typeof error === 'string') {
+      return error;
+    }
+
+    if (error && typeof error === 'object' && 'message' in error) {
+      const message = (error as { message?: unknown }).message;
+      if (typeof message === 'string') {
+        return message;
+      }
+    }
+  }
+
+  return fallback;
+};
+
+const uploadProfilePhotoViaBackend = async (
+  uid: string,
+  imageData: string,
+  idToken: string
+) => {
+  const response = await fetch(`${getApiBaseUrl()}/api/uploads/profile-photo`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ uid, imageData }),
+  });
+
+  const responseBody = await response.json().catch(() => null);
+
+  if (!response.ok || !responseBody?.success) {
+    throw new Error(getApiErrorMessage(responseBody, 'Failed to upload profile photo'));
+  }
+
+  return responseBody.imageUrl as string;
+};
+
+const submitDriverReportViaBackend = async (
+  uid: string,
+  reportInput: DriverReportData,
+  idToken: string
+) => {
+  const response = await fetch(`${getApiBaseUrl()}/api/uploads/driver-report`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      uid,
+      category: reportInput.category,
+      issueType: reportInput.issueType,
+      description: reportInput.description,
+      imageDataUrls: reportInput.imageUris,
+    }),
+  });
+
+  const responseBody = await response.json().catch(() => null);
+
+  if (!response.ok || !responseBody?.success) {
+    throw new Error(getApiErrorMessage(responseBody, 'Failed to submit report'));
+  }
+
+  return responseBody.reportId as string;
+};
+
+const normalizeVerificationStatus = (status: unknown): VerificationStatus | null => {
+  if (typeof status !== 'string') {
+    return null;
+  }
+
+  const normalized = status.trim().toLowerCase();
+
+  if (normalized === 'verified' || normalized === 'approved') {
+    return 'verified';
+  }
+
+  if (
+    normalized === 'pending' ||
+    normalized === 'waiting' ||
+    normalized === 'waiting for verification' ||
+    normalized === 'waiting for approval'
+  ) {
+    return 'pending';
+  }
+
+  if (normalized === 'rejected') {
+    return 'rejected';
+  }
+
+  return null;
+};
+
+export const updateDriverProfilePhoto = async (
+  uid: string,
+  localImageUri: string,
+  idToken?: string | null
+): Promise<string> => {
+  if (!uid) {
+    throw new Error('Firebase UID is required');
+  }
+
+  if (localImageUri.startsWith('data:image') && idToken) {
+    return uploadProfilePhotoViaBackend(uid, localImageUri, idToken);
+  }
+
+  if (Platform.OS === 'web') {
+    if (!idToken) {
+      throw new Error('Firebase ID token is required to update profile photo on web');
+    }
+
+    const profilePhotoUrl = await resizeWebImageToDataUrl(localImageUri);
+    await updateDriverProfilePhotoViaRest(uid, profilePhotoUrl, idToken);
+    return profilePhotoUrl;
+  }
+
+  const response = await fetch(localImageUri);
+  const blob = await response.blob();
+  const storageRef = ref(storage, `drivers/${uid}/profile-photo.jpg`);
+
+  await uploadBytes(storageRef, blob, {
+    contentType: blob.type || 'image/jpeg',
+    customMetadata: {
+      ownerUid: uid,
+    },
+  });
+
+  const profilePhotoUrl = await getDownloadURL(storageRef);
+
+  if (auth.currentUser?.uid === uid) {
+    await setDoc(
+      doc(db, 'drivers', uid),
+      {
+        profilePhotoUrl,
+        updatedAt: Timestamp.now(),
+      },
+      { merge: true }
+    );
+  } else if (idToken) {
+    await updateDriverProfilePhotoViaRest(uid, profilePhotoUrl, idToken);
+  } else {
+    throw new Error('Firebase user is not signed in and no ID token was provided');
+  }
+
+  return profilePhotoUrl;
+};
+
+const uploadReportImage = async (
+  uid: string,
+  localImageUri: string,
+  reportSeed: number,
+  index: number
+) => {
+  if (localImageUri.startsWith('data:image')) {
+    return localImageUri;
+  }
+
+  if (Platform.OS === 'web') {
+    return resizeWebImageToDataUrl(localImageUri, 720, 0.76);
+  }
+
+  const response = await fetch(localImageUri);
+  const blob = await response.blob();
+  const storageRef = ref(storage, `driver-reports/${uid}/${reportSeed}-${index + 1}.jpg`);
+
+  await uploadBytes(storageRef, blob, {
+    contentType: blob.type || 'image/jpeg',
+    customMetadata: {
+      ownerUid: uid,
+    },
+  });
+
+  return getDownloadURL(storageRef);
+};
+
+const storeDriverReportViaRest = async (
+  reportData: Record<string, any>,
+  idToken: string
+) => {
+  const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID;
+
+  if (!projectId) {
+    throw new Error('Firebase project ID is not configured');
+  }
+
+  const fields = Object.entries(reportData).reduce<Record<string, any>>((acc, [key, value]) => {
+    const converted = toFirestoreRestValue(value);
+    if (converted !== undefined) {
+      acc[key] = converted;
+    }
+    return acc;
+  }, {});
+
+  const response = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/driverReports`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fields }),
+    }
+  );
+
+  const responseBody = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    console.error('Firestore REST report write failed:', responseBody);
+    throw new Error(responseBody?.error?.message || 'Failed to submit report');
+  }
+
+  return responseBody?.name?.split('/').pop();
+};
+
+export const submitDriverReport = async (
+  uid: string,
+  reportInput: DriverReportData,
+  idToken?: string | null
+): Promise<{ success: boolean; reportId?: string; error?: string }> => {
+  try {
+    if (!uid) {
+      throw new Error('Firebase UID is required');
+    }
+
+    if (idToken) {
+      const reportId = await submitDriverReportViaBackend(uid, reportInput, idToken);
+      return { success: true, reportId };
+    }
+
+    const reportSeed = Date.now();
+    const imageUrls = await Promise.all(
+      reportInput.imageUris.map((imageUri, index) =>
+        uploadReportImage(uid, imageUri, reportSeed, index)
+      )
+    );
+
+    const now = Timestamp.now();
+    const reportData = {
+      uid,
+      category: reportInput.category,
+      issueType: reportInput.issueType,
+      description: reportInput.description,
+      imageUrls,
+      imageCount: imageUrls.length,
+      status: 'submitted',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    if (auth.currentUser?.uid === uid) {
+      const reportRef = await addDoc(collection(db, 'driverReports'), reportData);
+      return { success: true, reportId: reportRef.id };
+    }
+
+    if (idToken) {
+      const reportId = await storeDriverReportViaRest(reportData, idToken);
+      return { success: true, reportId };
+    }
+
+    throw new Error('Firebase user is not signed in and no ID token was provided');
+  } catch (error: any) {
+    console.error('Error submitting driver report:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to submit report',
+    };
+  }
+};
 
 const toFirestoreRestValue = (value: any): any => {
   if (value === undefined) {
@@ -182,6 +478,82 @@ const fromFirestoreRestFields = (fields: Record<string, any>) => {
     acc[key] = fromFirestoreRestValue(value);
     return acc;
   }, {});
+};
+
+const isPhoneIdentifier = (value: string) => {
+  return value.startsWith('+') || /^\d{10,15}$/.test(value);
+};
+
+const updateDriverProfilePhotoViaRest = async (
+  uid: string,
+  profilePhotoUrl: string,
+  idToken: string
+) => {
+  const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID;
+
+  if (!projectId) {
+    throw new Error('Firebase project ID is not configured');
+  }
+
+  const fields = {
+    profilePhotoUrl: toFirestoreRestValue(profilePhotoUrl),
+    updatedAt: toFirestoreRestValue(Timestamp.now()),
+  };
+
+  const response = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/drivers/${encodeURIComponent(uid)}?updateMask.fieldPaths=profilePhotoUrl&updateMask.fieldPaths=updatedAt`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fields }),
+    }
+  );
+
+  const responseBody = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    console.error('Firestore REST profile photo update failed:', responseBody);
+    throw new Error(responseBody?.error?.message || 'Failed to update profile photo');
+  }
+};
+
+const resizeWebImageToDataUrl = async (
+  imageUri: string,
+  size = 256,
+  quality = 0.82
+): Promise<string> => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    throw new Error('Web image resizing is only available in a browser');
+  }
+
+  const image = new window.Image();
+
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error('Failed to load selected image'));
+    image.src = imageUri;
+  });
+
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+
+  const context = canvas.getContext('2d');
+
+  if (!context) {
+    throw new Error('Unable to prepare selected image');
+  }
+
+  const sourceSize = Math.min(image.width, image.height);
+  const sourceX = (image.width - sourceSize) / 2;
+  const sourceY = (image.height - sourceSize) / 2;
+
+  context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size);
+
+  return canvas.toDataURL('image/jpeg', quality);
 };
 
 const getDriverByUidViaRest = async (uid: string, idToken: string) => {
@@ -332,7 +704,7 @@ export const storeOnboardingData = async (
 export const getVerificationStatus = async (uidOrPhone: string, idToken?: string) => {
   try {
     if (idToken && auth.currentUser?.uid !== uidOrPhone) {
-      const data = uidOrPhone.startsWith('+')
+      const data = isPhoneIdentifier(uidOrPhone)
         ? await getDriverByPhoneViaRest(uidOrPhone, idToken)
         : await getDriverByUidViaRest(uidOrPhone, idToken);
 
@@ -341,8 +713,15 @@ export const getVerificationStatus = async (uidOrPhone: string, idToken?: string
         return null;
       }
 
+      const status = normalizeVerificationStatus(data.verificationStatus);
+
+      if (!status) {
+        console.warn(`Unknown verification status for ${uidOrPhone}:`, data.verificationStatus);
+        return null;
+      }
+
       return {
-        status: data.verificationStatus,
+        status,
         rejectionReason: data.rejectionReason,
         rejectedDocuments: data.rejectedDocuments,
         verificationNotes: data.verificationNotes,
@@ -353,7 +732,7 @@ export const getVerificationStatus = async (uidOrPhone: string, idToken?: string
     let docSnap = await getDoc(doc(db, 'drivers', uidOrPhone));
 
     // If not found and looks like a phone number, try searching by phone field
-    if (!docSnap.exists() && uidOrPhone.startsWith('+')) {
+    if (!docSnap.exists() && isPhoneIdentifier(uidOrPhone)) {
       const q = query(
         collection(db, 'drivers'),
         where('phoneNumber', '==', uidOrPhone)
@@ -367,8 +746,15 @@ export const getVerificationStatus = async (uidOrPhone: string, idToken?: string
 
     if (docSnap.exists()) {
       const data = docSnap.data() as OnboardingData;
+      const status = normalizeVerificationStatus(data.verificationStatus);
+
+      if (!status) {
+        console.warn(`Unknown verification status for ${uidOrPhone}:`, data.verificationStatus);
+        return null;
+      }
+
       return {
-        status: data.verificationStatus,
+        status,
         rejectionReason: data.rejectionReason,
         rejectedDocuments: data.rejectedDocuments,
         verificationNotes: data.verificationNotes,
@@ -387,8 +773,16 @@ export const getVerificationStatus = async (uidOrPhone: string, idToken?: string
  * Fetch complete driver profile
  * Can use either UID (preferred) or phone number (for admin queries)
  */
-export const getDriverProfile = async (uidOrPhone: string) => {
+export const getDriverProfile = async (uidOrPhone: string, idToken?: string | null) => {
   try {
+    if (idToken && auth.currentUser?.uid !== uidOrPhone) {
+      const data = isPhoneIdentifier(uidOrPhone)
+        ? await getDriverByPhoneViaRest(uidOrPhone, idToken)
+        : await getDriverByUidViaRest(uidOrPhone, idToken);
+
+      return data;
+    }
+
     // Try as UID first
     let docSnap = await getDoc(doc(db, 'drivers', uidOrPhone));
 
