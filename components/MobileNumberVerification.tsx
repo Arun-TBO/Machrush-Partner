@@ -1,25 +1,25 @@
-import React, { useState, useRef, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  Pressable,
-  Animated,
-  Alert,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Spacing, Radius } from '@/lib/theme';
-import { OTPVerification } from './OTPVerification';
-import { DriverDetailsScreen } from './DriverDetailsScreen';
-import { VehicleDetailsScreen } from './VehicleDetailsScreen';
-import { BankDetailsScreen } from './BankDetailsScreen';
-import { DocumentsVerificationScreen } from './DocumentsVerificationScreen';
-import {
-  storeOnboardingData,
   getVerificationStatus,
   OnboardingData,
+  storeOnboardingData,
 } from '@/lib/firestoreOnboardingService'; // Real Firebase Firestore
+import { Colors, Radius, Spacing } from '@/lib/theme';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Alert,
+  Animated,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BankDetailsScreen } from './BankDetailsScreen';
+import { DocumentsVerificationScreen } from './DocumentsVerificationScreen';
+import { DriverDetailsScreen } from './DriverDetailsScreen';
+import { OTPVerification } from './OTPVerification';
+import { VehicleDetailsScreen } from './VehicleDetailsScreen';
 
 import { sendOTP } from '@/lib/firebaseAuthService'; // Real Firebase Auth
 
@@ -134,7 +134,28 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
       
       console.log('✅ Firebase UID stored in state');
 
-      const verificationStatus = await getVerificationStatus(result.uid, result.idToken);
+      const lookupIds = Array.from(
+        new Set(
+          [
+            result.uid,
+            result.phoneNumber,
+            `+91${mobileNumber}`,
+            mobileNumber,
+            result.phoneNumber?.replace(/^\+91/, ''),
+          ].filter(Boolean)
+        )
+      ) as string[];
+
+      console.log('Checking existing driver with:', lookupIds);
+
+      let verificationStatus = null;
+      for (const lookupId of lookupIds) {
+        verificationStatus = await getVerificationStatus(lookupId, result.idToken);
+        if (verificationStatus) {
+          console.log(`Existing driver found using: ${lookupId}`);
+          break;
+        }
+      }
 
       if (verificationStatus?.status === 'verified') {
         console.log('✅ Existing driver already verified, going to app');
@@ -149,7 +170,13 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
         return;
       }
 
-      // New drivers and rejected drivers should complete or re-upload onboarding.
+      console.log(
+        verificationStatus?.status === 'rejected'
+          ? 'Existing driver rejected, starting re-upload onboarding'
+          : 'New driver, starting onboarding'
+      );
+
+      setShowOTP(false);
       setShowDriverDetails(true);
     } catch (error) {
       console.error('Error processing OTP verification:', error);
@@ -459,7 +486,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     paddingHorizontal: 16,
     paddingVertical: Spacing.sm,
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '500',
     color: Colors.neutral900,
     fontFamily: 'DM Sans',

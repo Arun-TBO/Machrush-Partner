@@ -1,21 +1,25 @@
+import { getVerificationStatus } from '@/lib/firestoreOnboardingService';
+import { Ionicons, MaterialIcons, Octicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
+  Alert,
+  Image,
+  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
-  Alert,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Spacing, Radius } from '@/lib/theme';
-import { getVerificationStatus } from '@/lib/firestoreOnboardingService';
+
+const verifiedImage = require('@/assets/images/verified.png');
 
 interface DocumentsVerificationScreenProps {
   phoneNumber?: string;
-  uid?: string; // Firebase UID (preferred)
+  uid?: string;
   idToken?: string;
+  onBack?: () => void;
   onVerificationComplete?: () => void;
   onRetryUpload?: () => void;
 }
@@ -27,39 +31,34 @@ interface VerificationData {
   reviewedAt?: string;
 }
 
-export const DocumentsVerificationScreen: React.FC<
-  DocumentsVerificationScreenProps
-> = ({ phoneNumber, uid, idToken, onVerificationComplete, onRetryUpload }) => {
+export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenProps> = ({
+  phoneNumber,
+  uid,
+  idToken,
+  onBack,
+  onVerificationComplete,
+  onRetryUpload,
+}) => {
   const [verificationData, setVerificationData] = useState<VerificationData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const insets = useSafeAreaInsets();
-
-  // Fetch verification status from backend/Firestore
-  useEffect(() => {
-    fetchVerificationStatus();
-    // Poll for verification updates every 5 seconds
-    const interval = setInterval(fetchVerificationStatus, 5000);
-    return () => clearInterval(interval);
-  }, [uid, phoneNumber]);
+  const [showSupportModal, setShowSupportModal] = useState(false);
 
   const fetchVerificationStatus = async () => {
     try {
-      // Use UID if available (preferred), fall back to phone number
       const identifier = uid || phoneNumber;
-      
+
       if (!identifier) {
-        console.error('❌ No UID or phone number provided for verification check');
+        console.error('No UID or phone number provided for verification check');
         setIsLoading(false);
         return;
       }
 
-      console.log(`🔍 Checking verification status for: ${identifier}`);
-      
-      // Fetch from Firestore
+      console.log(`Checking verification status for: ${identifier}`);
+
       const data = await getVerificationStatus(identifier, idToken);
-      
+
       if (!data) {
-        console.warn('⚠️ No verification data found');
+        console.warn('No verification data found');
         setIsLoading(false);
         return;
       }
@@ -69,132 +68,170 @@ export const DocumentsVerificationScreen: React.FC<
         rejectionReason: data.rejectionReason,
         rejectedDocuments: data.rejectedDocuments,
       });
-      
-      console.log(`📊 Verification status: ${data.status}`);
-      setIsLoading(false);
 
-      // If verified, auto-navigate to app after 2 seconds
-      if (data.status === 'verified' && onVerificationComplete) {
-        console.log('✅ Verified! Routing to app in 2 seconds...');
-        setTimeout(() => {
-          onVerificationComplete();
-        }, 2000);
-      }
+      console.log(`Verification status: ${data.status}`);
+      setIsLoading(false);
     } catch (error) {
       console.error('Error fetching verification status:', error);
       setIsLoading(false);
     }
   };
 
-  if (isLoading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.topNav}>
-          <Text style={styles.navTitle}>Onboarding</Text>
-        </View>
+  useEffect(() => {
+    fetchVerificationStatus();
+    const interval = setInterval(fetchVerificationStatus, 5000);
+    return () => clearInterval(interval);
+  }, [uid, phoneNumber, idToken]);
+
+  const status = verificationData?.status || 'pending';
+  const isVerified = status === 'verified';
+  const isRejected = status === 'rejected';
+  const canUseButton = isVerified || isRejected;
+  const title = isVerified ? 'Documents verified' : 'Documents under review';
+  const description = isVerified
+    ? 'All your documents have been approved. You can now access the app.'
+    : 'Our team will verify your documents within 24 hours.  We will notify you once the review is complete.';
+  const actionMessage =
+    verificationData?.rejectionReason ||
+    'Your driving license photo is blurry. Please upload a clear photo showing all details.';
+  const buttonLabel = isRejected ? 'Re-upload Documents' : 'Go to app';
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.headerTopContainer} >
+          
+          </View>
+           
+      <View style={styles.topNav}>
+        <Pressable
+          style={styles.navIconButton}
+          onPress={onBack}
+          disabled={!onBack}
+          hitSlop={8}
+        >
+          <Ionicons name="arrow-back" size={24} color="#9d9d9d" />
+        </Pressable>
+        <Text style={styles.navTitle}>Onboarding</Text>
+        <Pressable
+          style={styles.navIconButton}
+          onPress={() => setShowSupportModal(true)}
+          hitSlop={8}
+        >
+          <MaterialIcons name="support-agent" size={24} color="#1d1b20" />
+        </Pressable>
+      </View>
+
+      {isLoading ? (
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading verification status...</Text>
         </View>
-      </SafeAreaView>
-    );
-  }
-
-  // If verified, show success state (though this should auto-navigate)
-  if (verificationData?.status === 'verified') {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.topNav}>
-          <Text style={styles.navTitle}>Onboarding</Text>
-        </View>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.contentContainer}>
-            <View style={styles.iconContainer}>
-              <Text style={styles.verifiedIcon}>✓</Text>
-            </View>
-            <Text style={styles.mainTitle}>Documents Verified</Text>
-            <Text style={styles.mainDescription}>
-              Your documents have been verified successfully. Welcome!
-            </Text>
-          </View>
-
-          <Pressable
-            style={[styles.continueButton, styles.continueButtonActive]}
-            onPress={onVerificationComplete}
+      ) : (
+        <View style={styles.screenBody}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
           >
-            <Text style={styles.continueButtonText}>Go to app</Text>
-          </Pressable>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  // Pending or Rejected status
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.topNav}>
-        <Text style={styles.navTitle}>Onboarding</Text>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.contentContainer}>
-          {/* Icon Card */}
-          <View style={styles.statusCard}>
-            <View style={styles.iconBox}>
-              <Text style={styles.pendingIcon}>?</Text>
+            <View style={styles.reviewCard}>
+              {isVerified ? (
+                <Image source={verifiedImage} style={styles.verifiedImage} resizeMode="contain" />
+              ) : (
+                <Octicons name="unverified" size={80} color="#e0ad00" />
+              )}
+              <Text style={styles.mainTitle}>{title}</Text>
+              <Text style={styles.mainDescription}>{description}</Text>
             </View>
-            <Text style={styles.mainTitle}>Documents under review</Text>
-            <Text style={styles.mainDescription}>
-              Our team will verify your documents within 24 hours. We will notify you once the
-              review is complete.
-            </Text>
-          </View>
 
-          {/* Rejection/Action Required Message */}
-          {verificationData?.status === 'rejected' && verificationData?.rejectionReason && (
-            <View style={styles.actionRequiredBox}>
-              <View style={styles.actionHeaderContainer}>
-                <Text style={styles.alertIcon}>⚠</Text>
-                <Text style={styles.actionTitle}>Action required</Text>
+            {isRejected && (
+              <View style={styles.actionRequiredBox}>
+                <View style={styles.actionHeaderContainer}>
+                  <MaterialIcons name="message" size={16} color="#1d1b20" />
+                  <Text style={styles.actionTitle}>Action required</Text>
+                </View>
+                <Text style={styles.actionMessage}>{actionMessage}</Text>
               </View>
-              <Text style={styles.actionMessage}>{verificationData.rejectionReason}</Text>
+            )}
+
+            <Text style={styles.infoText}>Complete all document uploads to access the app</Text>
+          </ScrollView>
+
+          <View style={styles.bottomArea}>
+            <Pressable
+              style={[
+                styles.continueButton,
+                isVerified && styles.continueButtonActive,
+                !canUseButton && styles.continueButtonDisabled,
+              ]}
+              onPress={() => {
+                if (isVerified) {
+                  onVerificationComplete?.();
+                } else if (isRejected && onRetryUpload) {
+                  onRetryUpload();
+                } else {
+                  Alert.alert('Info', 'Your documents are under review. Please check back soon.');
+                }
+              }}
+              disabled={!canUseButton}
+            >
+              <Text
+                style={[
+                  styles.continueButtonText,
+                  isVerified && styles.continueButtonTextActive,
+                ]}
+              >
+                {buttonLabel}
+              </Text>
+            </Pressable>
+
+            <View style={styles.navigationHandle}>
+              <View style={styles.handleBar} />
             </View>
-          )}
-
-          {/* Info Message */}
-          <Text style={styles.infoText}>Complete all document uploads to access the app</Text>
+          </View>
         </View>
+      )}
 
-        {/* Continue Button */}
-        <Pressable
-          style={[
-            styles.continueButton,
-            verificationData?.status === 'pending' && styles.continueButtonDisabled,
-          ]}
-          onPress={() => {
-            if (verificationData?.status === 'rejected' && onRetryUpload) {
-              onRetryUpload();
-            } else {
-              Alert.alert('Info', 'Your documents are under review. Please check back soon.');
-            }
-          }}
-          disabled={verificationData?.status === 'pending'}
-        >
-          <Text style={styles.continueButtonText}>
-            {verificationData?.status === 'rejected' ? 'Re-upload Documents' : 'Go to app'}
-          </Text>
+      <Modal
+        visible={showSupportModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSupportModal(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowSupportModal(false)}>
+          <Pressable style={styles.supportSheet} onPress={(event) => event.stopPropagation()}>
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetHandle} />
+            </View>
+
+            <View style={styles.supportIntro}>
+              <Text style={styles.supportTitle}>Contact support</Text>
+              <Text style={styles.supportSubtitle}>
+                We are here to help you with any questions or issues
+              </Text>
+            </View>
+
+            <View style={styles.supportOptions}>
+              <View style={styles.supportRow}>
+                <View style={styles.supportIconCircle}>
+                  <Ionicons name="call" size={22} color="#05c" />
+                </View>
+                <View style={styles.supportTextGroup}>
+                  <Text style={styles.supportLabel}>Call us (24x7)</Text>
+                  <Text style={styles.supportValue}>022276110864</Text>
+                </View>
+              </View>
+
+              <View style={styles.supportRow}>
+                <View style={styles.supportIconCircle}>
+                  <MaterialIcons name="email" size={22} color="#05c" />
+                </View>
+                <View style={styles.supportTextGroup}>
+                  <Text style={styles.supportLabel}>Email us</Text>
+                  <Text style={styles.supportValue}>machrush@support.com</Text>
+                </View>
+              </View>
+            </View>
+          </Pressable>
         </Pressable>
-      </ScrollView>
-
-      {/* Navigation Handle */}
-      <View style={styles.navigationHandle}>
-        <View style={styles.handleBar} />
-      </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -204,43 +241,47 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#eff2f6',
   },
-
-  // Top Navigation
+   headerTopContainer : {
+    height: 36,
+    backgroundColor : 'white'
+  },
   topNav: {
     height: 64,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    paddingHorizontal: 24,
-    paddingVertical: 8,
-    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+  },
+  navIconButton: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   navTitle: {
+    flex: 1,
     fontSize: 20,
-    fontWeight: '600',
+    fontWeight: '500',
     color: '#1c1c1c',
     fontFamily: 'Poppins',
     lineHeight: 32,
   },
-
-  // Scroll View
+  screenBody: {
+    flex: 1,
+  },
   scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 16,
-    paddingVertical: 24,
-    gap: 24,
+    paddingTop: 24,
+    paddingBottom: 24,
   },
-
-  // Content Container
-  contentContainer: {
-    gap: 24,
-    marginBottom: 24,
-  },
-
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 16,
   },
   loadingText: {
     fontSize: 16,
@@ -248,48 +289,20 @@ const styles = StyleSheet.create({
     color: '#606060',
     fontFamily: 'Poppins',
   },
-  iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#e7f0ff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    alignSelf: 'center',
-    marginBottom: 10,
-  },
-
-  // Status Card
-  statusCard: {
-    backgroundColor: 'white',
+  reviewCard: {
+    width: '100%',
+    backgroundColor: '#ffffff',
     borderRadius: 16,
-    padding: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 24,
     gap: 10,
     alignItems: 'center',
+    overflow: 'hidden',
   },
-  iconBox: {
+  verifiedImage: {
     width: 80,
     height: 80,
-    borderRadius: 40,
-    backgroundColor: '#fff3cd',
-    borderWidth: 3,
-    borderColor: '#ffc107',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
   },
-  pendingIcon: {
-    fontSize: 40,
-    fontWeight: '600',
-    color: '#ffc107',
-  },
-  verifiedIcon: {
-    fontSize: 40,
-    fontWeight: '600',
-    color: '#05c',
-  },
-
-  // Main Title & Description
   mainTitle: {
     fontSize: 40,
     fontWeight: '500',
@@ -303,33 +316,31 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     color: '#606060',
     fontFamily: 'Poppins',
-    lineHeight: 24,
     textAlign: 'center',
     letterSpacing: -0.5,
   },
-
-  // Action Required Box
   actionRequiredBox: {
-    backgroundColor: 'white',
-    borderWidth: 1.5,
+    height: 140,
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
     borderColor: '#d00416',
     borderRadius: 8,
-    padding: 12,
-    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 10,
+    marginTop: 40,
+    overflow: 'hidden',
   },
   actionHeaderContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
-  alertIcon: {
-    fontSize: 16,
-    color: '#d00416',
-  },
   actionTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
+    fontWeight: '500',
+    color: '#000000',
     fontFamily: 'Poppins',
     letterSpacing: -0.5,
   },
@@ -340,54 +351,145 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins',
     lineHeight: 24,
   },
-
-  // Info Text
   infoText: {
+    marginTop: 40,
     fontSize: 14,
     fontWeight: '400',
     color: '#606060',
     fontFamily: 'Poppins',
     lineHeight: 21,
   },
-
-  // Continue Button
+  bottomArea: {
+    paddingHorizontal: 16,
+  },
   continueButton: {
-    backgroundColor: '#a4a4a4',
-    borderRadius: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
     height: 56,
-    marginBottom: 24,
+      backgroundColor: '#a4a4a4',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 40,
+    marginBottom: 40,
   },
   continueButtonActive: {
     backgroundColor: '#05c',
+   
   },
   continueButtonDisabled: {
-    opacity: 0.6,
+    opacity: 1,
   },
   continueButtonText: {
     fontSize: 16,
     fontWeight: '500',
     color: '#606060',
     fontFamily: 'Poppins',
-    lineHeight: 20,
     letterSpacing: -0.5,
   },
-
-  // Navigation Handle
+  continueButtonTextActive: {
+    color: '#ffffff',
+  },
   navigationHandle: {
     height: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingBottom: 8,
   },
   handleBar: {
     width: 108,
     height: 4,
     backgroundColor: '#1d1b20',
     borderRadius: 12,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.24)',
+  },
+  supportSheet: {
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 40,
+    gap: 24,
+    overflow: 'hidden',
+  },
+  sheetHeader: {
+    width: '100%',
+    padding: 16,
+    alignItems: 'center',
+  },
+  sheetHandle: {
+    width: 32,
+    height: 4,
+    borderRadius: 100,
+    backgroundColor: '#79747e',
+  },
+  supportIntro: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 8,
+  },
+  supportTitle: {
+    width: '100%',
+    fontSize: 24,
+    fontWeight: '500',
+    color: '#29292b',
+    fontFamily: 'Poppins',
+    textAlign: 'center',
+    letterSpacing: -1,
+  },
+  supportSubtitle: {
+    width: '100%',
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#606060',
+    fontFamily: 'Poppins',
+    lineHeight: 21,
+    textAlign: 'center',
+  },
+  supportOptions: {
+    width: '100%',
+    gap: 8,
+  },
+  supportRow: {
+    width: '100%',
+    minHeight: 76,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(27, 124, 255, 0.1)',
+    overflow: 'hidden',
+  },
+  supportIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 40,
+    backgroundColor: 'rgba(27, 124, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  supportTextGroup: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: 4,
+  },
+  supportLabel: {
+    fontSize: 16,
+    fontWeight: '400',
+    color: '#606060',
+    fontFamily: 'Poppins',
+    lineHeight: 24,
+  },
+  supportValue: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+    letterSpacing: -0.5,
   },
 });
 

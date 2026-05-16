@@ -1,9 +1,13 @@
 // Theme tokens from Figma design
 export const Colors = {
   primary: '#05C',
-  neutral900: '#4A4A4A',
+  // neutral900: '#4A4A4A',
+  neutral900: ' #1C1C1C',
   neutral800: '#606060',
   neutral700: '#777',
+  neutral600: '#9D9D9D',
+  neutral300: '#E0E0E0',
+  neutral200: '#F0F0F0',
   neutral100: '#FFF',
   overlay: 'rgba(0, 0, 0, 0.1)',
   shadow: 'rgba(0, 0, 0, 0.10)',
@@ -18,6 +22,7 @@ export const Spacing = {
 };
 
 export const Radius = {
+  sm: 8,
   md: 8,   // --Radius-2
   lg: 24,
   full: 100,

@@ -1,13 +1,13 @@
+import { Colors, Radius, Spacing } from '@/lib/theme';
 import React from 'react';
 import {
-  TouchableOpacity,
-  Text,
-  StyleSheet,
-  ViewStyle,
-  TextStyle,
   GestureResponderEvent,
+  StyleSheet,
+  Text,
+  TextStyle,
+  TouchableOpacity,
+  ViewStyle,
 } from 'react-native';
-import { Colors, Spacing, Radius, Typography } from '@/lib/theme';
 
 export type ButtonVariant = 'primary' | 'secondary';
 

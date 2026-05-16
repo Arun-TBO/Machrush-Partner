@@ -1,16 +1,19 @@
+import { Colors, Radius, Spacing } from '@/lib/theme';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
+  FlatList,
+  Image,
+  Modal,
   Pressable,
   ScrollView,
-  Modal,
-  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Spacing, Radius } from '@/lib/theme';
+import ICONS from '../constants/icons';
+
 
 interface BankDetailsScreenProps {
   onContinue?: (bankData: BankDetailsData) => void;
@@ -85,11 +88,14 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container]}>
       {/* Top Navigation */}
+       <View style={styles.headerTopContainer} >
+          
+       </View>
       <View style={styles.topNav}>
         <Pressable style={styles.backButton} onPress={onBack}>
-          <Text style={styles.backIcon}>←</Text>
+           <Image source={ICONS.LeftArrow} style={styles.backIcon} />
         </Pressable>
         <Text style={styles.navTitle}>Onboarding</Text>
         <View style={{ width: 48 }} />
@@ -168,6 +174,11 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
           />
         </View>
 
+      
+
+       
+         
+      </ScrollView>
         {/* Continue Button */}
         <Pressable
           style={[styles.continueButton, !isFormValid && styles.buttonDisabled]}
@@ -176,10 +187,6 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
         >
           <Text style={styles.buttonText}>Continue</Text>
         </Pressable>
-
-        <View style={{ height: 40 }} />
-      </ScrollView>
-
       {/* Bank Selection Modal */}
       <Modal
         visible={showBankModal}
@@ -231,29 +238,36 @@ const styles = StyleSheet.create({
   },
 
   // Top Navigation
+   
+   headerTopContainer : {
+    height: 36,
+    backgroundColor : 'white'
+  },
+
   topNav: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
     height: 64,
-    backgroundColor: Colors.neutral100,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: '#f0f0f0',
+    gap: 2,
   },
   backButton: {
-    width: 48,
+   width: 48,
     height: 48,
-    justifyContent: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
   },
   backIcon: {
-    fontSize: 24,
-    color: Colors.neutral900,
+    width: 41,
+    height: 41
   },
   navTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '500',
     color: Colors.neutral900,
     fontFamily: 'Poppins',
@@ -352,19 +366,23 @@ const styles = StyleSheet.create({
 
   // Continue Button
   continueButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: Radius.md,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
+    backgroundColor: '#05c',
+    borderRadius: 8,
+    paddingVertical: 13,
+    paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: Spacing.lg,
+    marginTop: 40,
+    marginBottom: 40,
+    height: 56,
+    paddingBottom: 24,
+    margin: 16,
   },
   buttonDisabled: {
-    opacity: 0.6,
+    backgroundColor: '#a4a4a4',
   },
   buttonText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '500',
     color: Colors.neutral100,
     fontFamily: 'Poppins',

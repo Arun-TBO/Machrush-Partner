@@ -48,6 +48,35 @@ export interface OnboardingData {
   submittedAt?: Timestamp;
 }
 
+type VerificationStatus = 'pending' | 'verified' | 'rejected';
+
+const normalizeVerificationStatus = (status: unknown): VerificationStatus | null => {
+  if (typeof status !== 'string') {
+    return null;
+  }
+
+  const normalized = status.trim().toLowerCase();
+
+  if (normalized === 'verified' || normalized === 'approved') {
+    return 'verified';
+  }
+
+  if (
+    normalized === 'pending' ||
+    normalized === 'waiting' ||
+    normalized === 'waiting for verification' ||
+    normalized === 'waiting for approval'
+  ) {
+    return 'pending';
+  }
+
+  if (normalized === 'rejected') {
+    return 'rejected';
+  }
+
+  return null;
+};
+
 const toFirestoreRestValue = (value: any): any => {
   if (value === undefined) {
     return undefined;
@@ -182,6 +211,10 @@ const fromFirestoreRestFields = (fields: Record<string, any>) => {
     acc[key] = fromFirestoreRestValue(value);
     return acc;
   }, {});
+};
+
+const isPhoneIdentifier = (value: string) => {
+  return value.startsWith('+') || /^\d{10,15}$/.test(value);
 };
 
 const getDriverByUidViaRest = async (uid: string, idToken: string) => {
@@ -332,7 +365,7 @@ export const storeOnboardingData = async (
 export const getVerificationStatus = async (uidOrPhone: string, idToken?: string) => {
   try {
     if (idToken && auth.currentUser?.uid !== uidOrPhone) {
-      const data = uidOrPhone.startsWith('+')
+      const data = isPhoneIdentifier(uidOrPhone)
         ? await getDriverByPhoneViaRest(uidOrPhone, idToken)
         : await getDriverByUidViaRest(uidOrPhone, idToken);
 
@@ -341,8 +374,15 @@ export const getVerificationStatus = async (uidOrPhone: string, idToken?: string
         return null;
       }
 
+      const status = normalizeVerificationStatus(data.verificationStatus);
+
+      if (!status) {
+        console.warn(`Unknown verification status for ${uidOrPhone}:`, data.verificationStatus);
+        return null;
+      }
+
       return {
-        status: data.verificationStatus,
+        status,
         rejectionReason: data.rejectionReason,
         rejectedDocuments: data.rejectedDocuments,
         verificationNotes: data.verificationNotes,
@@ -353,7 +393,7 @@ export const getVerificationStatus = async (uidOrPhone: string, idToken?: string
     let docSnap = await getDoc(doc(db, 'drivers', uidOrPhone));
 
     // If not found and looks like a phone number, try searching by phone field
-    if (!docSnap.exists() && uidOrPhone.startsWith('+')) {
+    if (!docSnap.exists() && isPhoneIdentifier(uidOrPhone)) {
       const q = query(
         collection(db, 'drivers'),
         where('phoneNumber', '==', uidOrPhone)
@@ -367,8 +407,15 @@ export const getVerificationStatus = async (uidOrPhone: string, idToken?: string
 
     if (docSnap.exists()) {
       const data = docSnap.data() as OnboardingData;
+      const status = normalizeVerificationStatus(data.verificationStatus);
+
+      if (!status) {
+        console.warn(`Unknown verification status for ${uidOrPhone}:`, data.verificationStatus);
+        return null;
+      }
+
       return {
-        status: data.verificationStatus,
+        status,
         rejectionReason: data.rejectionReason,
         rejectedDocuments: data.rejectedDocuments,
         verificationNotes: data.verificationNotes,

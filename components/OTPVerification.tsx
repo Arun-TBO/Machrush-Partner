@@ -1,18 +1,18 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { Colors, Radius, Spacing } from '@/lib/theme';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  Pressable,
-  Dimensions,
-  Animated,
   Alert,
+  Animated,
+  Dimensions,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Spacing, Radius } from '@/lib/theme';
 
-import { verifyOTP, resendOTP } from '@/lib/firebaseAuthService'; // Real Firebase
+import { resendOTP, verifyOTP } from '@/lib/firebaseAuthService'; // Real Firebase
 
 const { width } = Dimensions.get('window');
 
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: Colors.neutral700,
     fontFamily: 'Poppins',
-    lineHeight: 18,
+    lineHeight: 20,
     letterSpacing: 0,
   },
   phoneNumberLink: {

@@ -1,23 +1,21 @@
+import { Colors, Radius, Spacing } from '@/lib/theme';
+import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  Pressable,
-  ScrollView,
+  Alert,
+  FlatList,
   Image,
   Modal,
-  FlatList,
-  SafeAreaView,
-  Animated,
-  useRef,
-  useEffect,
-  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Spacing, Radius } from '@/lib/theme';
+import ICONS from '../constants/icons';
+import IMAGES from '../constants/images';
 
 interface VehicleDetailsScreenProps {
   onContinue?: (vehicleData: VehicleDetailsData) => void;
@@ -36,9 +34,27 @@ interface VehicleDetailsData {
 
 const VEHICLE_TYPES = ['2-Wheeler', '3-Wheeler', 'Auto', 'Car', 'Truck', 'Mini Truck'];
 const BODY_TYPES = [
-  { id: 'closed', label: 'Closed Body', image: 'closed-vehicle' },
-  { id: 'open', label: 'Opened Body', image: 'open-vehicle' },
+  { id: 'closed', label: 'Closed Body', Activeimage: IMAGES.NonActiveTrck , nonActiveImage: IMAGES.ActiveTrck },
+  { id: 'open', label: 'Opened Body', Activeimage: IMAGES.BodyOpenNonActiveTrak , nonActiveImage: IMAGES.BodyOpenActiveTrak },
 ];
+
+const AddVehiclePhotosData = [{
+     id : 'front',
+     text : 'Front side',}
+     ,
+     {
+      id : 'Left',
+     text : 'Left side ',
+     },
+     {
+      id : 'Right',
+     text : 'Right side ',
+     },
+     {
+      id : 'Back',
+     text : 'Back side',
+     }
+    ]
 
 export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   onContinue,
@@ -63,6 +79,12 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   const [isLoading, setIsLoading] = useState(false);
 
   const insets = useSafeAreaInsets();
+  
+  // Vehicles Images state
+  const [frontImg, setFrontImg] = useState<string | null>(null);
+  const [leftImg, setLeftImg] = useState<string | null>(null);
+  const [rightImg, setRightImg] = useState<string | null>(null);
+  const [backImg, setBackImg] = useState<string | null>(null);
 
   // Request permissions and open image picker
   const requestMediaPermissions = async () => {
@@ -109,29 +131,46 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   };
 
   // Pick multiple images for vehicle photos
-  const pickMultiplePhotos = async () => {
-    const hasPermission = await requestMediaPermissions();
-    if (!hasPermission) return;
-
-    try {
-      setIsLoading(true);
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultiple: true,
-        quality: 0.8,
-      });
-
-      if (!result.canceled) {
-        const uris = result.assets.map((asset) => asset.uri);
-        setVehiclePhotoUris((prev) => [...prev, ...uris].slice(0, 4)); // Max 4 photos
+   const pickImage = async (
+    value: 'front' | 'left' | 'right' | 'back'
+    ) => {
+      try {
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsEditing: false,
+          aspect: [1, 1],
+          quality: 0.8,
+        });
+  
+        if (!result.canceled) {
+          const uri = result.assets[0].uri;
+          if (value === 'front') {
+            setFrontImg(uri);
+          } else if (value === 'left') {
+            setLeftImg(uri);
+          } else if (value === 'right') {
+            setRightImg(uri);
+          } else if (value === 'back') {
+            setBackImg(uri);
+          }
+        }
+      } catch (error) {
+        console.error('Error picking image:', error);
+        alert('Failed to pick image');
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to pick photos');
-      console.error(error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    };
+  
+    const removeImage = (value: 'front' | 'left' | 'right' | 'back') => {
+      if (value === 'front') {
+        setFrontImg(null);
+      } else if (value === 'left') {
+        setLeftImg(null);
+      } else if (value === 'right') {
+        setRightImg(null);
+      } else if (value === 'back') {
+        setBackImg(null);
+      } 
+    };
 
   // Remove RC book
   const removeRcBook = () => {
@@ -155,7 +194,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
     setShowVehicleTypeModal(false);
   };
 
-  const isFormValid = vehicleNumber && vehicleType && vehicleCapacity && selectedBodyType && rcBookUri && insuranceUri && vehiclePhotoUris.length > 0;
+  const isFormValid = vehicleNumber && vehicleType && vehicleCapacity && selectedBodyType && rcBookUri && insuranceUri && frontImg && leftImg && rightImg && backImg;
 
   const handleContinue = () => {
     if (!isFormValid) {
@@ -177,11 +216,14 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container]}>
       {/* Top Navigation */}
+       <View style={styles.headerTopContainer} >
+          
+          </View>
       <View style={styles.topNav}>
         <Pressable style={styles.backButton} onPress={onBack}>
-          <Text style={styles.backIcon}>←</Text>
+             <Image source={ICONS.LeftArrow} style={styles.backButtonIcon} />
         </Pressable>
         <Text style={styles.navTitle}>Onboarding</Text>
         <View style={{ width: 48 }} />
@@ -262,7 +304,14 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                       { backgroundColor: Colors.neutral200 },
                     ]}
                   >
-                    <Text style={styles.imageText}>🚚</Text>
+                    <Image
+                      source={
+                        selectedBodyType === type.id
+                          ? type.nonActiveImage
+                          : type.Activeimage
+                      }
+                      style={{ width: 120, height: 100 }}
+                    />
                   </View>
                 </View>
                 <Text style={styles.bodyTypeLabel}>{type.label}</Text>
@@ -281,9 +330,9 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
               <Text style={styles.documentTitle}>RC book</Text>
               <Text style={styles.documentSubtitle}>Upload RC book photo or PDF</Text>
               {!rcBookUri && (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.retryIcon}>↻</Text>
-                  <Text style={styles.errorText}>Upload again</Text>
+                <View style={styles.uploadContainer}>
+                 <Image source={ICONS.UploadIcon } style={styles.uploadIcon} />
+                  <Text style={styles.uploadText}>Upload</Text>
                 </View>
               )}
               {rcBookUri && (
@@ -301,12 +350,23 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                 <Text style={styles.uploadButtonSmallText}>Upload</Text>
               </Pressable>
             ) : (
-              <Pressable
-                style={[styles.uploadButtonSmall, styles.removeButton]}
-                onPress={removeRcBook}
-              >
-                <Text style={styles.removeButtonText}>✕</Text>
-              </Pressable>
+
+                <View style={styles.uploadedCanelContainer}>
+              
+                               <View style={styles.uploadedImageContainer}>
+                                <Image source={{ uri: rcBookUri }} style={styles.uploadedImage} />
+                              
+                        </View>
+              
+                         <Pressable
+                            style={styles.removeButton}
+                            onPress={removeRcBook}
+                            disabled={isLoading}
+                          >
+                            <Text style={styles.removeButtonIcon}>✕</Text>
+                          </Pressable>
+                          </View>
+                           
             )}
           </View>
 
@@ -316,9 +376,9 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
               <Text style={styles.documentTitle}>Insurance</Text>
               <Text style={styles.documentSubtitle}>Upload insurance photo or PDF</Text>
               {!insuranceUri && (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.retryIcon}>↻</Text>
-                  <Text style={styles.errorText}>Upload again</Text>
+                <View style={styles.uploadContainer}>
+                  <Image source={ICONS.UploadIcon } style={styles.uploadIcon } />
+                  <Text style={styles.uploadText}>Upload</Text>
                 </View>
               )}
               {insuranceUri && (
@@ -336,12 +396,22 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                 <Text style={styles.uploadButtonSmallText}>Upload</Text>
               </Pressable>
             ) : (
-              <Pressable
-                style={[styles.uploadButtonSmall, styles.removeButton]}
-                onPress={removeInsurance}
-              >
-                <Text style={styles.removeButtonText}>✕</Text>
-              </Pressable>
+              
+                <View style={styles.uploadedCanelContainer}>
+              
+                               <View style={styles.uploadedImageContainer}>
+                                <Image source={{ uri: insuranceUri }} style={styles.uploadedImage} />
+                              
+                        </View>
+              
+                         <Pressable
+                            style={styles.removeButton}
+                            onPress={removeInsurance}
+                            disabled={isLoading}
+                          >
+                            <Text style={styles.removeButtonIcon}>✕</Text>
+                          </Pressable>
+                          </View>
             )}
           </View>
 
@@ -353,16 +423,19 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
             <View style={styles.documentContent}>
               <Text style={styles.documentTitle}>Vehicle photos</Text>
               <Text style={styles.documentSubtitle}>Front, back & side photos</Text>
-              {vehiclePhotoUris.length > 0 && (
+             
+              
+              {/* {vehiclePhotoUris.length > 0 && (
                 <Text style={styles.uploadedCount}>✓ {vehiclePhotoUris.length} photo(s) uploaded</Text>
-              )}
+              )} */}
             </View>
-            <Text style={[styles.expandIcon, isPhotosExpanded && styles.expandIconOpen]}>
+            {/* <Text style={[styles.expandIcon, isPhotosExpanded && styles.expandIconOpen]}>
               ›
-            </Text>
+            </Text> */}
           </Pressable>
 
-          {isPhotosExpanded && (
+         
+          {/* {isPhotosExpanded && (
             <View style={styles.photoThumbnailsContainer}>
               {vehiclePhotoUris.length === 0 ? (
                 <Pressable
@@ -386,6 +459,8 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                       </Pressable>
                     </View>
                   ))}
+                 
+                 
                   {vehiclePhotoUris.length < 4 && (
                     <Pressable
                       style={styles.addMorePhotoButton}
@@ -398,9 +473,71 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                 </>
               )}
             </View>
-          )}
+          )} */}
+
+
+        {/* // add new vechicle photo upload section with thumbnails and remove option */}
+         
+         <View style={styles.vehiclePhotosContainer}>
+           {/* {
+            AddVehiclePhotosData.map(eachTYpe => (
+
+                <Pressable
+                 key={eachTYpe.id}
+                 style={styles.addNewPhotoButton}
+                 onPress={pickMultiplePhotos}
+                 disabled={isLoading}
+                    >
+                      <Text style={styles.addMorePhotoIcon}>+</Text>
+                      <Text style={styles.addMorePhotoText}>{eachTYpe.text}</Text>
+          </Pressable>
+
+            ))
+           } */}
+
+            <VehiclePhotoUploadItem
+              title="Front side"
+              imageUri={frontImg || undefined}
+              onUpload={() => pickImage('front')}
+              onRemove={() => removeImage('front')}
+              />
+
+              <VehiclePhotoUploadItem
+              title="Left side"
+              imageUri={leftImg || undefined}
+              onUpload={() => pickImage('left')}
+              onRemove={() => removeImage('left')}
+              />
+             
+             <VehiclePhotoUploadItem
+              title="Right side"
+              imageUri={rightImg || undefined}
+              onUpload={() => pickImage('right')}
+              onRemove={() => removeImage('right')}
+              />
+
+              <VehiclePhotoUploadItem
+              title="Back side"
+              imageUri={backImg || undefined}
+              onUpload={() => pickImage('back')}
+              onRemove={() => removeImage('back')}
+  
+              />
+              
+         </View>
+
+          
+        
+        
         </View>
 
+
+
+       
+
+       
+      </ScrollView>
+         
         {/* Continue Button */}
         <Pressable
           style={[styles.continueButton, !isFormValid && styles.buttonDisabled]}
@@ -409,9 +546,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
         >
           <Text style={styles.buttonText}>Continue</Text>
         </Pressable>
-
-        <View style={{ height: 40 }} />
-      </ScrollView>
+       
 
       {/* Vehicle Type Modal */}
       <Modal
@@ -428,7 +563,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Vehicle Type</Text>
               <Pressable onPress={() => setShowVehicleTypeModal(false)}>
-                <Text style={styles.closeIcon}>✕</Text>
+                <Text style={styles.closeIcon}>{'✕'}</Text>
               </Pressable>
             </View>
 
@@ -455,6 +590,58 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   );
 };
 
+
+
+interface VehiclePhotsUploadItemProps {
+  title: string;
+  imageUri?: string;
+  onUpload: () => void;
+  onRemove: () => void;
+}
+
+const VehiclePhotoUploadItem: React.FC<VehiclePhotsUploadItemProps> = ({
+  title,
+  imageUri,
+  onUpload,
+  onRemove,
+}) => {
+  return (
+         <>
+          {imageUri ? (
+             
+
+                <View style={styles.uploadedCanelContainer}>
+             
+                              <View style={styles.uploadedImageContainer}>
+                               <Image source={{ uri: imageUri }} style={styles.uploadedImage} />
+                             
+                       </View>
+             
+                        <Pressable
+                           style={styles.removeButton}
+                           onPress={onRemove}
+  
+                         >
+                            <Text style={styles.removeButtonIcon}>{'✕'}</Text>
+                           
+                         </Pressable>
+                         </View>
+
+        ) : (
+          <Pressable
+                 style={styles.addNewPhotoButton}
+                 onPress={onUpload}
+                    >
+                      <Text style={styles.addMorePhotoIcon}>+</Text>
+                      <Text style={styles.addMorePhotoText}>{title}</Text>
+          </Pressable>
+        )}
+      </>
+  );
+};
+
+
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -462,37 +649,39 @@ const styles = StyleSheet.create({
   },
 
   // Top Navigation
+   headerTopContainer : {
+    height: 36,
+    backgroundColor : 'white'
+  },
+
   topNav: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 8,
     height: 64,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
-    gap: 12,
+    gap: 2,
   },
   backButton: {
     width: 48,
     height: 48,
-    justifyContent: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  backIcon: {
-    fontSize: 24,
-    color: '#1c1c1c',
+   backButtonIcon: {
+    width: 41,
+    height: 41
   },
   navTitle: {
-    fontSize: 30,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '500',
     color: '#1c1c1c',
     fontFamily: 'Poppins',
-    lineHeight: 32,
     textAlign: 'center',
-    flex: -1,
-    alignSelf: 'center',
   },
 
   // Scroll View
@@ -514,9 +703,9 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 40,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#1c1c1c',
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins Medium',
     lineHeight: 48,
   },
   subtitle: {
@@ -664,22 +853,21 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins',
     lineHeight: 18,
   },
-  errorContainer: {
+  uploadContainer: {
     flexDirection: 'row',
     gap: 4,
     alignItems: 'center',
     marginTop: 4,
   },
-  retryIcon: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: '#d00416',
-    fontFamily: 'Poppins',
+  uploadIcon: {
+    width: 12,
+    height: 12,
+    // tintColor: '#0055CC',
   },
-  errorText: {
+  uploadText: {
     fontSize: 12,
     fontWeight: '400',
-    color: '#d00416',
+    color: '#0055CC',
     fontFamily: 'Poppins',
     lineHeight: 18,
   },
@@ -729,12 +917,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins',
     lineHeight: 18,
   },
-  removeButton: {
-    backgroundColor: '#d00416',
-    borderWidth: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  // removeButton: {
+  //   backgroundColor: '#d00416',
+  //   borderWidth: 0,
+  //   justifyContent: 'center',
+  //   alignItems: 'center',
+  // },
   removeButtonText: {
     fontSize: 20,
     fontWeight: '400',
@@ -850,6 +1038,7 @@ const styles = StyleSheet.create({
 
   // Continue Button
   continueButton: {
+     
     backgroundColor: '#05c',
     borderRadius: 8,
     paddingVertical: 16,
@@ -857,11 +1046,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 40,
-    marginBottom: 24,
+    marginBottom: 40,
     height: 56,
+    paddingBottom: 24,
+    margin: 16,
   },
   buttonDisabled: {
-    opacity: 0.6,
+    backgroundColor: '#a4a4a4',
   },
   buttonText: {
     fontSize: 16,
@@ -929,6 +1120,66 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: Colors.neutral900,
     borderRadius: 12,
+  },
+
+  // Additional styles can be added here
+ uploadedCanelContainer : {
+   flexDirection: 'row',
+},
+  uploadedImageContainer: {
+    width: 70,
+    height: 64,
+    position: 'relative',
+    borderRadius: 8,
+    overflow: 'visible',
+  },
+  uploadedImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  removeButton: {
+    position: 'absolute',
+    top: -0,
+    right: -0,
+    width: 22,
+    height: 22,
+    borderRadius: 20,
+    backgroundColor: '#d00416',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  removeButtonIcon: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'white',
+    fontFamily: 'Poppins',
+  },
+  
+  // Additional styles can be added here
+  vehiclePhotosContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 2,
+  },
+  addNewPhotoButton: {
+    height : 64,
+    width: '24%',
+    aspectRatio: 1,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d2d2d2',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addMorePhotoText: {
+    fontFamily : 'regular',
+    fontSize: 12,
+    color: '#606060',
   },
 });
 

@@ -1,18 +1,20 @@
-import React, { useState, useRef, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  Pressable,
-  Image,
-  ScrollView,
-  Animated,
-  SafeAreaView,
-} from 'react-native';
+import { Colors } from '@/lib/theme';
 import * as ImagePicker from 'expo-image-picker';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  Image,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Spacing, Radius } from '@/lib/theme';
+import ICONS from '../constants/icons';
 
 interface DriverDetailsScreenProps {
   onContinue?: (data: DriverDetailsData) => void;
@@ -64,7 +66,7 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
+        allowsEditing: false,
         aspect: [1, 1],
         quality: 0.8,
       });
@@ -124,11 +126,17 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Top Container */}
+   
+    <View style={styles.headerTopContainer} >
+    
+    </View>
+     
       {/* Header */}
-
       <View style={styles.header}>
+
         <Pressable onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backButtonText}>←</Text>
+         <Image source={ICONS.LeftArrow} style={styles.backButtonIcon} />
         </Pressable>
         <Text style={styles.headerTitle}>Onboarding</Text>
       </View>
@@ -198,7 +206,11 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
                 />
               </View>
 
-              {/* Continue Button */}
+            </View>
+          </View>
+        </ScrollView>
+            <View style={styles.contentContainer }>
+               {/* Continue Button */}
               <Pressable
                 style={[
                   styles.continueButton,
@@ -211,9 +223,9 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
                   {isLoading ? 'Processing...' : 'Continue'}
                 </Text>
               </Pressable>
+              
             </View>
-          </View>
-        </ScrollView>
+             
       </Animated.View>
 
       {/* Navigation Handle */}
@@ -242,15 +254,15 @@ const DocumentUploadItem: React.FC<DocumentUploadItemProps> = ({
   isLoading,
 }) => {
   return (
-    <View style={styles.documentItem}>
+    <TouchableOpacity style={styles.documentItem}  onPress={onUpload}>
       {/* Left side: Info */}
-      <View style={styles.documentInfo}>
+      <View style={styles.documentInfo} >
         <Text style={styles.documentTitle}>{title}</Text>
         <Text style={styles.documentDescription}>{description}</Text>
         {hasError && (
           <View style={styles.errorContainer}>
-            <Text style={styles.retryIcon}>↻</Text>
-            <Text style={styles.errorText}>Upload again</Text>
+            <Image source={ICONS.UploadIcon } style={styles.uploadIcon} />
+            <Text style={styles.uploadText}>Upload</Text>
           </View>
         )}
       </View>
@@ -258,16 +270,29 @@ const DocumentUploadItem: React.FC<DocumentUploadItemProps> = ({
       {/* Right side: Upload box or Image */}
       <View style={styles.documentUploadBox}>
         {imageUri ? (
-          <View style={styles.uploadedImageContainer}>
-            <Image source={{ uri: imageUri }} style={styles.uploadedImage} />
-            <Pressable
+            <View style={styles.uploadedCanelContainer}>
+
+                 <View style={styles.uploadedImageContainer}>
+                  <Image source={{ uri: imageUri }} style={styles.uploadedImage} />
+                
+          </View>
+
+           <Pressable
               style={styles.removeButton}
               onPress={onRemove}
               disabled={isLoading}
             >
-              <Text style={styles.removeButtonIcon}>✕</Text>
+              <Text style={styles.removeButtonIcon}>{'✕'}</Text>
             </Pressable>
-          </View>
+            </View>
+             
+              
+             
+          
+          
+
+
+       
         ) : (
           <Pressable
             style={styles.uploadButton}
@@ -278,7 +303,7 @@ const DocumentUploadItem: React.FC<DocumentUploadItemProps> = ({
           </Pressable>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 
@@ -290,9 +315,13 @@ const styles = StyleSheet.create({
 
   
   // Header
+  headerTopContainer : {
+    height: 36,
+    backgroundColor : 'white'
+  },
   header: {
-    height: 100,
-    paddingHorizontal: 24,
+    height: 64,
+    paddingHorizontal: 18,
     paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
@@ -300,13 +329,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
-    gap: 12,
+    gap: 2,
   },
   backButton: {
-    width: 38,
-    height: 38,
-    justifyContent: 'center',
+    width: 48,
+    height: 48,
+    flexDirection: 'row',
     alignItems: 'center',
+  },
+   backButtonIcon: {
+    width: 41,
+    height: 41
   },
   backButtonText: {
     fontSize: 24,
@@ -314,11 +347,10 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   headerTitle: {
-    fontSize: 30,
+    fontSize: 22,
     fontWeight: '600',
     color: '#1c1c1c',
     fontFamily: 'Poppins',
-    lineHeight: 32,
     textAlign: 'center',
     flex: -1,
     alignSelf: 'center',
@@ -346,10 +378,10 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 40,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#1c1c1c',
     fontFamily: 'Poppins',
-    lineHeight: 48,
+   
   },
   subtitle: {
     fontSize: 16,
@@ -438,16 +470,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 4,
   },
-  retryIcon: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: '#d00416',
-    fontFamily: 'Poppins',
+  uploadIcon: {
+    width: 12,
+    height: 12,
+    // tintColor: '#d00416',
   },
-  errorText: {
+  uploadText: {
     fontSize: 12,
     fontWeight: '400',
-    color: '#d00416',
+    color: '#0055CC',
     fontFamily: 'Poppins',
     lineHeight: 18,
   },
@@ -477,12 +508,15 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins',
     lineHeight: 18,
   },
+uploadedCanelContainer : {
+   flexDirection: 'row',
+},
   uploadedImageContainer: {
-    width: 64,
+    width: 70,
     height: 64,
     position: 'relative',
     borderRadius: 8,
-    overflow: 'hidden',
+    overflow: 'visible',
   },
   uploadedImage: {
     width: '100%',
@@ -491,11 +525,11 @@ const styles = StyleSheet.create({
   },
   removeButton: {
     position: 'absolute',
-    top: -7,
-    right: -7,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    top: -0,
+    right: -0,
+    width: 22,
+    height: 22,
+    borderRadius: 20,
     backgroundColor: '#d00416',
     justifyContent: 'center',
     alignItems: 'center',
@@ -516,10 +550,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 40,
-    marginBottom: 24,
+    marginBottom: 40,
   },
   continueButtonDisabled: {
-    opacity: 0.5,
+    backgroundColor: '#a4a4a4',
   },
   continueButtonText: {
     fontSize: 16,

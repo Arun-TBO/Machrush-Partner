@@ -1,29 +1,28 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { Colors, Radius, Shadows, Spacing } from '@/lib/theme';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  Dimensions,
-  Image,
-  ScrollView,
-  SafeAreaView,
-  PanResponder,
-  GestureResponderEvent,
-  PanResponderGestureState,
   Animated,
+  Dimensions,
+  GestureResponderEvent,
+  Image,
+  PanResponder,
+  PanResponderGestureState,
   Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Spacing, Radius, Shadows } from '@/lib/theme';
-import { ProgressIndicator } from './ProgressIndicator';
-import { PrimaryButton } from './PrimaryButton';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import IMAGES from '../constants/images';
 import { MobileNumberVerification } from './MobileNumberVerification';
+import { PrimaryButton } from './PrimaryButton';
+import { ProgressIndicator } from './ProgressIndicator';
 
 const { width, height } = Dimensions.get('window');
 
 // Logo asset
 const LOGO = require('@/assets/images/Logo.png');
-
 // Arrow Icon Component
 const ArrowIcon = () => (
   <Text style={{ fontSize: 20, color: Colors.neutral100 }}>→</Text>
@@ -72,7 +71,10 @@ export const WalkthroughScreen: React.FC<WalkthroughScreenProps> = ({
   const [currentStep, setCurrentStep] = useState(0);
   const [showVerification, setShowVerification] = useState(false);
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+ const fadeAnim = useRef(new Animated.Value(0)).current;
+const logoTranslateX = useRef(new Animated.Value(-150)).current;
+const logoTranslateY = useRef(new Animated.Value(-250)).current;
+const textTranslateY = useRef(new Animated.Value(120)).current;
   const logoPositionAnim = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const insets = useSafeAreaInsets();
   const screen = WALKTHROUGH_SCREENS[currentStep];
@@ -82,7 +84,9 @@ export const WalkthroughScreen: React.FC<WalkthroughScreenProps> = ({
     // Fade in + Zoom in parallel
     fadeAnim.setValue(0);
     scaleAnim.setValue(0.95);
-    
+    logoTranslateX.setValue(-200);
+    logoTranslateY.setValue(-250);
+    textTranslateY.setValue(150);
     const isLogoScreen = screen.isLogoScreen;
     
     if (isLogoScreen) {
@@ -94,17 +98,34 @@ export const WalkthroughScreen: React.FC<WalkthroughScreenProps> = ({
       
       logoPositionAnim.setValue({ x: initialX, y: initialY });
       Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(logoPositionAnim, {
-          toValue: { x: 0, y: 0 },
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ]).start();
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 1200,
+      useNativeDriver: true,
+    }),
+
+    // Logo top -> center
+     Animated.timing(logoTranslateX, {
+      toValue: 0,
+      duration: 1500,
+      useNativeDriver: true,
+    }),
+
+    Animated.timing(logoTranslateY, {
+      toValue: 0,
+      duration: 1500,
+      useNativeDriver: true,
+    }),
+
+    // Text bottom -> center
+    Animated.timing(textTranslateY, {
+      toValue: 0,
+      duration: 1600,
+      useNativeDriver: true,
+    }),
+  ]).start();
+
+      
     } else {
       // Screens 1-2: Normal animation
       logoPositionAnim.setValue({ x: 0, y: 0 });
@@ -125,8 +146,11 @@ export const WalkthroughScreen: React.FC<WalkthroughScreenProps> = ({
   
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        const { dx, dy } = gestureState;
+        return Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10;
+      },
       onPanResponderRelease: (evt: GestureResponderEvent, gestureState: PanResponderGestureState) => {
         const { dx } = gestureState;
         const swipeThreshold = 50;
@@ -144,6 +168,7 @@ export const WalkthroughScreen: React.FC<WalkthroughScreenProps> = ({
   ).current;
 
   const handleNext = () => {
+    console.log('Continue button pressed on screen', currentStep + 1);
     if (currentStep < WALKTHROUGH_SCREENS.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
@@ -170,7 +195,7 @@ export const WalkthroughScreen: React.FC<WalkthroughScreenProps> = ({
         onBack={() => setShowVerification(false)}
       />
     ) : (
-      <SafeAreaView style={[styles.container, { paddingTop: insets.top }]} {...panResponder.panHandlers}>
+      <SafeAreaView style={[styles.container]} {...panResponder.panHandlers}>
       <ScrollView
         scrollEnabled={false}
         style={styles.scrollView}
@@ -206,23 +231,38 @@ export const WalkthroughScreen: React.FC<WalkthroughScreenProps> = ({
         
         {/* Logo Center Section - Only for screen 3 */}
         {screen.isLogoScreen && (
-          <Animated.View style={[
-            styles.logoCenterContainer,
-            {
-              opacity: fadeAnim,
-              transform: [
-                { translateX: logoPositionAnim.x },
-                { translateY: logoPositionAnim.y },
-              ],
-            },
-          ]}>
-            <Image
-              source={LOGO}
-              style={[styles.logoCenterImage, { tintColor: Colors.primary }]}
-              resizeMode="contain"
-            />
-            <Text style={styles.machrushText}>MACHRUSH</Text>
-          </Animated.View>
+          <>
+      <View style={styles.logoCenterContainer}>
+
+            <Animated.Image
+                source={IMAGES.AppLogo}
+                resizeMode="contain"
+                style={[
+                  styles.logoCenterImage,
+                  {
+                    opacity: fadeAnim,
+                    transform: [
+                      { translateX: logoTranslateX },
+                      { translateY: logoTranslateY },
+                    ],
+                  },
+                ]}
+              />
+            
+            <Animated.Text
+              style={[
+                styles.machrushText,
+                {
+                  opacity: fadeAnim,
+                  transform: [{ translateY: textTranslateY }],
+                },
+              ]}
+            >
+              MACHRUSH
+            </Animated.Text>
+
+</View>
+            </>
         )}
 
         {/* Bottom Sheet Section */}
@@ -301,8 +341,9 @@ const styles = StyleSheet.create({
   },
   heroImage: {
     width: '100%',
-    height: '100%',
-    position: 'absolute',
+    height: '80%',
+    marginBottom : '100%'
+    // position: 'absolute',
   },
   heroPlaceholder: {
     width: '100%',
@@ -339,7 +380,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: Colors.neutral100,
-    borderRadius: Radius.lg,
+    borderTopLeftRadius: Radius.lg,
+    borderTopRightRadius: Radius.lg,
     paddingHorizontal: Spacing.sm,
     paddingBottom: Spacing.md,
     display: 'flex',
@@ -449,6 +491,9 @@ const styles = StyleSheet.create({
     height: 100,
     marginBottom: Spacing.lg,
     resizeMode: 'contain',
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   machrushText: {
     fontSize: 40,
