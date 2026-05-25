@@ -18,7 +18,12 @@ import { useRouter } from 'expo-router';
 import { signOutUser } from '@/lib/firebaseAuthService';
 import { auth } from '@/lib/firebase';
 import { getDriverProfile, updateDriverProfilePhoto } from '@/lib/firestoreOnboardingService';
-import { getCachedProfilePhotoUrl, setCachedProfilePhotoUrl } from '@/lib/profilePhotoCache';
+import {
+  getCachedDriverName,
+  getCachedProfilePhotoUrl,
+  setCachedDriverName,
+  setCachedProfilePhotoUrl,
+} from '@/lib/profileCache';
 
 const profileAvatarImage = require('@/assets/images/profile/profile-avatar.png');
 const backImage = require('@/assets/images/profile/back.png');
@@ -238,6 +243,7 @@ export default function ProfileScreen() {
   const [isSupportVisible, setIsSupportVisible] = React.useState(false);
   const [isLogoutVisible, setIsLogoutVisible] = React.useState(false);
   const [profilePhotoUrl, setProfilePhotoUrl] = React.useState<string | null>(null);
+  const [driverName, setDriverName] = React.useState('Driver');
   const [isPhotoUploading, setIsPhotoUploading] = React.useState(false);
   const router = useRouter();
 
@@ -289,22 +295,34 @@ export default function ProfileScreen() {
         return;
       }
 
-      const cachedPhotoUrl = await getCachedProfilePhotoUrl(uid);
+      const [cachedPhotoUrl, cachedDriverName] = await Promise.all([
+        getCachedProfilePhotoUrl(uid),
+        getCachedDriverName(uid),
+      ]);
+
       if (isMounted && cachedPhotoUrl) {
         setProfilePhotoUrl(cachedPhotoUrl);
+      }
+      if (isMounted && cachedDriverName) {
+        setDriverName(cachedDriverName);
       }
 
       const driverProfile = await getDriverProfile(uid, idToken);
       const savedPhotoUrl =
         driverProfile?.profilePhotoUrl ||
         (driverProfile?.photoUri?.startsWith('http') ? driverProfile.photoUri : null);
+      const savedDriverName = driverProfile?.fullName?.trim();
 
       if (savedPhotoUrl) {
         await setCachedProfilePhotoUrl(uid, savedPhotoUrl);
       }
+      if (savedDriverName) {
+        await setCachedDriverName(uid, savedDriverName);
+      }
 
       if (isMounted) {
         setProfilePhotoUrl(savedPhotoUrl || cachedPhotoUrl || null);
+        setDriverName(savedDriverName || cachedDriverName || 'Driver');
       }
     };
 
@@ -392,7 +410,7 @@ export default function ProfileScreen() {
             <View style={styles.profileRow}>
               <View style={styles.identity}>
                 <View style={styles.nameRow}>
-                  <Text style={styles.driverName}>Ralph Edwards</Text>
+                  <Text style={styles.driverName}>{driverName}</Text>
                   <Image source={verifiedBadgeImage} style={styles.verifiedBadge} resizeMode="contain" />
                 </View>
                 <Text style={styles.viewProfile}>View Profile</Text>

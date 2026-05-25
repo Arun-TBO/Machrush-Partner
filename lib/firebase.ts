@@ -1,7 +1,10 @@
 import { initializeApp, FirebaseApp, getApp } from 'firebase/app';
-import { Auth, getAuth } from 'firebase/auth';
+import * as FirebaseAuth from 'firebase/auth';
+import { Auth, getAuth, initializeAuth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { FirebaseStorage, getStorage } from 'firebase/storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 // Firebase configuration from environment variables
 // These values are securely stored in .env.local (never commit to git)
@@ -45,7 +48,23 @@ try {
 // Initialize Firebase Authentication
 let auth: Auth;
 try {
-  auth = getAuth(firebaseApp);
+  if (Platform.OS === 'web') {
+    auth = getAuth(firebaseApp);
+  } else {
+    try {
+      const getReactNativePersistence = (FirebaseAuth as any).getReactNativePersistence;
+
+      if (typeof getReactNativePersistence === 'function') {
+        auth = initializeAuth(firebaseApp, {
+          persistence: getReactNativePersistence(AsyncStorage),
+        });
+      } else {
+        auth = getAuth(firebaseApp);
+      }
+    } catch {
+      auth = getAuth(firebaseApp);
+    }
+  }
   console.log('✅ Firebase Auth initialized');
 } catch (error) {
   console.error('❌ Firebase Auth initialization error:', error);

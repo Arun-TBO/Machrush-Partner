@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Image,
@@ -10,11 +10,30 @@ import {
   StyleSheet,
   Text,
   View,
+  RefreshControl,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { auth } from '@/lib/firebase';
-import { getDriverProfile } from '@/lib/firestoreOnboardingService';
-import { getCachedProfilePhotoUrl, setCachedProfilePhotoUrl } from '@/lib/profilePhotoCache';
+import {
+  getDriverProfile,
+  getLatestDriverAvailability,
+  updateDriverAvailability,
+} from '@/lib/firestoreOnboardingService';
+import {
+  getCachedAvailabilityStatus,
+  getCachedProfilePhotoUrl,
+  setCachedAvailabilityStatus,
+  setCachedProfilePhotoUrl,
+} from '@/lib/profileCache';
+import {
+  getDriverActiveDeliveries,
+  getDriverTodayEarnings,
+  getTodayDeliveries,
+  updateDeliveryStatus,
+  type Delivery,
+} from '@/lib/deliveryService';
 
 const profileImage = require('@/assets/images/home-profile.png');
 const mapPinImage = require('@/assets/images/home-map-pin.png');
@@ -27,42 +46,26 @@ const profileTabImage = require('@/assets/images/home-tab-profile.png');
 const onlineImportantImage = require('@/assets/images/driver-online-important.png');
 const offlineImportantImage = require('@/assets/images/driver-offline-important.png');
 
-const jobRequests = [
-  {
-    id: 'job-1',
-    earnings: '₹2,200',
-    pickupDistance: '5km pickup',
-    age: '16min ago',
-    pickupTitle: 'To Pickup',
-    pickupTime: 'Approx. 10 mins',
-    pickupAddress: 'Sobi Engineering, Porur',
-    dropTitle: 'Drop 35 km',
-    dropTime: 'Approx. 60 mins',
-    dropAddress: 'Ram CNC Works, Gandhipuram',
-  },
-  {
-    id: 'job-2',
-    earnings: '₹2,200',
-    pickupDistance: '5km pickup',
-    age: '16min ago',
-    pickupTitle: 'To Pickup',
-    pickupTime: 'Approx. 10 mins',
-    pickupAddress: 'Sobi Engineering, Porur',
-    dropTitle: 'Drop 35 km',
-    dropTime: 'Approx. 60 mins',
-    dropAddress: 'Ram CNC Works, Gandhipuram',
-  },
-];
+type DriverStatus = 'online' | 'offline';
 
-function StatusBarBlock() {
-  return (
-    <View style={styles.statusBar}>
-     
-    </View>
-  );
+interface JobRequestFromDelivery {
+  id: string;
+  earnings: string;
+  pickupDistance: string;
+  age: string;
+  pickupTitle: string;
+  pickupTime: string;
+  pickupAddress: string;
+  dropTitle: string;
+  dropTime: string;
+  dropAddress: string;
+  prioritySet: number;
+  deliveryData: Delivery;
 }
 
-type DriverStatus = 'online' | 'offline';
+function StatusBarBlock() {
+  return <View style={styles.statusBar} />;
+}
 
 function OnlineToggle({
   status,
@@ -93,11 +96,15 @@ function Header({
   onTogglePress,
   onProfilePress,
   profilePhotoUrl,
+  todayEarnings,
+  isLoading,
 }: {
   driverStatus: DriverStatus;
   onTogglePress: () => void;
   onProfilePress: () => void;
   profilePhotoUrl: string | null;
+  todayEarnings: number;
+  isLoading: boolean;
 }) {
   return (
     <View style={styles.header}>
@@ -125,8 +132,14 @@ function Header({
 
       <View style={styles.earningRow}>
         <View>
-          <Text style={styles.totalEarning}>₹2,200</Text>
-          <Text style={styles.totalLabel}>Today total earning</Text>
+          {isLoading ? (
+            <ActivityIndicator size="small" color="#05c" />
+          ) : (
+            <>
+              <Text style={styles.totalEarning}>₹{todayEarnings.toLocaleString()}</Text>
+              <Text style={styles.totalLabel}>Today total earning</Text>
+            </>
+          )}
         </View>
         <OnlineToggle status={driverStatus} onPress={onTogglePress} />
       </View>
@@ -134,9 +147,9 @@ function Header({
   );
 }
 
-function Chip({ label, active }: { label: string; active?: boolean }) {
+function Chip({ label, active, onPress }: { label: string; active?: boolean; onPress?: () => void }) {
   return (
-    <Pressable style={[styles.chip, active ? styles.chipActive : styles.chipInactive]}>
+    <Pressable style={[styles.chip, active ? styles.chipActive : styles.chipInactive]} onPress={onPress}>
       <Text style={[styles.chipText, active ? styles.chipTextActive : styles.chipTextInactive]}>
         {label}
       </Text>
@@ -171,9 +184,44 @@ function RoutePoint({
   );
 }
 
-function JobCard({ job }: { job: (typeof jobRequests)[number] }) {
+// Helper function to get color based on priority set
+function getPrioritySetColor(set: number): string {
+  switch(set) {
+    case 1: return '#ff4444'; // Red - Highest priority (0-20 min)
+    case 2: return '#ff8800'; // Orange (20-40 min)
+    case 3: return '#ffcc00'; // Yellow (40-60 min)
+    case 4: return '#44aa44'; // Green - Lowest priority (60-90 min)
+    default: return '#999999';
+  }
+}
+
+// Helper function to get priority set label
+function getPrioritySetLabel(set: number): string {
+  switch(set) {
+    case 1: return 'URGENT';
+    case 2: return 'HIGH';
+    case 3: return 'MEDIUM';
+    case 4: return 'LOW';
+    default: return 'UNKNOWN';
+  }
+}
+
+function JobCard({ job, onAccept, onReject, isAccepting }: { 
+  job: JobRequestFromDelivery; 
+  onAccept: (delivery: Delivery) => void;
+  onReject: (deliveryId: string) => void;
+  isAccepting: boolean;
+}) {
   return (
-    <View style={styles.jobCard}>
+    <View style={[
+      styles.jobCard, 
+      { borderLeftWidth: 4, borderLeftColor: getPrioritySetColor(job.prioritySet) }
+    ]}>
+      {/* Priority Set Badge */}
+      <View style={[styles.priorityBadge, { backgroundColor: getPrioritySetColor(job.prioritySet) }]}>
+        <Text style={styles.priorityBadgeText}>{getPrioritySetLabel(job.prioritySet)}</Text>
+      </View>
+      
       <View style={styles.jobTopRow}>
         <View>
           <Text style={styles.estimateLabel}>Estimated earnings</Text>
@@ -207,11 +255,11 @@ function JobCard({ job }: { job: (typeof jobRequests)[number] }) {
       </View>
 
       <View style={styles.cardActions}>
-        <Pressable style={styles.rejectButton}>
+        <Pressable style={styles.rejectButton} onPress={() => onReject(job.id)}>
           <Text style={styles.rejectText}>Reject</Text>
         </Pressable>
-        <Pressable style={styles.acceptButton}>
-          <Text style={styles.acceptText}>Accept</Text>
+        <Pressable style={styles.acceptButton} onPress={() => onAccept(job.deliveryData)} disabled={isAccepting}>
+          <Text style={styles.acceptText}>{isAccepting ? 'Accepting...' : 'Accept'}</Text>
         </Pressable>
       </View>
     </View>
@@ -304,71 +352,329 @@ function StatusConfirmModal({
   );
 }
 
+// Helper function to calculate time ago
+function getTimeAgo(timestamp: any): string {
+  if (!timestamp) return 'Just now';
+  
+  let date: Date;
+  if (timestamp.toDate) {
+    date = timestamp.toDate();
+  } else if (timestamp instanceof Date) {
+    date = timestamp;
+  } else if (timestamp.seconds) {
+    date = new Date(timestamp.seconds * 1000);
+  } else {
+    date = new Date(timestamp);
+  }
+
+  const now = new Date();
+  const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+  
+  if (diffInMinutes < 1) return 'Just now';
+  if (diffInMinutes === 1) return '1min ago';
+  if (diffInMinutes < 60) return `${diffInMinutes}min ago`;
+  if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}hr ago`;
+  return `${Math.floor(diffInMinutes / 1440)}d ago`;
+}
+
+// Helper function to get priority set based on timestamp
+function getPrioritySet(timestamp: any): number {
+  if (!timestamp) return 4;
+  
+  let date: Date;
+  if (timestamp.toDate) {
+    date = timestamp.toDate();
+  } else if (timestamp.seconds) {
+    date = new Date(timestamp.seconds * 1000);
+  } else if (timestamp instanceof Date) {
+    date = timestamp;
+  } else {
+    date = new Date(timestamp);
+  }
+  
+  const now = new Date();
+  const ageInMinutes = (now.getTime() - date.getTime()) / (1000 * 60);
+  
+  if (ageInMinutes <= 20) return 1;
+  if (ageInMinutes <= 40) return 2;
+  if (ageInMinutes <= 60) return 3;
+  return 4;
+}
+
+// Helper function to format earnings
+function formatEarnings(amount: number): string {
+  return `₹${amount.toLocaleString('en-IN')}`;
+}
+
+// Helper function to get pickup distance
+function getPickupDistance(delivery: Delivery): string {
+  if (delivery.distance?.pickup) {
+    return `${Math.round(delivery.distance.pickup)}km pickup`;
+  }
+  return '2km pickup';
+}
+
+// Helper function to get estimated times
+function getEstimatedTime(delivery: Delivery, type: 'pickup' | 'drop'): string {
+  if (type === 'pickup' && delivery.estimatedTime?.pickup) {
+    return `Approx. ${Math.round(delivery.estimatedTime.pickup)} mins`;
+  }
+  if (type === 'drop' && delivery.estimatedTime?.dropoff) {
+    return `Approx. ${Math.round(delivery.estimatedTime.dropoff)} mins`;
+  }
+  return type === 'pickup' ? 'Approx. 10 mins' : 'Approx. 60 mins';
+}
+
+// Convert Delivery to JobRequestFromDelivery
+function deliveryToJobRequest(delivery: Delivery): JobRequestFromDelivery {
+  const earnings = formatEarnings(delivery.pricing?.total || 0);
+  const pickupDistance = getPickupDistance(delivery);
+  const age = getTimeAgo(delivery.timestamps?.createdAt);
+  const pickupAddress = delivery.locations?.pickup?.address || 'Pickup location';
+  const dropAddress = delivery.locations?.dropoff?.address || 'Dropoff location';
+  const pickupTime = getEstimatedTime(delivery, 'pickup');
+  const dropTime = getEstimatedTime(delivery, 'drop');
+  const prioritySet = getPrioritySet(delivery.timestamps?.createdAt);
+  
+  const isUrgent = delivery.priority === 'urgent';
+  const dropTitle = isUrgent ? 'Drop (Urgent)' : `Drop ${delivery.distance?.total ? Math.round(delivery.distance.total) + 'km' : '35 km'}`;
+  
+  return {
+    id: delivery.id,
+    earnings,
+    pickupDistance,
+    age,
+    pickupTitle: 'To Pickup',
+    pickupTime,
+    pickupAddress,
+    dropTitle,
+    dropTime,
+    dropAddress,
+    prioritySet,
+    deliveryData: delivery,
+  };
+}
+
 export default function HomeScreen() {
   const router = useRouter();
-  const [driverStatus, setDriverStatus] = useState<DriverStatus>('online');
+  const [driverStatus, setDriverStatus] = useState<DriverStatus>('offline');
   const [pendingStatus, setPendingStatus] = useState<DriverStatus | null>(null);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+  const [jobRequests, setJobRequests] = useState<JobRequestFromDelivery[]>([]);
+  const [todayEarnings, setTodayEarnings] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState<'all' | 'nearest' | 'urgent'>('all');
+  const [acceptingDeliveryId, setAcceptingDeliveryId] = useState<string | null>(null);
+
+  const loadDriverData = async (showRefresh = false) => {
+    if (showRefresh) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
+
+    try {
+      const [storedUid, storedIdToken] = await Promise.all([
+        AsyncStorage.getItem('firebaseUid'),
+        AsyncStorage.getItem('firebaseIdToken'),
+      ]);
+      const uid = auth.currentUser?.uid || storedUid;
+      const idToken = auth.currentUser
+        ? await auth.currentUser.getIdToken().catch(() => storedIdToken)
+        : storedIdToken;
+
+      if (!uid) {
+        setProfilePhotoUrl(null);
+        setJobRequests([]);
+        setTodayEarnings(0);
+        setIsLoading(false);
+        setIsRefreshing(false);
+        return;
+      }
+
+      // Load profile data
+      const [cachedPhotoUrl, cachedStatus] = await Promise.all([
+        getCachedProfilePhotoUrl(uid),
+        getCachedAvailabilityStatus(uid),
+      ]);
+
+      if (cachedPhotoUrl) setProfilePhotoUrl(cachedPhotoUrl);
+      if (cachedStatus) setDriverStatus(cachedStatus);
+
+      // Load driver profile for photo URL
+      const driverProfile = await getDriverProfile(uid, idToken).catch((error) => {
+        console.error('Error loading driver profile:', error);
+        return null;
+      });
+
+      const savedPhotoUrl = driverProfile?.profilePhotoUrl ||
+        (driverProfile?.photoUri?.startsWith('http') ? driverProfile.photoUri : null);
+
+      if (savedPhotoUrl) {
+        await setCachedProfilePhotoUrl(uid, savedPhotoUrl);
+        setProfilePhotoUrl(savedPhotoUrl);
+      }
+
+      const earnings = await getDriverTodayEarnings(uid, idToken);
+      setTodayEarnings(earnings);
+
+      const todayDeliveries = await getTodayDeliveries(uid, idToken);
+      console.log('========== TODAY DELIVERIES ==========');
+      console.log(`Total deliveries created today: ${todayDeliveries.length}`);
+      console.log('Today deliveries data:', JSON.stringify(todayDeliveries, null, 2));
+      console.log('======================================');
+
+      const activeDeliveries = await getDriverActiveDeliveries(uid, idToken);
+      
+      console.log(`Found ${activeDeliveries.length} active deliveries`);
+      
+      // Apply additional filters based on selection
+      let filteredDeliveries = [...activeDeliveries];
+      if (selectedFilter === 'urgent') {
+        filteredDeliveries = filteredDeliveries.filter(d => d.priority === 'urgent');
+      } else if (selectedFilter === 'nearest') {
+        filteredDeliveries.sort((a, b) => {
+          const distA = a.distance?.pickup || Infinity;
+          const distB = b.distance?.pickup || Infinity;
+          return distA - distB;
+        });
+      }
+      
+      const jobRequestsData = filteredDeliveries.map(deliveryToJobRequest);
+      setJobRequests(jobRequestsData);
+
+      console.log('========== MY DELIVERIES DATA ==========');
+      console.log(`Total deliveries: ${activeDeliveries.length}`);
+      console.log('Full data:', JSON.stringify(activeDeliveries, null, 2));
+      console.log('========================================');
+
+      // Load latest availability status
+      const latestStatus = await getLatestDriverAvailability(uid, idToken).catch((error) => {
+        console.error('Error loading availability:', error);
+        return null;
+      });
+      
+      if (latestStatus) {
+        await setCachedAvailabilityStatus(uid, latestStatus);
+        setDriverStatus(latestStatus);
+      }
+    } catch (error) {
+      console.error('Error loading driver data:', error);
+      Alert.alert('Error', 'Failed to load data. Please try again.');
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
 
   useFocusEffect(
-    React.useCallback(() => {
-      let isActive = true;
-
-      const loadProfilePhoto = async () => {
-        const [storedUid, storedIdToken] = await Promise.all([
-          AsyncStorage.getItem('firebaseUid'),
-          AsyncStorage.getItem('firebaseIdToken'),
-        ]);
-        const uid = auth.currentUser?.uid || storedUid;
-
-        if (!uid) {
-          if (isActive) {
-            setProfilePhotoUrl(null);
-          }
-          return;
-        }
-
-        const cachedPhotoUrl = await getCachedProfilePhotoUrl(uid);
-        if (isActive && cachedPhotoUrl) {
-          setProfilePhotoUrl(cachedPhotoUrl);
-        }
-
-        const driverProfile = await getDriverProfile(uid, storedIdToken);
-        const savedPhotoUrl =
-          driverProfile?.profilePhotoUrl ||
-          (driverProfile?.photoUri?.startsWith('http') ? driverProfile.photoUri : null);
-
-        if (savedPhotoUrl) {
-          await setCachedProfilePhotoUrl(uid, savedPhotoUrl);
-        }
-
-        if (isActive) {
-          setProfilePhotoUrl(savedPhotoUrl || cachedPhotoUrl || null);
-        }
-      };
-
-      loadProfilePhoto();
-
-      return () => {
-        isActive = false;
-      };
-    }, [])
+    useCallback(() => {
+      loadDriverData(false);
+    }, [selectedFilter])
   );
+
+  // Auto-refresh when driver is online
+  useEffect(() => {
+    let interval: number | null = null;
+    
+    if (driverStatus === 'online') {
+      interval = setInterval(() => {
+        loadDriverData(true);
+      }, 30000); // Refresh every 30 seconds
+    }
+    
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [driverStatus, selectedFilter]);
+
+  const handleRefresh = useCallback(() => {
+    loadDriverData(true);
+  }, [selectedFilter]);
 
   const handleTogglePress = () => {
     setPendingStatus(driverStatus === 'online' ? 'offline' : 'online');
   };
 
-  const handleConfirmStatus = () => {
+  const handleConfirmStatus = async () => {
     if (pendingStatus) {
+      const nextStatus = pendingStatus;
       setDriverStatus(pendingStatus);
       setPendingStatus(null);
+
+      const [storedUid, storedIdToken] = await Promise.all([
+        AsyncStorage.getItem('firebaseUid'),
+        AsyncStorage.getItem('firebaseIdToken'),
+      ]);
+      const uid = auth.currentUser?.uid || storedUid;
+
+      if (uid) {
+        await setCachedAvailabilityStatus(uid, nextStatus);
+        updateDriverAvailability(uid, nextStatus, storedIdToken);
+      }
     }
   };
 
   const handleProfilePress = () => {
     router.push('/profile');
   };
+
+  const handleAcceptDelivery = async (delivery: Delivery) => {
+    setAcceptingDeliveryId(delivery.id);
+    
+    try {
+      await updateDeliveryStatus(delivery.id, 'assigned');
+      Alert.alert('Success', 'Delivery accepted successfully!');
+      await loadDriverData(true);
+    } catch (error) {
+      console.error('Error accepting delivery:', error);
+      Alert.alert('Error', 'Failed to accept delivery. Please try again.');
+    } finally {
+      setAcceptingDeliveryId(null);
+    }
+  };
+
+  const handleRejectDelivery = async (deliveryId: string) => {
+    Alert.alert(
+      'Reject Delivery',
+      'Are you sure you want to reject this delivery?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reject',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setJobRequests(prev => prev.filter(job => job.id !== deliveryId));
+              Alert.alert('Success', 'Delivery rejected');
+            } catch (error) {
+              console.error('Error rejecting delivery:', error);
+              Alert.alert('Error', 'Failed to reject delivery');
+              await loadDriverData(true);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleFilterChange = (filter: 'all' | 'nearest' | 'urgent') => {
+    setSelectedFilter(filter);
+  };
+
+  if (isLoading && !isRefreshing) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#05c" />
+          <Text style={styles.loadingText}>Loading deliveries...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -377,12 +683,21 @@ export default function HomeScreen() {
         onTogglePress={handleTogglePress}
         onProfilePress={handleProfilePress}
         profilePhotoUrl={profilePhotoUrl}
+        todayEarnings={todayEarnings}
+        isLoading={isLoading}
       />
 
       <ScrollView
         style={styles.contentScroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={['#05c']}
+          />
+        }
       >
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Job Request</Text>
@@ -390,14 +705,31 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.chipRow}>
-          <Chip label="All" active />
-          <Chip label="Nearest" />
-          <Chip label="Urgent" />
+          <Chip label="All" active={selectedFilter === 'all'} onPress={() => handleFilterChange('all')} />
+          <Chip label="Nearest" active={selectedFilter === 'nearest'} onPress={() => handleFilterChange('nearest')} />
+          <Chip label="Urgent" active={selectedFilter === 'urgent'} onPress={() => handleFilterChange('urgent')} />
         </View>
 
-        {jobRequests.map((job) => (
-          <JobCard key={job.id} job={job} />
-        ))}
+        {jobRequests.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyTitle}>No active deliveries</Text>
+            <Text style={styles.emptyText}>
+              {driverStatus === 'online' 
+                ? 'You are online. New delivery requests will appear here.' 
+                : 'Go online to start receiving delivery requests.'}
+            </Text>
+          </View>
+        ) : (
+          jobRequests.map((job) => (
+            <JobCard 
+              key={job.id} 
+              job={job} 
+              onAccept={handleAcceptDelivery}
+              onReject={handleRejectDelivery}
+              isAccepting={acceptingDeliveryId === job.id}
+            />
+          ))
+        )}
       </ScrollView>
 
       <DriverTabBar onProfilePress={handleProfilePress} />
@@ -416,6 +748,38 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#eff2f6',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#606060',
+    fontFamily: 'Poppins',
+  },
+  emptyContainer: {
+    padding: 32,
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    marginTop: 20,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#606060',
+    fontFamily: 'Poppins',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   header: {
     backgroundColor: '#dbe6f7',
     borderBottomLeftRadius: 24,
@@ -429,19 +793,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-  },
-  statusTime: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1d1b20',
-    fontFamily: 'Roboto',
-    lineHeight: 20,
-    letterSpacing: 0.14,
-  },
-  statusIcons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
   },
   locationRow: {
     flexDirection: 'row',
@@ -613,6 +964,8 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 0 },
     elevation: 4,
+    position: 'relative',
+    overflow: 'hidden',
   },
   jobTopRow: {
     flexDirection: 'row',
@@ -908,5 +1261,21 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontFamily: 'Poppins',
     letterSpacing: -0.5,
+  },
+  priorityBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderTopRightRadius: 16,
+    borderBottomLeftRadius: 8,
+    zIndex: 10,
+  },
+  priorityBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    fontFamily: 'Poppins',
   },
 });
