@@ -101,3 +101,7 @@ temp/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Backend specific
+/Backend
+Backend/

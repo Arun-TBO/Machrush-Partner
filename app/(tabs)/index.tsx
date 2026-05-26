@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import * as Location from 'expo-location';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { auth } from '@/lib/firebase';
 import {
@@ -28,10 +29,10 @@ import {
   setCachedProfilePhotoUrl,
 } from '@/lib/profileCache';
 import {
+  assignDriverToDelivery,
   getDriverActiveDeliveries,
   getDriverTodayEarnings,
   getTodayDeliveries,
-  updateDeliveryStatus,
   type Delivery,
 } from '@/lib/deliveryService';
 
@@ -266,17 +267,28 @@ function JobCard({ job, onAccept, onReject, isAccepting }: {
   );
 }
 
-function DriverTabBar({ onProfilePress }: { onProfilePress: () => void }) {
+function DriverTabBar({
+  onProfilePress,
+  onDeliveriesPress,
+}: {
+  onProfilePress: () => void;
+  onDeliveriesPress: () => void;
+}) {
   return (
     <View style={styles.driverTabBar}>
       <View style={styles.tabItem}>
         <Image source={homeTabImage} style={styles.tabIcon} resizeMode="contain" />
         <Text style={styles.tabLabelActive}>Home</Text>
       </View>
-      <View style={styles.tabItem}>
+      <Pressable
+        style={styles.tabItem}
+        accessibilityRole="button"
+        accessibilityLabel="My Deliveries"
+        onPress={onDeliveriesPress}
+      >
         <Image source={deliveriesTabImage} style={styles.tabIcon} resizeMode="contain" />
         <Text style={styles.tabLabel}>My Deliveries</Text>
-      </View>
+      </Pressable>
       <Pressable
         style={styles.tabItem}
         accessibilityRole="button"
@@ -363,9 +375,17 @@ function getTimeAgo(timestamp: any): string {
     date = timestamp;
   } else if (timestamp.seconds) {
     date = new Date(timestamp.seconds * 1000);
-  } else {
+  } else if (timestamp._seconds) {
+    // Handle serialized Firestore Timestamp (e.g. from REST API / AsyncStorage)
+    date = new Date(timestamp._seconds * 1000);
+  } else if (typeof timestamp === 'string' || typeof timestamp === 'number') {
     date = new Date(timestamp);
+  } else {
+    return 'Just now';
   }
+
+  // Guard against Invalid Date / NaN
+  if (!isFinite(date.getTime())) return 'Just now';
 
   const now = new Date();
   const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
@@ -386,10 +406,15 @@ function getPrioritySet(timestamp: any): number {
     date = timestamp.toDate();
   } else if (timestamp.seconds) {
     date = new Date(timestamp.seconds * 1000);
+  } else if (timestamp._seconds) {
+    // Handle serialized Firestore Timestamp (e.g. from REST API)
+    date = new Date(timestamp._seconds * 1000);
   } else if (timestamp instanceof Date) {
     date = timestamp;
-  } else {
+  } else if (typeof timestamp === 'string' || typeof timestamp === 'number') {
     date = new Date(timestamp);
+  } else {
+    return 4;
   }
   
   const now = new Date();
@@ -406,12 +431,49 @@ function formatEarnings(amount: number): string {
   return `₹${amount.toLocaleString('en-IN')}`;
 }
 
-// Helper function to get pickup distance
-function getPickupDistance(delivery: Delivery): string {
-  if (delivery.distance?.pickup) {
-    return `${Math.round(delivery.distance.pickup)}km pickup`;
+// ── Haversine distance between two coordinates ──
+function getDistanceFromCoords(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number
+): number {
+  if (!isFinite(lat1) || !isFinite(lng1) || !isFinite(lat2) || !isFinite(lng2)) {
+    return NaN;
   }
-  return '2km pickup';
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+// Helper function to get pickup distance
+function getPickupDistance(delivery: Delivery, driverCoords?: { lat: number; lng: number } | null): string {
+  // Try to calculate from actual coords
+  if (driverCoords && isFinite(driverCoords.lat) && isFinite(driverCoords.lng)) {
+    const pickupCoords = delivery.locations?.pickup?.coords;
+    if (pickupCoords && isFinite(pickupCoords.lat) && isFinite(pickupCoords.lng)) {
+      const distance = getDistanceFromCoords(
+        driverCoords.lat, driverCoords.lng,
+        pickupCoords.lat, pickupCoords.lng
+      );
+      if (isFinite(distance)) {
+        return `${distance.toFixed(1)}km pickup`;
+      }
+    }
+  }
+  // Fallback to stored distance
+  if (delivery.distance?.pickup) {
+    const d = delivery.distance.pickup;
+    if (isFinite(d)) {
+      return `${Math.round(d)}km pickup`;
+    }
+  }
+  return '—';
 }
 
 // Helper function to get estimated times
@@ -426,9 +488,9 @@ function getEstimatedTime(delivery: Delivery, type: 'pickup' | 'drop'): string {
 }
 
 // Convert Delivery to JobRequestFromDelivery
-function deliveryToJobRequest(delivery: Delivery): JobRequestFromDelivery {
+function deliveryToJobRequest(delivery: Delivery, driverCoords?: { lat: number; lng: number } | null): JobRequestFromDelivery {
   const earnings = formatEarnings(delivery.pricing?.total || 0);
-  const pickupDistance = getPickupDistance(delivery);
+  const pickupDistance = getPickupDistance(delivery, driverCoords);
   const age = getTimeAgo(delivery.timestamps?.createdAt);
   const pickupAddress = delivery.locations?.pickup?.address || 'Pickup location';
   const dropAddress = delivery.locations?.dropoff?.address || 'Dropoff location';
@@ -438,6 +500,8 @@ function deliveryToJobRequest(delivery: Delivery): JobRequestFromDelivery {
   
   const isUrgent = delivery.priority === 'urgent';
   const dropTitle = isUrgent ? 'Drop (Urgent)' : `Drop ${delivery.distance?.total ? Math.round(delivery.distance.total) + 'km' : '35 km'}`;
+
+  console.log(`Delivery ${delivery.id} - Age: ${age}, Pickup Distance: ${pickupDistance}, Priority Set: ${prioritySet}`);
   
   return {
     id: delivery.id,
@@ -453,6 +517,28 @@ function deliveryToJobRequest(delivery: Delivery): JobRequestFromDelivery {
     prioritySet,
     deliveryData: delivery,
   };
+}
+
+
+// ── Get driver's current location ──
+async function getDriverLocation(): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      console.warn('Location permission denied');
+      return null;
+    }
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+    return {
+      lat: location.coords.latitude,
+      lng: location.coords.longitude,
+    };
+  } catch (error) {
+    console.error('Error getting driver location:', error);
+    return null;
+  }
 }
 
 export default function HomeScreen() {
@@ -519,35 +605,103 @@ export default function HomeScreen() {
       const earnings = await getDriverTodayEarnings(uid, idToken);
       setTodayEarnings(earnings);
 
-      const todayDeliveries = await getTodayDeliveries(uid, idToken);
-      console.log('========== TODAY DELIVERIES ==========');
-      console.log(`Total deliveries created today: ${todayDeliveries.length}`);
-      console.log('Today deliveries data:', JSON.stringify(todayDeliveries, null, 2));
-      console.log('======================================');
-
       const activeDeliveries = await getDriverActiveDeliveries(uid, idToken);
       
       console.log(`Found ${activeDeliveries.length} active deliveries`);
       
-      // Apply additional filters based on selection
-      let filteredDeliveries = [...activeDeliveries];
+      // ── Get driver's current location for real distance calculation ──
+      const driverCoords = await getDriverLocation();
+
+      console.log('Driver coordinates:', driverCoords);
+      console.log('Active deliveries before filtering:', activeDeliveries.map(d => ({
+        id: d.id,
+        createdAt: d.timestamps?.createdAt,
+        pickupCoords: d.locations?.pickup?.coords,
+        distancePickup: d.distance?.pickup,
+      })));
+      
+      // ── Pre-filter: exclude deliveries older than 2 hours or >15 km away ──
+      let filteredDeliveries = activeDeliveries.filter((delivery) => {
+        // Time filter: must be within 90 minutes (delivery expiry window)
+        const createdAt = delivery.timestamps?.createdAt;
+
+         // Vehicle type matching: driverProfile.vehicleType is { name: string } in Firestore
+         // delivery.vehicle.name is a direct string
+         const rawVehicleType = driverProfile?.vehicleType;
+         const driverVehicleName = (typeof rawVehicleType === 'object' && rawVehicleType !== null)
+           ? (rawVehicleType as { name?: string }).name
+           : (typeof rawVehicleType === 'string' ? rawVehicleType : undefined);
+         const deliveryVehicleRequirement = delivery?.vehicle?.name;
+       
+         if (driverVehicleName && deliveryVehicleRequirement) {
+           if (String(driverVehicleName).toLowerCase().trim() !== String(deliveryVehicleRequirement).toLowerCase().trim()) {
+             return false; // Skip if vehicle types don't match
+           }
+         }
+        if (createdAt) {
+          let date: Date;
+          if (createdAt.toDate) date = createdAt.toDate();
+          else if (createdAt instanceof Date) date = createdAt;
+          else if (createdAt.seconds) date = new Date(createdAt.seconds * 1000);
+          else if (createdAt._seconds) date = new Date(createdAt._seconds * 1000);
+          else if (typeof createdAt === 'string' || typeof createdAt === 'number') date = new Date(createdAt);
+          else return false; // Can't parse timestamp, skip delivery
+          const ageInMinutes = (Date.now() - date.getTime()) / (1000 * 60);
+          if (ageInMinutes > 90) return false; // Older than 90 min — delivery expired
+        }
+        
+        // Distance filter: must be within 15 km
+        if (driverCoords) {
+          const pickupCoords = delivery.locations?.pickup?.coords;
+          if (pickupCoords?.lat && pickupCoords?.lng) {
+            const distance = getDistanceFromCoords(
+              driverCoords.lat, driverCoords.lng,
+              pickupCoords.lat, pickupCoords.lng
+            );
+            if (distance > 15) return false; // Too far
+          }
+          // If no coords but distance.pickup exists, check that
+          else if (delivery.distance?.pickup && delivery.distance.pickup > 15) {
+            return false;
+          }
+        }
+        // If no driver coords, still show the delivery (fallback)
+        return true;
+      });
+      
+      // Apply additional filters and sorting based on selection
       if (selectedFilter === 'urgent') {
         filteredDeliveries = filteredDeliveries.filter(d => d.priority === 'urgent');
       } else if (selectedFilter === 'nearest') {
         filteredDeliveries.sort((a, b) => {
-          const distA = a.distance?.pickup || Infinity;
-          const distB = b.distance?.pickup || Infinity;
-          return distA - distB;
+          // Use actual calculated distance when driverCoords are available
+          const getDist = (d: Delivery) => {
+            if (driverCoords) {
+              const c = d.locations?.pickup?.coords;
+              if (c?.lat && c?.lng) {
+                return getDistanceFromCoords(driverCoords.lat, driverCoords.lng, c.lat, c.lng);
+              }
+            }
+            return d.distance?.pickup || Infinity;
+          };
+          return getDist(a) - getDist(b);
+        });
+      } else {
+        // Default 'all' filter: sort by created time descending (newest first)
+        filteredDeliveries.sort((a, b) => {
+          const getTime = (d: Delivery) => {
+            const ts = d.timestamps?.createdAt;
+            if (ts?.toDate) return ts.toDate().getTime();
+            if (ts instanceof Date) return ts.getTime();
+            if (ts && typeof ts === 'object' && 'seconds' in ts) return (ts.seconds || 0) * 1000;
+            return 0;
+          };
+          return getTime(b) - getTime(a);
         });
       }
       
-      const jobRequestsData = filteredDeliveries.map(deliveryToJobRequest);
+      const jobRequestsData = filteredDeliveries.map(d => deliveryToJobRequest(d, driverCoords));
       setJobRequests(jobRequestsData);
-
-      console.log('========== MY DELIVERIES DATA ==========');
-      console.log(`Total deliveries: ${activeDeliveries.length}`);
-      console.log('Full data:', JSON.stringify(activeDeliveries, null, 2));
-      console.log('========================================');
 
       // Load latest availability status
       const latestStatus = await getLatestDriverAvailability(uid, idToken).catch((error) => {
@@ -622,20 +776,62 @@ export default function HomeScreen() {
     router.push('/profile');
   };
 
-  const handleAcceptDelivery = async (delivery: Delivery) => {
-    setAcceptingDeliveryId(delivery.id);
+  // const handleAcceptDelivery = async (delivery: Delivery) => {
+  //   setAcceptingDeliveryId(delivery.id);
     
-    try {
-      await updateDeliveryStatus(delivery.id, 'assigned');
-      Alert.alert('Success', 'Delivery accepted successfully!');
-      await loadDriverData(true);
-    } catch (error) {
-      console.error('Error accepting delivery:', error);
-      Alert.alert('Error', 'Failed to accept delivery. Please try again.');
-    } finally {
-      setAcceptingDeliveryId(null);
+  //   try {
+  //     const uid = auth.currentUser?.uid || await AsyncStorage.getItem('firebaseUid');
+  //     const idToken = auth.currentUser
+  //       ? await auth.currentUser.getIdToken().catch(() => null)
+  //       : await AsyncStorage.getItem('firebaseIdToken');
+
+  //     if (!uid) {
+  //       Alert.alert('Error', 'User not authenticated. Please sign in again.');
+  //       return;
+  //     }
+
+  //     // Fetch driver profile to get name, phone, photo, vehicle info
+  //     const driverProfile = await getDriverProfile(uid, idToken).catch(() => null);
+
+  //     await assignDriverToDelivery(delivery.id, uid, {
+  //       fullName: driverProfile?.fullName || driverProfile?.name || 'Driver',
+  //       phoneNumber: driverProfile?.phoneNumber || '',
+  //       photoUri: driverProfile?.profilePhotoUrl || driverProfile?.photoUri || '',
+  //       vehicleNumber: driverProfile?.vehicleNumber || '',
+  //     });
+
+  //     Alert.alert('Success', 'Delivery accepted successfully!');
+  //     await loadDriverData(true);
+  //   } catch (error) {
+  //     console.error('Error accepting delivery:', error);
+  //     Alert.alert('Error', 'Failed to accept delivery. Please try again.');
+  //   } finally {
+  //     setAcceptingDeliveryId(null);
+  //   }
+  // };
+
+  const handleAcceptDelivery = (delivery: Delivery) => {
+  // We navigate and pass the data as parameters to the details screen
+  router.push({
+    pathname: "/delivery-details", // Make sure this matches your file name in app/
+    params: {
+      deliveryId: delivery.id,
+      earnings: formatEarnings(delivery.pricing?.total || 0),
+      pickupDist: getPickupDistance(delivery, null), // Helper from your code
+      pickupName: delivery.locations?.pickup?.name || "Sobi Engineering, Porur",
+      pickupAddr: delivery.locations?.pickup?.address || "Iyyanpanthangal,Porur, Chennai",
+      dropDist: delivery.distance?.total ? `${Math.round(delivery.distance.total)}km` : "35km",
+      dropTime: getEstimatedTime(delivery, 'drop'),
+      dropName: delivery.locations?.dropoff?.name || "Ram CNC Works, Gandhipuram",
+      dropAddr: delivery.locations?.dropoff?.address || "Iyyanpanthangal,Porur, Chennai",
+      // Fare breakdown data
+      baseFare: `₹${delivery.pricing?.baseFare || 700}`,
+      distanceFare: `₹${delivery.pricing?.distanceFare || 400}`,
+      fuelCost: `₹${delivery.pricing?.fuelCost || 800}`,
+      total: `₹${delivery.pricing?.total || 2000}`
     }
-  };
+  });
+};
 
   const handleRejectDelivery = async (deliveryId: string) => {
     Alert.alert(
@@ -732,7 +928,10 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
-      <DriverTabBar onProfilePress={handleProfilePress} />
+      <DriverTabBar
+          onProfilePress={handleProfilePress}
+          onDeliveriesPress={() => router.push('/(tabs)/my-deliveries')}
+        />
       <StatusConfirmModal
         targetStatus={pendingStatus || 'online'}
         visible={pendingStatus !== null}

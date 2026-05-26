@@ -28,6 +28,7 @@ export interface Vehicle {
 }
 
 export interface DeliveryLocation {
+  name?: string;
   address: string;
   coords?: { lat: number; lng: number } | null;
 }
@@ -36,6 +37,10 @@ export interface DeliveryPricing {
   tripFare: number;
   tax: number;
   total: number;
+  baseFare?: number;
+  distanceFare?: number;
+  timeFare?: number;
+  fuelCost?: number;
 }
 
 export interface DeliveryPerson {
@@ -114,14 +119,16 @@ export interface Delivery {
 // VEHICLES
 // ================================
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
+const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || '').replace(/\/$/, '') || undefined;
 
 const getTimestampDate = (value: any): Date | null => {
   if (!value) return null;
   if (value?.toDate) return value.toDate();
   if (value instanceof Date) return value;
-  if (typeof value === 'object' && 'seconds' in value) {
-    return new Date((value.seconds || 0) * 1000);
+  if (typeof value === 'object' && ('seconds' in value || '_seconds' in value)) {
+    const secs = value.seconds || value._seconds || 0;
+    const nsecs = value.nanoseconds || value._nanoseconds || 0;
+    return new Date((secs) * 1000 + nsecs / 1000000);
   }
 
   const date = new Date(value);
@@ -657,9 +664,12 @@ export const filterDriverActiveDeliveries = (
     .map((delivery) => {
       const createdDate = getTimestampDate(delivery.timestamps?.createdAt);
 
-      if (!createdDate) return { delivery, ageMinutes: Infinity, set: 0 };
+      if (!createdDate) return null;
 
       const ageInMinutes = (now.getTime() - createdDate.getTime()) / (1000 * 60);
+
+      // Exclude deliveries older than 90 minutes — delivery window expired
+      if (ageInMinutes > 90) return null;
 
       let set = 0;
       if (ageInMinutes <= boundaries.set1) {
@@ -700,6 +710,43 @@ export const filterDriverActiveDeliveries = (
 /**
  * Get ALL deliveries from backend API (bypasses security rules)
  */
+/**
+ * Fetch driver profile via backend Admin SDK (bypasses Firestore security rules).
+ * Returns the driver document data from the 'drivers' collection.
+ */
+export async function getDriverProfileViaBackend(
+  driverId: string,
+  token?: string | null
+): Promise<{ fullName?: string; phoneNumber?: string; photoUri?: string; vehicleNumber?: string; profilePhotoUrl?: string } | null> {
+  if (!API_BASE_URL) {
+    return null;
+  }
+
+  try {
+    const authToken = await resolveAuthToken(token);
+    const response = await fetch(
+      `${API_BASE_URL}/api/deliveries/driver-profile/${encodeURIComponent(driverId)}`,
+      {
+        headers: {
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+      }
+    );
+    if (!response.ok) {
+      console.warn('[DeliveryService] Backend driver profile fetch failed:', response.status);
+      return null;
+    }
+    const body = await response.json();
+    if (body.success && body.data) {
+      return body.data;
+    }
+    return null;
+  } catch (error) {
+    console.warn('[DeliveryService] Backend driver profile fetch error:', error);
+    return null;
+  }
+}
+
 export async function getAllDeliveries(token?: string | null): Promise<Delivery[]> {
   const backendOpenDeliveries = await fetchDeliveriesFromBackend('/api/deliveries/open', token);
   if (backendOpenDeliveries) {
@@ -759,70 +806,80 @@ export async function getDriverVisibleDeliveries(
     }
 
     if (API_BASE_URL) {
-      console.warn('[DeliveryService] Driver delivery backend unavailable; skipping Firestore fallback.');
-      return [];
+      console.warn('[DeliveryService] Driver delivery backend unavailable; falling back to Firestore SDK.');
+      // Do NOT return early - fall through to Firestore SDK fallback
     }
 
-    const authToken = await resolveAuthToken(token);
+    // Attempt REST query; if it fails (e.g. invalid auth token), fall through to SDK
+    let restQuerySucceeded = false;
+    try {
+      const authToken = await resolveAuthToken(token);
 
-    if (authToken) {
-      const [searchingDeliveries, assignedDeliveries] = await Promise.all([
-        runDeliveryQueryViaRest(
-          {
-            from: [{ collectionId: 'deliveries' }],
-            where: {
-              compositeFilter: {
-                op: 'AND',
-                filters: [
-                  {
-                    fieldFilter: {
-                      field: { fieldPath: 'status' },
-                      op: 'EQUAL',
-                      value: { stringValue: 'searching' },
+      if (authToken) {
+        const [searchingDeliveries, assignedDeliveries] = await Promise.all([
+          runDeliveryQueryViaRest(
+            {
+              from: [{ collectionId: 'deliveries' }],
+              where: {
+                compositeFilter: {
+                  op: 'AND',
+                  filters: [
+                    {
+                      fieldFilter: {
+                        field: { fieldPath: 'status' },
+                        op: 'EQUAL',
+                        value: { stringValue: 'searching' },
+                      },
                     },
-                  },
-                  {
-                    fieldFilter: {
-                      field: { fieldPath: 'driverId' },
-                      op: 'EQUAL',
-                      value: { nullValue: null },
+                    {
+                      fieldFilter: {
+                        field: { fieldPath: 'driverId' },
+                        op: 'EQUAL',
+                        value: { nullValue: null },
+                      },
                     },
-                  },
-                ],
+                  ],
+                },
               },
             },
-          },
-          authToken
-        ),
-        runDeliveryQueryViaRest(
-          {
-            from: [{ collectionId: 'deliveries' }],
-            where: {
-              fieldFilter: {
-                field: { fieldPath: 'driverId' },
-                op: 'EQUAL',
-                value: { stringValue: driverId },
+            authToken
+          ),
+          runDeliveryQueryViaRest(
+            {
+              from: [{ collectionId: 'deliveries' }],
+              where: {
+                fieldFilter: {
+                  field: { fieldPath: 'driverId' },
+                  op: 'EQUAL',
+                  value: { stringValue: driverId },
+                },
               },
             },
-          },
-          authToken
-        ),
-      ]);
+            authToken
+          ),
+        ]);
 
-      const visibleDeliveries = sortDeliveriesByDateDesc(
-        dedupeDeliveriesById([...searchingDeliveries, ...assignedDeliveries])
-      );
+        const visibleDeliveries = sortDeliveriesByDateDesc(
+          dedupeDeliveriesById([...searchingDeliveries, ...assignedDeliveries])
+        );
 
-      console.log('[DeliveryService] Visible deliveries for driver:', visibleDeliveries.length);
-      return visibleDeliveries;
+        console.log('[DeliveryService] Visible deliveries for driver:', visibleDeliveries.length);
+        restQuerySucceeded = true;
+        return visibleDeliveries;
+      }
+    } catch (error) {
+      console.warn('[DeliveryService] Firestore REST query failed, falling back to SDK:', error);
+      // Fall through to SDK fallback below
     }
 
+    // Fallback: use Firestore SDK directly
+    // Note: Use a simpler query without composite index requirements
+    // Filter driverId === null in code rather than in the query
     const [searchingSnapshot, assignedSnapshot] = await Promise.all([
       getDocs(
         query(
           collection(db, 'deliveries'),
-          where('status', '==', 'searching'),
-          where('driverId', '==', null)
+          where('status', '==', 'searching')
         )
       ),
       getDocs(
@@ -888,68 +945,74 @@ export async function getDriverActiveDeliveries(driverId: string, token?: string
  * Get driver's assigned deliveries (for history)
  */
 export async function getDriverAssignedDeliveries(driverId: string, token?: string | null): Promise<Delivery[]> {
-  try {
-    const backendAssignedDeliveries = await fetchDeliveriesFromBackend(
-      `/api/deliveries/driver/${encodeURIComponent(driverId)}?type=active`,
-      token
-    );
+  // Strategy: try backend → REST → SDK. Each step logs, but we always
+  // fall through to the SDK query at the end so that we never return
+  // empty prematurely due to a false-negative from an upstream method.
 
-    if (backendAssignedDeliveries) {
-      const filteredAssignedDeliveries = backendAssignedDeliveries.filter(
-        (delivery) => delivery.status !== 'searching'
+  let deliveries: Delivery[] | null = null;
+
+  // 1. Try backend API
+  if (API_BASE_URL) {
+    try {
+      const backendDeliveries = await fetchDeliveriesFromBackend(
+        `/api/deliveries/driver/${encodeURIComponent(driverId)}?type=active`,
+        token
       );
-      console.log(`[DeliveryService] Found ${filteredAssignedDeliveries.length} assigned deliveries for driver`);
-      return filteredAssignedDeliveries;
+      if (backendDeliveries !== null && backendDeliveries !== undefined) {
+        deliveries = backendDeliveries.filter((d) => d.status !== 'searching');
+        console.log(`[DeliveryService] Backend returned ${deliveries.length} assigned deliveries`);
+      }
+    } catch (error) {
+      console.warn('[DeliveryService] Backend assigned fetch failed:', error);
     }
+  }
 
-    if (API_BASE_URL) {
-      console.warn('[DeliveryService] Driver assigned-delivery backend unavailable; skipping Firestore fallback.');
-      return [];
-    }
-
-    const authToken = await resolveAuthToken(token);
-
-    if (authToken) {
-      const assignedDeliveries = await runDeliveryQueryViaRest(
-        {
-          from: [{ collectionId: 'deliveries' }],
-          where: {
-            fieldFilter: {
-              field: { fieldPath: 'driverId' },
-              op: 'EQUAL',
-              value: { stringValue: driverId },
+  // 2. Try Firestore REST API (if we still have no results)
+  if (!deliveries) {
+    try {
+      const authToken = await resolveAuthToken(token);
+      if (authToken) {
+        const restDeliveries = await runDeliveryQueryViaRest(
+          {
+            from: [{ collectionId: 'deliveries' }],
+            where: {
+              fieldFilter: {
+                field: { fieldPath: 'driverId' },
+                op: 'EQUAL',
+                value: { stringValue: driverId },
+              },
             },
           },
-        },
-        authToken
-      );
-
-      const filteredAssignedDeliveries = assignedDeliveries.filter(
-        (delivery) => delivery.status !== 'searching'
-      );
-
-      console.log(`[DeliveryService] Found ${filteredAssignedDeliveries.length} assigned deliveries for driver`);
-      return filteredAssignedDeliveries;
+          authToken
+        );
+        deliveries = restDeliveries.filter((d) => d.status !== 'searching');
+        console.log(`[DeliveryService] REST returned ${deliveries.length} assigned deliveries`);
+      }
+    } catch (error) {
+      console.warn('[DeliveryService] REST assigned query failed:', error);
     }
-
-    const snapshot = await getDocs(
-      query(
-        collection(db, 'deliveries'),
-        where('driverId', '==', driverId)
-      )
-    );
-
-    const assignedDeliveries = mapSnapshotToDeliveries(snapshot).filter(
-      (delivery) => delivery.status !== 'searching'
-    );
-    
-    console.log(`[DeliveryService] Found ${assignedDeliveries.length} assigned deliveries for driver`);
-    return assignedDeliveries;
-    
-  } catch (error) {
-    console.error('[DeliveryService] Error getting assigned deliveries:', error);
-    return [];
   }
+
+  // 3. Final fallback: Firestore SDK (most reliable)
+  if (!deliveries) {
+    try {
+      const snapshot = await getDocs(
+        query(
+          collection(db, 'deliveries'),
+          where('driverId', '==', driverId)
+        )
+      );
+      deliveries = mapSnapshotToDeliveries(snapshot).filter(
+        (d) => d.status !== 'searching'
+      );
+      console.log(`[DeliveryService] SDK returned ${deliveries.length} assigned deliveries`);
+    } catch (error) {
+      console.error('[DeliveryService] SDK assigned query failed:', error);
+      deliveries = [];
+    }
+  }
+
+  return deliveries;
 }
 
 /**
@@ -1145,6 +1208,71 @@ export async function submitReview(
     console.log('[DeliveryService] Review submitted for:', deliveryId);
   } catch (error) {
     console.error('[DeliveryService] Error submitting review:', error);
+    throw error;
+  }
+}
+
+/**
+ * Assign a driver to a delivery via the backend /api/deliveries/:id/assign endpoint.
+ * This properly sets driverId, driver info, tracking.otp, tracking.estimatedArrival,
+ * and timestamps.assignedAt in a single call.
+ */
+export async function assignDriverToDelivery(
+  deliveryId: string,
+  driverId: string,
+  driverData: {
+    fullName: string;
+    phoneNumber: string;
+    photoUri: string;
+    vehicleNumber: string;
+  },
+): Promise<void> {
+  if (API_BASE_URL) {
+    try {
+      const authToken = await resolveAuthToken();
+      const response = await fetch(`${API_BASE_URL}/api/deliveries/${deliveryId}/assign`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify({ driverId, driver: driverData }),
+      });
+      if (response.ok) {
+        const body = await response.json();
+        console.log('[DeliveryService] Driver assigned via backend:', deliveryId, 'OTP:', body.data?.otp);
+        return;
+      }
+      console.warn('[DeliveryService] Backend assign failed:', response.status);
+    } catch (error) {
+      console.warn('[DeliveryService] Backend assign error:', error);
+    }
+  }
+
+  // Fallback: write directly via Firestore SDK
+  try {
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    const now = Timestamp.now();
+
+    await updateDoc(doc(db, 'deliveries', deliveryId), {
+      driverId: driverId,
+      driver: {
+        fullName: driverData.fullName || '',
+        phoneNumber: driverData.phoneNumber || '',
+        photoUri: driverData.photoUri || '',
+        vehicleNumber: driverData.vehicleNumber || '',
+      },
+      status: 'assigned',
+      'tracking.otp': otp,
+      'tracking.driverLat': null,
+      'tracking.driverLng': null,
+      'tracking.estimatedArrival': '~10 mins',
+      'timestamps.assignedAt': now,
+    });
+
+    console.log('[DeliveryService] Driver assigned via SDK:', deliveryId, 'OTP:', otp);
+  } catch (error) {
+    console.error('[DeliveryService] Error assigning driver:', error);
     throw error;
   }
 }

@@ -136,7 +136,7 @@ export default function VehicleDetailsProfileScreen() {
             label="Vehicle Number"
             value={driverProfile?.vehicleNumber || 'e.g.TN 01 AB 1234'}
           />
-          <VehicleField label="Vehicle type" value={driverProfile?.vehicleType || 'Pickup 9ft'} />
+          <VehicleField label="Vehicle type" value={typeof driverProfile?.vehicleType === 'object' ? driverProfile?.vehicleType?.name || 'Pickup 9ft' : driverProfile?.vehicleType || 'Pickup 9ft'} />
           <VehicleField
             label="Enter vehicle capacity"
             value={driverProfile?.vehicleCapacity || '500kg'}

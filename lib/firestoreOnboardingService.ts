@@ -26,7 +26,7 @@ export interface OnboardingData {
 
   // Vehicle Details
   vehicleNumber: string;
-  vehicleType: string;
+  vehicleType: { name: string } | string;
   vehicleCapacity: string;
   bodyType: string;
   rcBookUri: string;
@@ -619,10 +619,15 @@ const getDriverAvailabilityStateViaRest = async (
     }
   );
 
-  if (response.status === 404 || response.status === 403) {
-    if (response.status === 403) {
-      console.warn('Driver availability state read is blocked by Firestore rules.');
-    }
+  // Handle auth errors (401/403) and not-found (404) gracefully — token may be expired
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    console.warn(
+      `Driver availability state read returned ${response.status}; token may be expired.`
+    );
     return null;
   }
 
@@ -891,16 +896,8 @@ export const getVerificationStatus = async (uidOrPhone: string, idToken?: string
  * Can use either UID (preferred) or phone number (for admin queries)
  */
 export const getDriverProfile = async (uidOrPhone: string, idToken?: string | null) => {
+  // 1. Try SDK path first (fastest, works if Firestore rules allow)
   try {
-    if (idToken && auth.currentUser?.uid !== uidOrPhone) {
-      const data = isPhoneIdentifier(uidOrPhone)
-        ? await getDriverByPhoneViaRest(uidOrPhone, idToken)
-        : await getDriverByUidViaRest(uidOrPhone, idToken);
-
-      return data;
-    }
-
-    // Try as UID first
     let docSnap = await getDoc(doc(db, 'drivers', uidOrPhone));
 
     // If not found and looks like a phone number, search by phone field
@@ -919,12 +916,26 @@ export const getDriverProfile = async (uidOrPhone: string, idToken?: string | nu
     if (docSnap.exists()) {
       return docSnap.data() as OnboardingData;
     }
-
-    return null;
   } catch (error) {
-    console.error('Error fetching driver profile:', error);
-    return null;
+    console.warn('SDK getDriverProfile failed, trying REST fallback:', error);
   }
+
+  // 2. Fallback: Try Firestore REST API if idToken is available
+  //    This works even when SDK fails due to missing composite index or transient errors
+  if (idToken) {
+    try {
+      const data = isPhoneIdentifier(uidOrPhone)
+        ? await getDriverByPhoneViaRest(uidOrPhone, idToken)
+        : await getDriverByUidViaRest(uidOrPhone, idToken);
+      if (data) {
+        return data as OnboardingData;
+      }
+    } catch (restError) {
+      console.warn('REST getDriverProfile fallback also failed:', restError);
+    }
+  }
+
+  return null;
 };
 
 export const updateDriverAvailability = async (
