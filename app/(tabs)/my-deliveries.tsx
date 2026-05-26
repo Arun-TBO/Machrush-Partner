@@ -219,8 +219,20 @@ export default function MyDeliveriesApp() {
         {/* DYNAMIC LIST */}
         <View style={{ paddingBottom: 100 }}>
           {isLoading ? <ActivityIndicator style={{marginTop: 50}} color="#0055FF" /> :
-           (activeTab === 'paid' ? stats.history : stats.pending).map((delivery) => (
-            <Pressable key={delivery.id} style={s.deliveryItem} onPress={() => { setSelectedId(delivery.id); setView('details'); }}>
+           (activeTab === 'paid' ? stats.history : stats.pending).map((delivery) => {
+            // Active deliveries (assigned/in_transit) navigate to the live tracking flow
+            const isActive = delivery.status === 'assigned' || delivery.status === 'in_transit';
+            return (
+            <Pressable key={delivery.id} style={s.deliveryItem} onPress={() => {
+              if (isActive) {
+                // Navigate to live DeliverStepsConfirmation flow with deliveryId
+                const route = `/(tabs)/DeliverStepsConfirmation?deliveryId=${encodeURIComponent(delivery.id)}`;
+                router.push(route as any);
+              } else {
+                setSelectedId(delivery.id);
+                setView('details');
+              }
+            }}>
               <View style={s.itemLeft}>
                 <View style={s.logoContainer}><MaterialCommunityIcons name="alpha-a-box" size={24} color="white" /></View>
                 <View style={{flex: 1}}>
@@ -229,13 +241,20 @@ export default function MyDeliveriesApp() {
                 </View>
               </View>
               <View style={s.itemRight}>
-                <View style={[s.statusPill, activeTab === 'paid' ? s.badgePaid : s.badgePending]}>
-                  <Text style={[s.statusPillText, activeTab === 'paid' ? s.textPaid : s.textPending]}>{activeTab === 'paid' ? 'Paid' : 'Pending'}</Text>
-                </View>
+                {isActive ? (
+                  <View style={[s.statusPill, { backgroundColor: '#DBEAFE' }]}>
+                    <Text style={[s.statusPillText, { color: '#2563EB' }]}>Track</Text>
+                  </View>
+                ) : (
+                  <View style={[s.statusPill, activeTab === 'paid' ? s.badgePaid : s.badgePending]}>
+                    <Text style={[s.statusPillText, activeTab === 'paid' ? s.textPaid : s.textPending]}>{activeTab === 'paid' ? 'Paid' : 'Pending'}</Text>
+                  </View>
+                )}
                 <Ionicons name="chevron-forward" size={18} color="#CCC" />
               </View>
             </Pressable>
-          ))}
+            );
+          })}
         </View>
       </ScrollView>
 

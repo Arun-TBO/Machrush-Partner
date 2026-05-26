@@ -31,6 +31,7 @@ import {
 import {
   assignDriverToDelivery,
   getDriverActiveDeliveries,
+  getDriverAssignedDeliveries,
   getDriverTodayEarnings,
   getTodayDeliveries,
   type Delivery,
@@ -552,6 +553,7 @@ export default function HomeScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'nearest' | 'urgent'>('all');
   const [acceptingDeliveryId, setAcceptingDeliveryId] = useState<string | null>(null);
+  const [assignedDeliveries, setAssignedDeliveries] = useState<Delivery[]>([]);
 
   const loadDriverData = async (showRefresh = false) => {
     if (showRefresh) {
@@ -604,6 +606,13 @@ export default function HomeScreen() {
 
       const earnings = await getDriverTodayEarnings(uid, idToken);
       setTodayEarnings(earnings);
+
+      // Fetch assigned deliveries (accepted jobs that are in progress)
+      const assigned = await getDriverAssignedDeliveries(uid, idToken);
+      // Only show accepted, assigned or in_transit deliveries as active
+      const activeAssigned = assigned.filter(d => d.status === 'accepted' || d.status === 'assigned' || d.status === 'in_transit');
+      setAssignedDeliveries(activeAssigned);
+      console.log(`Found ${activeAssigned.length} active assigned deliveries`);
 
       const activeDeliveries = await getDriverActiveDeliveries(uid, idToken);
       
@@ -895,6 +904,44 @@ export default function HomeScreen() {
           />
         }
       >
+        {/* Active (Assigned) Delivery Section - shown above Job Requests */}
+        {assignedDeliveries.length > 0 && (
+          <View style={styles.activeDeliverySection}>
+            <Text style={styles.activeDeliveryTitle}>Active Delivery</Text>
+            {assignedDeliveries.map((delivery) => (
+              <Pressable
+                key={delivery.id}
+                style={styles.activeDeliveryCard}
+                onPress={() => router.push({
+                  pathname: '/(tabs)/DeliverStepsConfirmation',
+                  params: { deliveryId: delivery.id }
+                })}
+              >
+                <View style={styles.activeDeliveryTopRow}>
+                  <View style={styles.activeStatusBadge}>
+                    <Text style={styles.activeStatusText}>
+                      {delivery.status === 'accepted' || delivery.status === 'assigned' ? 'HEAD TO PICKUP' : 'EN ROUTE'}
+                    </Text>
+                  </View>
+                  <Text style={styles.activeEarnings}>
+                    {formatEarnings(delivery.pricing?.total || 0)}
+                  </Text>
+                </View>
+                <View style={styles.activeDeliveryRoute}>
+                  <Text style={styles.activeRoutePickup} numberOfLines={1}>
+                    📍 {delivery.locations?.pickup?.address || 'Pickup'}
+                  </Text>
+                  <Text style={styles.activeRouteArrow}>↓</Text>
+                  <Text style={styles.activeRouteDropoff} numberOfLines={1}>
+                    📍 {delivery.locations?.dropoff?.address || 'Dropoff'}
+                  </Text>
+                </View>
+                <Text style={styles.activeDeliveryTapText}>Tap to view delivery steps →</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Job Request</Text>
           <Image source={filterImage} style={styles.filterIcon} resizeMode="contain" />
@@ -1476,5 +1523,88 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ffffff',
     fontFamily: 'Poppins',
+  },
+  // ── Active Delivery Section Styles ──
+  activeDeliverySection: {
+    width: '100%',
+    gap: 12,
+  },
+  activeDeliveryTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+    letterSpacing: -0.5,
+  },
+  activeDeliveryCard: {
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    gap: 12,
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
+    borderLeftWidth: 4,
+    borderLeftColor: '#005CEE',
+  },
+  activeDeliveryTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  activeStatusBadge: {
+    backgroundColor: '#005CEE',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  activeStatusText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#ffffff',
+    fontFamily: 'Poppins',
+    letterSpacing: 0.5,
+  },
+  activeEarnings: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1fc16b',
+    fontFamily: 'Poppins',
+  },
+  activeDeliveryRoute: {
+    backgroundColor: '#f5f7fa',
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+  },
+  activeRoutePickup: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+    lineHeight: 20,
+  },
+  activeRouteArrow: {
+    fontSize: 16,
+    color: '#005CEE',
+    textAlign: 'center',
+    marginLeft: 4,
+  },
+  activeRouteDropoff: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+    lineHeight: 20,
+  },
+  activeDeliveryTapText: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#005CEE',
+    fontFamily: 'Poppins',
+    textAlign: 'right',
   },
 });

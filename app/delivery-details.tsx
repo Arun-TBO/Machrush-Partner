@@ -71,7 +71,12 @@ export default function DeliveryDetailsScreen() {
       });
 
       Alert.alert('Success', 'Delivery accepted successfully!', [
-        { text: 'OK', onPress: () => router.replace('/(tabs)/my-deliveries') }
+        { text: 'OK', onPress: () => {
+          // Use replace with string URL format for cross-navigator navigation
+          // from root stack (delivery-details) to tabs (DeliverStepsConfirmation)
+          // This ensures delivery-details is removed from the stack
+          router.replace(`/(tabs)/DeliverStepsConfirmation?deliveryId=${encodeURIComponent(deliveryId)}`);
+        }}
       ]);
     } catch (error) {
       console.error('Error accepting delivery:', error);

@@ -89,6 +89,26 @@ const getApiErrorMessage = (responseBody: unknown, fallback: string) => {
   return fallback;
 };
 
+/**
+ * Convert a base64 data URL to a Blob without using fetch(dataUrl).blob(),
+ * which is unreliable on React Native.
+ */
+const dataUrlToBlob = (dataUrl: string): Blob => {
+  const parts = dataUrl.split(',');
+  if (parts.length !== 2) {
+    throw new Error('Invalid data URL format');
+  }
+  const mimeMatch = parts[0].match(/data:(.*?);/);
+  const mimeType = (mimeMatch && mimeMatch[1]) || 'image/jpeg';
+  const byteString = atob(parts[1]);
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i);
+  }
+  return new Blob([ab], { type: mimeType });
+};
+
 const uploadProfilePhotoViaBackend = async (
   uid: string,
   imageData: string,
@@ -177,22 +197,27 @@ export const updateDriverProfilePhoto = async (
     throw new Error('Firebase UID is required');
   }
 
+  // Prefer backend path when we have both a data URL and an idToken
   if (localImageUri.startsWith('data:image') && idToken) {
     return uploadProfilePhotoViaBackend(uid, localImageUri, idToken);
   }
 
+  // Web path: resize then update via REST
   if (Platform.OS === 'web') {
     if (!idToken) {
       throw new Error('Firebase ID token is required to update profile photo on web');
     }
-
     const profilePhotoUrl = await resizeWebImageToDataUrl(localImageUri);
     await updateDriverProfilePhotoViaRest(uid, profilePhotoUrl, idToken);
     return profilePhotoUrl;
   }
 
-  const response = await fetch(localImageUri);
-  const blob = await response.blob();
+  // Native path: upload directly to Firebase Storage using the SDK
+  // Use dataUrlToBlob to avoid the broken fetch(dataUrl).blob() on React Native
+  const blob = localImageUri.startsWith('data:')
+    ? dataUrlToBlob(localImageUri)
+    : await fetch(localImageUri).then((r) => r.blob());
+
   const storageRef = ref(storage, `drivers/${uid}/profile-photo.jpg`);
 
   await uploadBytes(storageRef, blob, {
@@ -228,14 +253,17 @@ const uploadReportImage = async (
   reportSeed: number,
   index: number
 ) => {
+  // For data URLs (from the picker with base64: true), the backend already
+  // receives them as is; for client-side storage, convert to blob properly.
   if (localImageUri.startsWith('data:image')) {
-    return localImageUri;
+    return localImageUri; // Will be sent as data URL to the report submission path
   }
 
   if (Platform.OS === 'web') {
     return resizeWebImageToDataUrl(localImageUri, 720, 0.76);
   }
 
+  // Use dataUrlToBlob for consistency, though this path may not trigger for reports
   const response = await fetch(localImageUri);
   const blob = await response.blob();
   const storageRef = ref(storage, `driver-reports/${uid}/${reportSeed}-${index + 1}.jpg`);
@@ -831,7 +859,7 @@ export const getVerificationStatus = async (uidOrPhone: string, idToken?: string
         : await getDriverByUidViaRest(uidOrPhone, idToken);
 
       if (!data) {
-        console.warn(`âš ï¸ No verification status found for: ${uidOrPhone}`);
+        console.warn(`⚠️ No verification status found for: ${uidOrPhone}`);
         return null;
       }
 

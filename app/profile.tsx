@@ -335,12 +335,22 @@ export default function ProfileScreen() {
 
   const handleEditProfilePhoto = async () => {
     try {
-      const { uid, idToken } = await getCurrentProfileSession();
+      let { uid, idToken } = await getCurrentProfileSession();
 
       if (!uid) {
         Alert.alert('Login required', 'Please login again before updating your profile picture.');
         router.replace('/phone-number');
         return;
+      }
+
+      // Refresh the ID token to ensure it's not expired
+      if (auth.currentUser) {
+        try {
+          idToken = await auth.currentUser.getIdToken(true);
+          await AsyncStorage.setItem('firebaseIdToken', idToken);
+        } catch {
+          // Use whatever we have from session
+        }
       }
 
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -363,9 +373,16 @@ export default function ProfileScreen() {
       }
 
       const selectedAsset = result.assets[0];
-      const selectedUri = selectedAsset?.base64
-        ? `data:${selectedAsset.mimeType || 'image/jpeg'};base64,${selectedAsset.base64}`
-        : selectedAsset?.uri;
+
+      // Use the file URI directly on native (not the base64 data URL)
+      // This ensures reliable blob conversion in the SDK storage upload path
+      let selectedUri = selectedAsset?.uri;
+
+      // Only fall back to base64 data URL if we need the backend path
+      // (i.e. auth.currentUser is not set, requiring the REST path with idToken)
+      if (!auth.currentUser && selectedAsset?.base64) {
+        selectedUri = `data:${selectedAsset.mimeType || 'image/jpeg'};base64,${selectedAsset.base64}`;
+      }
 
       if (!selectedUri) {
         return;
