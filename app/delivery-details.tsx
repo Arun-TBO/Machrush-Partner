@@ -1,4 +1,4 @@
-import { assignDriverToDelivery } from '@/lib/deliveryService';
+import { assignDriverToDelivery, getDriverAssignedDeliveries } from '@/lib/deliveryService';
 import { auth } from '@/lib/firebase';
 import { getDriverProfile } from '@/lib/firestoreOnboardingService';
 import { Ionicons } from '@expo/vector-icons';
@@ -55,6 +55,26 @@ export default function DeliveryDetailsScreen() {
 
       if (!uid || !deliveryId) {
         Alert.alert('Error', 'Session expired. Please log in again.');
+        return;
+      }
+
+      const assignedDeliveries = await getDriverAssignedDeliveries(uid, idToken);
+      const activeDelivery = assignedDeliveries.find(
+        (item) => item.status === 'assigned' || item.status === 'in_transit'
+      );
+
+      if (activeDelivery && activeDelivery.id !== deliveryId) {
+        Alert.alert('Active delivery already running', 'Please finish your current delivery before accepting another trip.', [
+          {
+            text: 'Open active trip',
+            onPress: () => router.replace(`/(tabs)/DeliverStepsConfirmation?deliveryId=${encodeURIComponent(activeDelivery.id)}`),
+          },
+        ]);
+        return;
+      }
+
+      if (activeDelivery?.id === deliveryId) {
+        router.replace(`/(tabs)/DeliverStepsConfirmation?deliveryId=${encodeURIComponent(deliveryId)}`);
         return;
       }
 

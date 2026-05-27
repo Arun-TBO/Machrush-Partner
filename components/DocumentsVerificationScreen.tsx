@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Image,
@@ -43,7 +43,7 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
   const [isLoading, setIsLoading] = useState(true);
   const [showSupportModal, setShowSupportModal] = useState(false);
 
-  const fetchVerificationStatus = async () => {
+  const fetchVerificationStatus = useCallback(async () => {
     try {
       const identifier = uid || phoneNumber;
 
@@ -75,13 +75,13 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
       console.error('Error fetching verification status:', error);
       setIsLoading(false);
     }
-  };
+  }, [idToken, phoneNumber, uid]);
 
   useEffect(() => {
     fetchVerificationStatus();
     const interval = setInterval(fetchVerificationStatus, 5000);
     return () => clearInterval(interval);
-  }, [uid, phoneNumber, idToken]);
+  }, [fetchVerificationStatus]);
 
   const status = verificationData?.status || 'pending';
   const isVerified = status === 'verified';

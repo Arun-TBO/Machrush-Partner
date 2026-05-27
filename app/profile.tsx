@@ -403,13 +403,15 @@ export default function ProfileScreen() {
   };
 
   const handleConfirmLogout = async () => {
-    await Promise.allSettled([
-      signOutUser(),
-      AsyncStorage.clear(),
-    ]);
-
-    setIsLogoutVisible(false);
-    router.replace('/phone-number');
+    try {
+      await AsyncStorage.clear();
+      await signOutUser();
+    } catch (error) {
+      console.error('Error during logout:', error);
+    } finally {
+      setIsLogoutVisible(false);
+      router.replace('/');
+    }
   };
 
   return (

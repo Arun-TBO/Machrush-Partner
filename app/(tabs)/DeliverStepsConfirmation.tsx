@@ -11,8 +11,8 @@ import {
   ArrowRight,
   CheckCircle2,
   ChevronLeft,
+  Headphones,
   MapPin,
-  MoreVertical,
   Navigation,
   Phone,
 } from 'lucide-react-native';
@@ -33,7 +33,7 @@ import {
 } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 // --- Types ---
 type DeliveryStep = 'PICKUP' | 'START_RIDE' | 'ARRIVED_DROP' | 'DETAILS' | 'CANCEL_CONFIRM' | 'COMPLETED';
@@ -198,10 +198,12 @@ const DeliverStepsConfirmation = () => {
           if (updated.status === 'delivered') {
             setStep('COMPLETED');
           } else {
-            const newStep = statusToStep[updated.status] || (step !== 'DETAILS' && step !== 'CANCEL_CONFIRM' ? step : step);
-            if (newStep && step !== 'DETAILS' && step !== 'CANCEL_CONFIRM') {
-              setStep(newStep);
-            }
+            setStep((currentStep) => {
+              if (currentStep === 'DETAILS' || currentStep === 'CANCEL_CONFIRM') {
+                return currentStep;
+              }
+              return statusToStep[updated.status] || currentStep;
+            });
           }
         });
       } catch (err) {
@@ -244,6 +246,7 @@ const DeliverStepsConfirmation = () => {
       await updateDeliveryStatus(deliveryId, 'cancelled');
       router.back();
     } catch (err) {
+      console.error('[DeliverSteps] Cancel delivery failed:', err);
       Alert.alert('Error', 'Failed to cancel delivery');
     } finally {
       setIsUpdating(false);
@@ -293,7 +296,6 @@ const DeliverStepsConfirmation = () => {
 
   const pickupDistKm = delivery.distance?.pickup ? `${delivery.distance.pickup}km` : '3Km';
   const totalDistKm = delivery.distance?.total ? `${delivery.distance.total}km` : '35km';
-  const pickupEta = delivery.estimatedTime?.pickup ? `Approx. ${Math.round(delivery.estimatedTime.pickup)} mins` : '';
   const dropoffEta = delivery.estimatedTime?.dropoff ? `Approx. ${Math.round(delivery.estimatedTime.dropoff)} mins` : 'Approx. 50 mins';
 
   // --- Shared Components ---
@@ -521,42 +523,51 @@ const DeliverStepsConfirmation = () => {
   if (step === 'DETAILS') {
     return (
       <SafeAreaView style={styles.detailsContainer}>
-        <View style={styles.header}>
+        <View style={styles.detailsHeader}>
           <TouchableOpacity onPress={() => {
             setStep(delivery.status === 'in_transit' ? 'START_RIDE' : 'PICKUP');
-          }}>
+          }} style={styles.detailsHeaderIcon}>
             <ChevronLeft size={24} color="black" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Delivery Details</Text>
-          <MoreVertical size={24} color="black" />
+          <Text style={styles.detailsHeaderTitle}>Delivery Details</Text>
+          <TouchableOpacity style={styles.detailsHeaderHelp}>
+            <Headphones size={24} color="#1c1c1c" />
+          </TouchableOpacity>
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <View style={styles.earningsCard}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.detailsScrollContent}>
+          <View style={styles.detailsPriceFrame}>
             <Text style={styles.earningsLabel}>Estimated earnings</Text>
             <Text style={styles.earningsAmount}>{formatAmount(totalEarning)}</Text>
           </View>
 
           <View style={styles.routeSection}>
             <View style={styles.sectionHeader}>
-              <Navigation size={18} color="black" />
+              <Navigation size={20} color="#1c1c1c" fill="#1c1c1c" />
               <Text style={styles.sectionTitle}>Route</Text>
             </View>
             <View style={styles.timelineContainer}>
+              <View style={styles.detailsTimelineLine} />
               <View style={styles.timelineItem}>
-                <View style={[styles.dot, { backgroundColor: '#2563EB' }]} />
-                <View>
+                <View style={styles.detailsTimelineIcon}>
+                  <View style={styles.detailsTimelineDot} />
+                </View>
+                <View style={styles.timelineTextWrap}>
                   <Text style={styles.timelineTitle}>To Pickup {pickupDistKm}</Text>
                   <Text style={styles.timelineLocation}>{pickupName}</Text>
                   <Text style={styles.timelineSub}>{pickupAddress}</Text>
                 </View>
               </View>
+              <View style={styles.detailsRouteDivider} />
               <View style={styles.timelineItem}>
-                <View style={[styles.dot, { backgroundColor: '#2563EB' }]} />
-                <View>
-                  <Text style={styles.timelineTitle}>
-                    Drop {totalDistKm} {dropoffEta ? <Text style={{color: '#2563EB', fontWeight: '400'}}>{dropoffEta}</Text> : null}
-                  </Text>
+                <View style={styles.detailsTimelineIconMuted}>
+                  <ChevronLeft size={14} color="#0055cc" style={{ transform: [{ rotate: '-90deg' }] }} />
+                </View>
+                <View style={styles.timelineTextWrap}>
+                  <View style={styles.timelineTitleRow}>
+                    <Text style={styles.timelineTitle}>Drop {totalDistKm}</Text>
+                    {dropoffEta ? <Text style={styles.timelineEta}>{dropoffEta}</Text> : null}
+                  </View>
                   <Text style={styles.timelineLocation}>{dropoffName}</Text>
                   <Text style={styles.timelineSub}>{dropoffAddress}</Text>
                 </View>
@@ -566,31 +577,31 @@ const DeliverStepsConfirmation = () => {
 
           <View style={styles.fareSection}>
             <Text style={styles.fareTitle}>Fare Breakdown</Text>
-            {baseFare > 0 && (
-              <View style={styles.fareRow}><Text style={styles.fareLabel}>Base fare</Text><Text style={styles.fareValue}>{formatAmount(baseFare)}</Text></View>
-            )}
-            {distanceFare > 0 && (
-              <View style={styles.fareRow}><Text style={styles.fareLabel}>Distance fare</Text><Text style={styles.fareValue}>{formatAmount(distanceFare)}</Text></View>
-            )}
-            {fuelCost > 0 && (
-              <View style={styles.fareRow}><Text style={styles.fareLabel}>Fuel Cost</Text><Text style={styles.fareValue}>{formatAmount(fuelCost)}</Text></View>
-            )}
+            <View style={styles.fareRows}>
+              <View style={styles.fareRow}><Text style={styles.fareLabel}>Base fare 50km</Text><Text style={styles.fareValue}>{formatAmount(baseFare || 700)}</Text></View>
+              <View style={styles.fareRow}><Text style={styles.fareLabel}>Distance fare</Text><Text style={styles.fareValue}>{formatAmount(distanceFare || 400)}</Text></View>
+              <View style={styles.fareRow}><Text style={styles.fareLabel}>Fuel Cost</Text><Text style={styles.fareValue}>{formatAmount(fuelCost || 800)}</Text></View>
+            </View>
             {tax > 0 && (
               <View style={styles.fareRow}><Text style={styles.fareLabel}>Tax</Text><Text style={styles.fareValue}>{formatAmount(tax)}</Text></View>
             )}
+            <View style={styles.fareDivider} />
             <View style={[styles.fareRow, styles.totalRow]}>
               <Text style={styles.totalLabel}>Total earning</Text>
               <Text style={styles.totalValue}>{formatAmount(totalEarning)}</Text>
             </View>
+            <View style={styles.fareDivider} />
           </View>
         </ScrollView>
 
-        <TouchableOpacity 
-          style={styles.cancelDeliveryButton} 
-          onPress={() => setStep('CANCEL_CONFIRM')}
-        >
-          <Text style={styles.cancelDeliveryText}>Cancel Delivery</Text>
-        </TouchableOpacity>
+        <View style={styles.detailsFooter}>
+          <TouchableOpacity 
+            style={styles.cancelDeliveryButton} 
+            onPress={() => setStep('CANCEL_CONFIRM')}
+          >
+            <Text style={styles.cancelDeliveryText}>Cancel Delivery</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
@@ -794,29 +805,234 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
 
   // Details Screen
-  detailsContainer: { flex: 1, backgroundColor: 'white' },
-  earningsCard: { padding: 30, alignItems: 'center' },
-  earningsLabel: { fontSize: 14, color: '#666', marginBottom: 8 },
-  earningsAmount: { fontSize: 44, fontWeight: '700' },
-  routeSection: { padding: 20, borderTopWidth: 1, borderColor: '#F0F0F0' },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  sectionTitle: { fontSize: 16, fontWeight: '600', marginLeft: 10 },
-  timelineContainer: { paddingLeft: 10, borderLeftWidth: 1, borderLeftColor: '#E0E0E0', borderStyle: 'dashed', marginLeft: 10 },
-  timelineItem: { marginBottom: 30, paddingLeft: 20 },
+  detailsContainer: { flex: 1, backgroundColor: '#ffffff' },
+  detailsHeader: {
+    height: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+    backgroundColor: '#ffffff',
+  },
+  detailsHeaderIcon: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailsHeaderTitle: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: '500',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+    lineHeight: 32,
+  },
+  detailsHeaderHelp: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  detailsScrollContent: {
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 100,
+    gap: 24,
+  },
+  detailsPriceFrame: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 16,
+  },
+  earningsLabel: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#606060',
+    fontFamily: 'Poppins',
+    lineHeight: 18,
+  },
+  earningsAmount: {
+    fontSize: 40,
+    fontWeight: '500',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+    lineHeight: 48,
+  },
+  routeSection: {
+    borderWidth: 1,
+    borderColor: '#e8e8e8',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    gap: 12,
+    overflow: 'hidden',
+  },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+    letterSpacing: -0.5,
+  },
+  timelineContainer: {
+    position: 'relative',
+    backgroundColor: '#eff2f6',
+    borderRadius: 12,
+    padding: 12,
+    gap: 12,
+    overflow: 'hidden',
+  },
+  timelineItem: { flexDirection: 'row', alignItems: 'center', gap: 24, minHeight: 58 },
+  timelineTextWrap: { flex: 1, minWidth: 0 },
+  detailsTimelineIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#a4cbff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  detailsTimelineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#0055cc',
+  },
+  detailsTimelineIconMuted: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#a4cbff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  detailsTimelineLine: {
+    position: 'absolute',
+    left: 22,
+    top: 40,
+    height: 90,
+    borderLeftWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#0055cc',
+  },
+  detailsRouteDivider: {
+    height: 1,
+    marginLeft: 44,
+    borderTopWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#d2d2d2',
+  },
   dot: { position: 'absolute', left: -6, top: 6, width: 12, height: 12, borderRadius: 6 },
-  timelineTitle: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
-  timelineLocation: { fontSize: 14, fontWeight: '500' },
-  timelineSub: { fontSize: 12, color: '#999' },
-  fareSection: { padding: 20 },
-  fareTitle: { fontSize: 16, fontWeight: '600', marginBottom: 20 },
-  fareRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  fareLabel: { fontSize: 15, color: '#666' },
-  fareValue: { fontSize: 15, fontWeight: '600' },
-  totalRow: { marginTop: 15, paddingTop: 15, borderTopWidth: 1, borderColor: '#F0F0F0' },
-  totalLabel: { fontSize: 14, color: '#999' },
-  totalValue: { fontSize: 16, fontWeight: '700' },
-  cancelDeliveryButton: { margin: 20, padding: 18, borderRadius: 8, borderWidth: 1, borderColor: '#EF4444', alignItems: 'center' },
-  cancelDeliveryText: { color: '#EF4444', fontWeight: '600' },
+  timelineTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+    letterSpacing: -0.5,
+  },
+  timelineTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  timelineEta: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#0055cc',
+    fontFamily: 'Satoshi',
+  },
+  timelineLocation: {
+    fontSize: 16,
+    fontWeight: '400',
+    color: '#616161',
+    fontFamily: 'Poppins',
+    lineHeight: 24,
+  },
+  timelineSub: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#616161',
+    fontFamily: 'Poppins',
+    lineHeight: 18,
+  },
+  fareSection: {
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+    borderRadius: 12,
+    gap: 16,
+  },
+  fareTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+    letterSpacing: -0.5,
+  },
+  fareRows: { gap: 8 },
+  fareRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  fareLabel: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#8e8e8e',
+    fontFamily: 'Poppins',
+    lineHeight: 21,
+  },
+  fareValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#606060',
+    fontFamily: 'Poppins',
+    lineHeight: 21,
+  },
+  fareDivider: {
+    height: 1,
+    borderTopWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#e8e8e8',
+  },
+  totalRow: {},
+  totalLabel: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#8e8e8e',
+    fontFamily: 'Poppins',
+    lineHeight: 21,
+  },
+  totalValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+    lineHeight: 21,
+  },
+  detailsFooter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#eff2f6',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  cancelDeliveryButton: {
+    minHeight: 48,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d00416',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  cancelDeliveryText: {
+    color: '#d00416',
+    fontSize: 16,
+    fontWeight: '500',
+    fontFamily: 'Poppins',
+    letterSpacing: -0.5,
+  },
 
   // Cancel Screen
   cancelContent: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },

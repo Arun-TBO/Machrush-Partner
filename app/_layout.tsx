@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import 'react-native-reanimated';
@@ -15,6 +16,8 @@ import { auth } from '@/lib/firebase';
 export const unstable_settings = {
   anchor: '(tabs)',
 };
+
+const WALKTHROUGH_COMPLETED_KEY = 'walkthroughCompleted';
 
 /**
  * Attempt to resolve a valid Firebase uid — checks currentUser,
@@ -63,31 +66,40 @@ export default function RootLayout() {
 
   // ── Check walkthrough status (unchanged) ──
   useEffect(() => {
+    const checkWalkthroughStatus = async () => {
+      try {
+        const completed = await AsyncStorage.getItem(WALKTHROUGH_COMPLETED_KEY);
+        setShowWalkthrough(completed !== 'true');
+      } catch {
+        setShowWalkthrough(true);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     checkWalkthroughStatus();
   }, []);
 
-  const checkWalkthroughStatus = async () => {
+  const handleWalkthroughComplete = async () => {
     try {
-      const TEST_MODE = true;
-      if (TEST_MODE) {
-        setShowWalkthrough(true);
-      } else {
-        const completed = await AsyncStorage.getItem('walkthroughCompleted');
-        setShowWalkthrough(completed !== 'true');
-      }
+      await Promise.all([
+        AsyncStorage.setItem(WALKTHROUGH_COMPLETED_KEY, 'true'),
+      ]);
+      setShowWalkthrough(false);
+      setIsAuthenticated(true);
+      router.replace('/(tabs)');
     } catch {
-      setShowWalkthrough(true);
-    } finally {
-      setIsLoading(false);
+      setShowWalkthrough(false);
     }
   };
 
-  const handleWalkthroughComplete = async () => {
+  const handleWalkthroughSkip = async () => {
     try {
-      await AsyncStorage.setItem('walkthroughCompleted', 'true');
+      await AsyncStorage.setItem(WALKTHROUGH_COMPLETED_KEY, 'true');
+    } finally {
       setShowWalkthrough(false);
-    } catch {
-      setShowWalkthrough(false);
+      setIsAuthenticated(false);
+      router.replace('/phone-number');
     }
   };
 
@@ -101,18 +113,23 @@ export default function RootLayout() {
 
     let cancelled = false;
 
-    const checkAuth = async () => {
+    const syncAuthState = async () => {
       const uid = await resolveAuthenticatedUid();
       if (cancelled) return;
       setIsAuthenticated(!!uid);
     };
 
-    checkAuth();
+    syncAuthState();
+
+    const unsubscribe = onAuthStateChanged(auth, async () => {
+      await syncAuthState();
+    });
 
     return () => {
       cancelled = true;
+      unsubscribe();
     };
-  }, [showWalkthrough]);
+  }, [showWalkthrough, segments]);
 
   // ── Redirect based on auth state ──
   useEffect(() => {
@@ -121,16 +138,34 @@ export default function RootLayout() {
     if (!isAuthenticated) {
       // Not authenticated → redirect to phone-number screen
       // Only redirect if we're not already there
-      if (segments[0] !== 'phone-number') {
-        router.replace('/phone-number');
-      }
+      let isCancelled = false;
+
+      const routeUnauthenticatedUser = async () => {
+        const completed = await AsyncStorage.getItem(WALKTHROUGH_COMPLETED_KEY);
+        if (isCancelled) return;
+
+        if (completed === 'true') {
+          setShowWalkthrough(false);
+          if (segments[0] !== 'phone-number') {
+            router.replace('/phone-number');
+          }
+        } else {
+          setShowWalkthrough(true);
+        }
+      };
+
+      routeUnauthenticatedUser();
+
+      return () => {
+        isCancelled = true;
+      };
     } else {
       // Authenticated → if we're on the phone-number screen, go to tabs
       if (segments[0] === 'phone-number') {
         router.replace('/(tabs)');
       }
     }
-  }, [isAuthenticated, segments]);
+  }, [isAuthenticated, router, segments]);
 
   // ── Loading state ──
   if (isLoading) {
@@ -143,7 +178,7 @@ export default function RootLayout() {
       <>
         <WalkthroughScreen
           onComplete={handleWalkthroughComplete}
-          onSkip={handleWalkthroughComplete}
+          onSkip={handleWalkthroughSkip}
         />
         <StatusBar style="auto" />
       </>

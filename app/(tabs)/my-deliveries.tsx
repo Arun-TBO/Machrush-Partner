@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  View, Text, StyleSheet, SafeAreaView, ScrollView,
+  View, Text, StyleSheet, SafeAreaView, ScrollView, Image,
   RefreshControl, ActivityIndicator, Pressable, Dimensions
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -10,6 +10,20 @@ import { getDriverAssignedDeliveries, type Delivery } from '@/lib/deliveryServic
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
+const companyImage = require('@/assets/images/my-delivery-company.png');
+const homeTabImage = require('@/assets/images/home-tab-home.png');
+const deliveriesTabImage = require('@/assets/images/home-tab-deliveries1.png');
+const profileTabImage = require('@/assets/images/home-tab-profile.png');
+
+const chartLabels = [
+  { date: '30', day: 'Mon' },
+  { date: '1', day: 'Tue' },
+  { date: '2', day: 'Wed' },
+  { date: '3', day: 'Thu' },
+  { date: '4', day: 'Fri' },
+  { date: '5', day: 'Sat' },
+  { date: '6', day: 'Sun' },
+];
 
 // --- HELPERS ---
 function toDate(dateVal: any): Date | null {
@@ -24,6 +38,10 @@ function formatDate(dateVal: any): string {
   const date = toDate(dateVal);
   if (!date) return 'N/A';
   return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function formatCurrency(amount = 0): string {
+  return `\u20B9${amount.toLocaleString('en-IN')}`;
 }
 
 export default function MyDeliveriesApp() {
@@ -163,42 +181,51 @@ export default function MyDeliveriesApp() {
     );
   }
 
+  const visibleDeliveries = activeTab === 'paid' ? stats.history : stats.pending;
+
   return (
     <SafeAreaView style={s.container}>
-      <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => loadDeliveries(true)} />}>
-        {/* WEEKLY BREAKDOWN */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={s.scrollContent}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => loadDeliveries(true)} colors={['#05c']} />}
+      >
         <View style={s.weeklySection}>
+          <View style={s.statusBarSpacer} />
           <Text style={s.weeklyTitle}>Weekly breakdown</Text>
           <View style={s.earningsNav}>
-            <Ionicons name="chevron-back" size={20} color="#555" />
+            <Ionicons name="caret-back" size={24} color="#606060" />
             <View style={{ alignItems: 'center' }}>
               <Text style={s.dateRange}>Sep 30 - Oct 6</Text>
-              <Text style={s.totalAmount}>₹{stats.totalEarned.toLocaleString('en-IN')}</Text>
+              <Text style={s.totalAmount}>{formatCurrency(stats.totalEarned)}</Text>
               <Text style={s.totalLabel}>Total earned</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#555" />
-          </View>
-
-          <View style={s.chartContainer}>
-             <View style={s.chartGridLine} />
-             <Text style={s.chartLimitText}>₹4,000</Text>
-             <View style={s.barsRow}>
-                {stats.chart.map((item, i) => {
-                  const max = Math.max(...stats.chart.map(o => o.val)) || 1;
-                  const h = (item.val / max) * 100;
-                  return (
-                    <View key={i} style={s.barWrapper}>
-                      <View style={[s.bar, { height: Math.max(h, 5), backgroundColor: item.val === max && max > 0 ? '#0055FF' : '#8EBAFF' }]} />
-                      <Text style={s.barDayNum}>{item.day}</Text>
-                      <Text style={s.barDayLabel}>{item.label}</Text>
-                    </View>
-                  );
-                })}
-             </View>
+            <Ionicons name="caret-forward" size={24} color="#606060" />
           </View>
         </View>
 
-        {/* STATS */}
+        <View style={s.chartSection}>
+          <View style={s.chartContainer}>
+            <View style={s.chartGridLine} />
+            <Text style={s.chartLimitText}>{'\u20B9'}4,000</Text>
+            <View style={s.barsRow}>
+              {stats.chart.map((item, i) => {
+                const max = Math.max(...stats.chart.map(o => o.val)) || 1;
+                const h = (item.val / max) * 140;
+                const isPeak = item.val === max && max > 0;
+                const label = chartLabels[i] || { date: String(item.day), day: item.label };
+                return (
+                  <View key={i} style={s.barWrapper}>
+                    <View style={[s.bar, { height: Math.max(h, 40), backgroundColor: isPeak ? '#05c' : '#76b0ff' }]} />
+                    <Text style={[s.barDayNum, isPeak && s.barDayActive]}>{label.date}</Text>
+                    <Text style={[s.barDayLabel, isPeak && s.barDayActive]}>{label.day}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+
         <View style={s.statsContainer}>
           <Text style={s.sectionHeader}>Stats</Text>
           <View style={s.statsRow}>
@@ -207,25 +234,26 @@ export default function MyDeliveriesApp() {
           </View>
         </View>
 
-        {/* LIST TABS */}
         <View style={s.listHeaderRow}>
           <Text style={s.sectionHeader}>My Deliveries</Text>
           <View style={s.tabContainer}>
-            <Pressable onPress={() => setActiveTab('paid')} style={[s.tabButton, activeTab === 'paid' && s.tabButtonActive]}><Text style={[s.tabTextMain, activeTab === 'paid' && s.tabTextActive]}>Paid</Text></Pressable>
-            <Pressable onPress={() => setActiveTab('pending')} style={[s.tabButton, activeTab === 'pending' && s.tabButtonActive]}><Text style={[s.tabTextMain, activeTab === 'pending' && s.tabTextActive]}>Pending</Text></Pressable>
+            <Pressable onPress={() => setActiveTab('paid')} style={[s.tabButton, s.tabButtonLeft, activeTab === 'paid' && s.tabButtonActive]}><Text style={[s.tabTextMain, activeTab === 'paid' && s.tabTextActive]}>Paid</Text></Pressable>
+            <Pressable onPress={() => setActiveTab('pending')} style={[s.tabButton, s.tabButtonRight, activeTab === 'pending' && s.tabButtonActive]}><Text style={[s.tabTextMain, activeTab === 'pending' && s.tabTextActive]}>Pending</Text></Pressable>
           </View>
         </View>
 
-        {/* DYNAMIC LIST */}
-        <View style={{ paddingBottom: 100 }}>
-          {isLoading ? <ActivityIndicator style={{marginTop: 50}} color="#0055FF" /> :
-           (activeTab === 'paid' ? stats.history : stats.pending).map((delivery) => {
-            // Active deliveries (assigned/in_transit) navigate to the live tracking flow
+        <View style={s.deliveryList}>
+          {isLoading ? <ActivityIndicator style={{ marginTop: 50 }} color="#0055FF" /> :
+           visibleDeliveries.length === 0 ? (
+            <View style={s.emptyList}>
+              <Text style={s.emptyTitle}>No {activeTab} deliveries</Text>
+              <Text style={s.emptyText}>Pull down to refresh when new deliveries are available.</Text>
+            </View>
+           ) : visibleDeliveries.map((delivery) => {
             const isActive = delivery.status === 'assigned' || delivery.status === 'in_transit';
             return (
             <Pressable key={delivery.id} style={s.deliveryItem} onPress={() => {
               if (isActive) {
-                // Navigate to live DeliverStepsConfirmation flow with deliveryId
                 const route = `/(tabs)/DeliverStepsConfirmation?deliveryId=${encodeURIComponent(delivery.id)}`;
                 router.push(route as any);
               } else {
@@ -234,10 +262,10 @@ export default function MyDeliveriesApp() {
               }
             }}>
               <View style={s.itemLeft}>
-                <View style={s.logoContainer}><MaterialCommunityIcons name="alpha-a-box" size={24} color="white" /></View>
-                <View style={{flex: 1}}>
+                <Image source={companyImage} style={s.logoContainer} resizeMode="cover" />
+                <View style={{ flex: 1 }}>
                   <Text style={s.companyName} numberOfLines={1}>{delivery.locations?.pickup?.address.split(',')[0]}</Text>
-                  <Text style={s.itemSubText}>₹{delivery.pricing?.total?.toLocaleString()} earned • {formatDate(delivery.timestamps?.createdAt)}</Text>
+                  <Text style={s.itemSubText} numberOfLines={1}>{formatCurrency(delivery.pricing?.total || 0)} earned {'\u2022'} {formatDate(delivery.timestamps?.createdAt)}</Text>
                 </View>
               </View>
               <View style={s.itemRight}>
@@ -250,7 +278,7 @@ export default function MyDeliveriesApp() {
                     <Text style={[s.statusPillText, activeTab === 'paid' ? s.textPaid : s.textPending]}>{activeTab === 'paid' ? 'Paid' : 'Pending'}</Text>
                   </View>
                 )}
-                <Ionicons name="chevron-forward" size={18} color="#CCC" />
+                <Ionicons name="chevron-forward" size={24} color="#bbbbbb" />
               </View>
             </Pressable>
             );
@@ -258,60 +286,71 @@ export default function MyDeliveriesApp() {
         </View>
       </ScrollView>
 
-      {/* BOTTOM NAV */}
       <View style={s.bottomNav}>
-         <Pressable style={s.navItem} onPress={() => router.push('/(tabs)')}><Ionicons name="home-outline" size={22} color="#888" /><Text style={s.navText}>Home</Text></Pressable>
-         <Pressable style={s.navItem} onPress={() => {}}><Ionicons name="chatbubble" size={22} color="#0055FF" /><Text style={[s.navText, {color: '#0055FF'}]}>My delivery's</Text></Pressable>
-         <Pressable style={s.navItem} onPress={() => router.push('/profile')}><Ionicons name="person-outline" size={22} color="#888" /><Text style={s.navText}>Profile</Text></Pressable>
+         <Pressable style={s.navItem} onPress={() => router.push('/(tabs)')}><Image source={homeTabImage} style={s.navIcon} resizeMode="contain" /><Text style={s.navText}>Home</Text></Pressable>
+         <Pressable style={s.navItem} onPress={() => {}}><Image source={deliveriesTabImage} style={s.navIcon} resizeMode="contain" /><Text style={s.navTextActive}>{"My delivery's"}</Text></Pressable>
+         <Pressable style={s.navItem} onPress={() => router.push('/profile')}><Image source={profileTabImage} style={s.navIcon} resizeMode="contain" /><Text style={s.navText}>Profile</Text></Pressable>
       </View>
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFF' },
+  container: { flex: 1, backgroundColor: '#eff2f6' },
   // Dashboard
-  weeklySection: { backgroundColor: '#E8EFFF', padding: 20 },
-  weeklyTitle: { fontSize: 18, fontWeight: '700', color: '#111' },
-  earningsNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 15 },
-  totalAmount: { fontSize: 32, fontWeight: '800', color: '#111' },
-  dateRange: { fontSize: 12, color: '#666' },
-  totalLabel: { fontSize: 11, color: '#666' },
-  chartContainer: { height: 120, marginTop: 20, justifyContent: 'flex-end' },
-  chartGridLine: { position: 'absolute', top: 20, left: 0, right: 0, borderTopWidth: 1, borderColor: '#CCC', borderStyle: 'dashed' },
-  chartLimitText: { position: 'absolute', top: 0, width: '100%', textAlign: 'center', fontSize: 12, color: '#444', fontWeight: '600' },
-  barsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  barWrapper: { alignItems: 'center', width: (width - 60) / 7 },
-  bar: { width: 30, borderRadius: 4, marginBottom: 5 },
-  barDayNum: { fontSize: 10, fontWeight: '700' },
-  barDayLabel: { fontSize: 10, color: '#888' },
-  statsContainer: { padding: 20 },
-  sectionHeader: { fontSize: 20, fontWeight: '700' },
-  statsRow: { flexDirection: 'row', marginTop: 15, gap: 20 },
+  scrollContent: { paddingBottom: 94 },
+  weeklySection: { backgroundColor: '#dbe6f7', paddingHorizontal: 16, paddingBottom: 20, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
+  statusBarSpacer: { height: 52 },
+  weeklyTitle: { fontSize: 20, fontWeight: '500', color: '#1c1c1c', fontFamily: 'Poppins', lineHeight: 32 },
+  earningsNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginTop: 24 },
+  totalAmount: { fontSize: 40, fontWeight: '500', color: '#1c1c1c', fontFamily: 'Poppins', lineHeight: 48 },
+  dateRange: { fontSize: 16, color: '#1c1c1c', fontWeight: '500', fontFamily: 'Poppins', letterSpacing: -0.5 },
+  totalLabel: { fontSize: 16, color: '#606060', fontFamily: 'Poppins', lineHeight: 24 },
+  chartSection: { backgroundColor: '#ffffff', paddingHorizontal: 13, paddingTop: 24, paddingBottom: 16 },
+  chartContainer: { height: 191, justifyContent: 'flex-end' },
+  chartGridLine: { position: 'absolute', top: 37, left: 0, right: 0, borderTopWidth: 1, borderColor: 'rgba(51,51,51,0.5)', borderStyle: 'dashed' },
+  chartLimitText: { position: 'absolute', top: 0, width: '100%', textAlign: 'center', fontSize: 16, color: '#1c1c1c', fontWeight: '500', fontFamily: 'Poppins', letterSpacing: -0.5 },
+  barsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', borderBottomWidth: 1, borderBottomColor: 'rgba(51,51,51,0.5)', borderStyle: 'dashed', paddingTop: 30 },
+  barWrapper: { alignItems: 'center', width: (width - 26 - 72) / 7 },
+  bar: { width: '100%', borderRadius: 4, marginBottom: 4, borderBottomWidth: 1, borderBottomColor: 'rgba(51,51,51,0.5)' },
+  barDayNum: { fontSize: 14, color: '#606060', fontFamily: 'Poppins', lineHeight: 21 },
+  barDayLabel: { fontSize: 14, color: '#606060', fontFamily: 'Poppins', lineHeight: 21 },
+  barDayActive: { color: '#1c1c1c' },
+  statsContainer: { backgroundColor: '#ffffff', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: '#d2d2d2' },
+  sectionHeader: { fontSize: 24, fontWeight: '500', color: '#1c1c1c', fontFamily: 'Poppins', letterSpacing: -1 },
+  statsRow: { flexDirection: 'row', marginTop: 16, gap: 16 },
   statBox: { flex: 1 },
-  statLabel: { fontSize: 12, color: '#666' },
-  statValue: { fontSize: 22, fontWeight: '700', marginTop: 5 },
-  listHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F2F2F2', paddingBottom: 10 },
-  tabContainer: { flexDirection: 'row', backgroundColor: '#F0F0F0', borderRadius: 20, padding: 3 },
-  tabButton: { paddingHorizontal: 15, paddingVertical: 5, borderRadius: 18 },
-  tabButtonActive: { backgroundColor: '#FFF', elevation: 2 },
-  tabTextMain: { fontSize: 12, fontWeight: '600', color: '#888' },
-  tabTextActive: { color: '#111' },
-  deliveryItem: { flexDirection: 'row', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F5F5F5', alignItems: 'center' },
-  itemLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  logoContainer: { width: 36, height: 36, backgroundColor: '#000', borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  companyName: { fontSize: 14, fontWeight: '600' },
-  itemSubText: { fontSize: 12, color: '#888', marginTop: 2 },
+  statLabel: { fontSize: 14, color: '#606060', fontFamily: 'Poppins', lineHeight: 21 },
+  statValue: { fontSize: 24, fontWeight: '500', color: '#1c1c1c', fontFamily: 'Poppins', letterSpacing: -1, marginTop: 4 },
+  listHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingTop: 24, paddingBottom: 18 },
+  tabContainer: { width: 152, height: 30, flexDirection: 'row', borderRadius: 8, overflow: 'hidden' },
+  tabButton: { flex: 1, alignItems: 'center', justifyContent: 'center', borderColor: '#bbbbbb', borderTopWidth: 1, borderBottomWidth: 1 },
+  tabButtonLeft: { borderLeftWidth: 1, borderTopLeftRadius: 8, borderBottomLeftRadius: 8 },
+  tabButtonRight: { borderWidth: 1, borderTopRightRadius: 8, borderBottomRightRadius: 8 },
+  tabButtonActive: { backgroundColor: '#ffffff' },
+  tabTextMain: { fontSize: 12, fontWeight: '400', color: '#606060', fontFamily: 'Poppins', lineHeight: 18 },
+  tabTextActive: { color: '#1c1c1c' },
+  deliveryList: { paddingBottom: 6 },
+  deliveryItem: { flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 24, borderBottomWidth: 1, borderBottomColor: '#d2d2d2', alignItems: 'center' },
+  itemLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 },
+  logoContainer: { width: 40, height: 40, borderRadius: 8, backgroundColor: '#000000' },
+  companyName: { fontSize: 16, fontWeight: '500', color: '#1c1c1c', fontFamily: 'Poppins', letterSpacing: -0.5 },
+  itemSubText: { fontSize: 14, color: '#606060', fontFamily: 'Poppins', lineHeight: 21, marginTop: 4 },
   itemRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  statusPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 5 },
-  statusPillText: { fontSize: 11, fontWeight: '700' },
-  badgePaid: { backgroundColor: '#E6F7F0' },
-  badgePending: { backgroundColor: '#FFF9E6' },
-  textPaid: { color: '#10B981' },
-  textPending: { color: '#FBBF24' },
-  bottomNav: { flexDirection: 'row', height: 70, borderTopWidth: 1, borderTopColor: '#EEE', backgroundColor: '#FFF', position: 'absolute', bottom: 0, width: '100%' },
-  navItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  navText: { fontSize: 10, marginTop: 4, fontWeight: '600' },
+  statusPill: { minHeight: 24, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
+  statusPillText: { fontSize: 12, fontWeight: '400', fontFamily: 'Poppins', lineHeight: 18 },
+  badgePaid: { backgroundColor: '#1fc16b' },
+  badgePending: { backgroundColor: '#ffdb43' },
+  textPaid: { color: '#ffffff' },
+  textPending: { color: '#1c1c1c' },
+  emptyList: { alignItems: 'center', paddingHorizontal: 24, paddingVertical: 36, borderTopWidth: 1, borderTopColor: '#d2d2d2' },
+  emptyTitle: { fontSize: 16, fontWeight: '500', color: '#1c1c1c', fontFamily: 'Poppins' },
+  emptyText: { fontSize: 14, color: '#606060', fontFamily: 'Poppins', textAlign: 'center', marginTop: 6 },
+  bottomNav: { flexDirection: 'row', gap: 10, borderTopWidth: 1, borderTopColor: '#a4cbff', backgroundColor: '#eff2f6', position: 'absolute', bottom: 0, width: '100%', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16 },
+  navItem: { flex: 1, alignItems: 'center', gap: 8 },
+  navIcon: { width: 28, height: 28 },
+  navText: { fontSize: 14, color: '#606060', fontFamily: 'Poppins', lineHeight: 21 },
+  navTextActive: { fontSize: 14, color: '#1c1c1c', fontWeight: '500', fontFamily: 'Poppins', lineHeight: 21 },
 
   // Details UI
   detailsHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, paddingTop: 40, height: 90 },

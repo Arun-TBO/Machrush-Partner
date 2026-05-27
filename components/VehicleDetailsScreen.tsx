@@ -9,13 +9,10 @@ import {
   Image,
   Modal,
   FlatList,
-  SafeAreaView,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Spacing, Radius } from '@/lib/theme';
 import { db } from '@/lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 
@@ -66,7 +63,6 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   // UI States
   const [vehicleMasterList, setVehicleMasterList] = useState<VehicleMasterItem[]>([]);
   const [showVehicleTypeModal, setShowVehicleTypeModal] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [isPhotosExpanded, setIsPhotosExpanded] = useState(false);
 
   // File States

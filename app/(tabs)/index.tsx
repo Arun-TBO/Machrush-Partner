@@ -29,11 +29,9 @@ import {
   setCachedProfilePhotoUrl,
 } from '@/lib/profileCache';
 import {
-  assignDriverToDelivery,
   getDriverActiveDeliveries,
   getDriverAssignedDeliveries,
   getDriverTodayEarnings,
-  getTodayDeliveries,
   type Delivery,
 } from '@/lib/deliveryService';
 
@@ -186,28 +184,6 @@ function RoutePoint({
   );
 }
 
-// Helper function to get color based on priority set
-function getPrioritySetColor(set: number): string {
-  switch(set) {
-    case 1: return '#ff4444'; // Red - Highest priority (0-20 min)
-    case 2: return '#ff8800'; // Orange (20-40 min)
-    case 3: return '#ffcc00'; // Yellow (40-60 min)
-    case 4: return '#44aa44'; // Green - Lowest priority (60-90 min)
-    default: return '#999999';
-  }
-}
-
-// Helper function to get priority set label
-function getPrioritySetLabel(set: number): string {
-  switch(set) {
-    case 1: return 'URGENT';
-    case 2: return 'HIGH';
-    case 3: return 'MEDIUM';
-    case 4: return 'LOW';
-    default: return 'UNKNOWN';
-  }
-}
-
 function JobCard({ job, onAccept, onReject, isAccepting }: { 
   job: JobRequestFromDelivery; 
   onAccept: (delivery: Delivery) => void;
@@ -215,15 +191,7 @@ function JobCard({ job, onAccept, onReject, isAccepting }: {
   isAccepting: boolean;
 }) {
   return (
-    <View style={[
-      styles.jobCard, 
-      { borderLeftWidth: 4, borderLeftColor: getPrioritySetColor(job.prioritySet) }
-    ]}>
-      {/* Priority Set Badge */}
-      <View style={[styles.priorityBadge, { backgroundColor: getPrioritySetColor(job.prioritySet) }]}>
-        <Text style={styles.priorityBadgeText}>{getPrioritySetLabel(job.prioritySet)}</Text>
-      </View>
-      
+    <View style={styles.jobCard}>
       <View style={styles.jobTopRow}>
         <View>
           <Text style={styles.estimateLabel}>Estimated earnings</Text>
@@ -260,7 +228,7 @@ function JobCard({ job, onAccept, onReject, isAccepting }: {
         <Pressable style={styles.rejectButton} onPress={() => onReject(job.id)}>
           <Text style={styles.rejectText}>Reject</Text>
         </Pressable>
-        <Pressable style={styles.acceptButton} onPress={() => onAccept(job.deliveryData)} disabled={isAccepting}>
+        <Pressable style={[styles.acceptButton, isAccepting && styles.actionButtonDisabled]} onPress={() => onAccept(job.deliveryData)} disabled={isAccepting}>
           <Text style={styles.acceptText}>{isAccepting ? 'Accepting...' : 'Accept'}</Text>
         </Pressable>
       </View>
@@ -552,10 +520,10 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'nearest' | 'urgent'>('all');
-  const [acceptingDeliveryId, setAcceptingDeliveryId] = useState<string | null>(null);
   const [assignedDeliveries, setAssignedDeliveries] = useState<Delivery[]>([]);
+  const hasActiveDelivery = assignedDeliveries.length > 0;
 
-  const loadDriverData = async (showRefresh = false) => {
+  const loadDriverData = useCallback(async (showRefresh = false) => {
     if (showRefresh) {
       setIsRefreshing(true);
     } else {
@@ -609,8 +577,8 @@ export default function HomeScreen() {
 
       // Fetch assigned deliveries (accepted jobs that are in progress)
       const assigned = await getDriverAssignedDeliveries(uid, idToken);
-      // Only show accepted, assigned or in_transit deliveries as active
-      const activeAssigned = assigned.filter(d => d.status === 'accepted' || d.status === 'assigned' || d.status === 'in_transit');
+      // "accepted" is normalized to "assigned" by the delivery service.
+      const activeAssigned = assigned.filter(d => d.status === 'assigned' || d.status === 'in_transit');
       setAssignedDeliveries(activeAssigned);
       console.log(`Found ${activeAssigned.length} active assigned deliveries`);
 
@@ -729,12 +697,12 @@ export default function HomeScreen() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  };
+  }, [selectedFilter]);
 
   useFocusEffect(
     useCallback(() => {
       loadDriverData(false);
-    }, [selectedFilter])
+    }, [loadDriverData])
   );
 
   // Auto-refresh when driver is online
@@ -752,11 +720,11 @@ export default function HomeScreen() {
         clearInterval(interval);
       }
     };
-  }, [driverStatus, selectedFilter]);
+  }, [driverStatus, loadDriverData]);
 
   const handleRefresh = useCallback(() => {
     loadDriverData(true);
-  }, [selectedFilter]);
+  }, [loadDriverData]);
 
   const handleTogglePress = () => {
     setPendingStatus(driverStatus === 'online' ? 'offline' : 'online');
@@ -783,6 +751,13 @@ export default function HomeScreen() {
 
   const handleProfilePress = () => {
     router.push('/profile');
+  };
+
+  const openActiveDelivery = (delivery: Delivery) => {
+    router.push({
+      pathname: '/(tabs)/DeliverStepsConfirmation',
+      params: { deliveryId: delivery.id },
+    });
   };
 
   // const handleAcceptDelivery = async (delivery: Delivery) => {
@@ -820,6 +795,20 @@ export default function HomeScreen() {
   // };
 
   const handleAcceptDelivery = (delivery: Delivery) => {
+    const activeDelivery = assignedDeliveries[0];
+
+    if (activeDelivery) {
+      Alert.alert(
+        'Active delivery already running',
+        'Please finish your current delivery before accepting another trip.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open active trip', onPress: () => openActiveDelivery(activeDelivery) },
+        ]
+      );
+      return;
+    }
+
   // We navigate and pass the data as parameters to the details screen
   router.push({
     pathname: "/delivery-details", // Make sure this matches your file name in app/
@@ -904,23 +893,19 @@ export default function HomeScreen() {
           />
         }
       >
-        {/* Active (Assigned) Delivery Section - shown above Job Requests */}
-        {assignedDeliveries.length > 0 && (
+        {hasActiveDelivery && (
           <View style={styles.activeDeliverySection}>
             <Text style={styles.activeDeliveryTitle}>Active Delivery</Text>
             {assignedDeliveries.map((delivery) => (
               <Pressable
                 key={delivery.id}
                 style={styles.activeDeliveryCard}
-                onPress={() => router.push({
-                  pathname: '/(tabs)/DeliverStepsConfirmation',
-                  params: { deliveryId: delivery.id }
-                })}
+                onPress={() => openActiveDelivery(delivery)}
               >
                 <View style={styles.activeDeliveryTopRow}>
                   <View style={styles.activeStatusBadge}>
                     <Text style={styles.activeStatusText}>
-                      {delivery.status === 'accepted' || delivery.status === 'assigned' ? 'HEAD TO PICKUP' : 'EN ROUTE'}
+                      {delivery.status === 'assigned' ? 'HEAD TO PICKUP' : 'EN ROUTE'}
                     </Text>
                   </View>
                   <Text style={styles.activeEarnings}>
@@ -942,36 +927,47 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Job Request</Text>
-          <Image source={filterImage} style={styles.filterIcon} resizeMode="contain" />
-        </View>
+        {!hasActiveDelivery && (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Job Request</Text>
+              <Image source={filterImage} style={styles.filterIcon} resizeMode="contain" />
+            </View>
 
-        <View style={styles.chipRow}>
-          <Chip label="All" active={selectedFilter === 'all'} onPress={() => handleFilterChange('all')} />
-          <Chip label="Nearest" active={selectedFilter === 'nearest'} onPress={() => handleFilterChange('nearest')} />
-          <Chip label="Urgent" active={selectedFilter === 'urgent'} onPress={() => handleFilterChange('urgent')} />
-        </View>
+            <View style={styles.chipRow}>
+              <Chip label="All" active={selectedFilter === 'all'} onPress={() => handleFilterChange('all')} />
+              <Chip label="Nearest" active={selectedFilter === 'nearest'} onPress={() => handleFilterChange('nearest')} />
+              <Chip label="Urgent" active={selectedFilter === 'urgent'} onPress={() => handleFilterChange('urgent')} />
+            </View>
 
-        {jobRequests.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyTitle}>No active deliveries</Text>
-            <Text style={styles.emptyText}>
-              {driverStatus === 'online' 
-                ? 'You are online. New delivery requests will appear here.' 
-                : 'Go online to start receiving delivery requests.'}
-            </Text>
+            {jobRequests.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyTitle}>No job requests</Text>
+                <Text style={styles.emptyText}>
+                  {driverStatus === 'online'
+                    ? 'You are online. New delivery requests will appear here.'
+                    : 'Go online to start receiving delivery requests.'}
+                </Text>
+              </View>
+            ) : (
+              jobRequests.map((job) => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  onAccept={handleAcceptDelivery}
+                  onReject={handleRejectDelivery}
+                  isAccepting={false}
+                />
+              ))
+            )}
+          </>
+        )}
+
+        {hasActiveDelivery && (
+          <View style={styles.lockedRequestNotice}>
+            <Text style={styles.lockedRequestTitle}>Finish active delivery first</Text>
+            <Text style={styles.lockedRequestText}>You can accept one trip at a time. Tap the active delivery card to continue the route.</Text>
           </View>
-        ) : (
-          jobRequests.map((job) => (
-            <JobCard 
-              key={job.id} 
-              job={job} 
-              onAccept={handleAcceptDelivery}
-              onReject={handleRejectDelivery}
-              isAccepting={acceptingDeliveryId === job.id}
-            />
-          ))
         )}
       </ScrollView>
 
@@ -1143,9 +1139,9 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 48,
+    paddingTop: 24,
     paddingBottom: 24,
-    gap: 16,
+    gap: 24,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -1166,7 +1162,6 @@ const styles = StyleSheet.create({
   chipRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 8,
   },
   chip: {
     flex: 1,
@@ -1266,7 +1261,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#ffffff',
     padding: 8,
-    gap: 8,
+    gap: 0,
     overflow: 'hidden',
   },
   routePoint: {
@@ -1316,6 +1311,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderStyle: 'dashed',
     borderColor: '#d6d6d6',
+    marginVertical: 8,
   },
   routeConnector: {
     position: 'absolute',
@@ -1368,6 +1364,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontFamily: 'Poppins',
     letterSpacing: -0.5,
+  },
+  actionButtonDisabled: {
+    opacity: 0.64,
   },
   driverTabBar: {
     borderTopWidth: 1,
@@ -1523,6 +1522,30 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ffffff',
     fontFamily: 'Poppins',
+  },
+  lockedRequestNotice: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    gap: 4,
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
+  },
+  lockedRequestTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+  },
+  lockedRequestText: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#606060',
+    fontFamily: 'Poppins',
+    lineHeight: 21,
   },
   // ── Active Delivery Section Styles ──
   activeDeliverySection: {
