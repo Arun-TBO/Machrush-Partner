@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Image,
@@ -10,11 +10,30 @@ import {
   StyleSheet,
   Text,
   View,
+  RefreshControl,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
+import * as Location from 'expo-location';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { auth } from '@/lib/firebase';
-import { getDriverProfile } from '@/lib/firestoreOnboardingService';
-import { getCachedProfilePhotoUrl, setCachedProfilePhotoUrl } from '@/lib/profilePhotoCache';
+import {
+  getDriverProfile,
+  getLatestDriverAvailability,
+  updateDriverAvailability,
+} from '@/lib/firestoreOnboardingService';
+import {
+  getCachedAvailabilityStatus,
+  getCachedProfilePhotoUrl,
+  setCachedAvailabilityStatus,
+  setCachedProfilePhotoUrl,
+} from '@/lib/profileCache';
+import {
+  getDriverActiveDeliveries,
+  getDriverAssignedDeliveries,
+  getDriverTodayEarnings,
+  type Delivery,
+} from '@/lib/deliveryService';
 
 const profileImage = require('@/assets/images/home-profile.png');
 const mapPinImage = require('@/assets/images/home-map-pin.png');
@@ -27,42 +46,26 @@ const profileTabImage = require('@/assets/images/home-tab-profile.png');
 const onlineImportantImage = require('@/assets/images/driver-online-important.png');
 const offlineImportantImage = require('@/assets/images/driver-offline-important.png');
 
-const jobRequests = [
-  {
-    id: 'job-1',
-    earnings: '₹2,200',
-    pickupDistance: '5km pickup',
-    age: '16min ago',
-    pickupTitle: 'To Pickup',
-    pickupTime: 'Approx. 10 mins',
-    pickupAddress: 'Sobi Engineering, Porur',
-    dropTitle: 'Drop 35 km',
-    dropTime: 'Approx. 60 mins',
-    dropAddress: 'Ram CNC Works, Gandhipuram',
-  },
-  {
-    id: 'job-2',
-    earnings: '₹2,200',
-    pickupDistance: '5km pickup',
-    age: '16min ago',
-    pickupTitle: 'To Pickup',
-    pickupTime: 'Approx. 10 mins',
-    pickupAddress: 'Sobi Engineering, Porur',
-    dropTitle: 'Drop 35 km',
-    dropTime: 'Approx. 60 mins',
-    dropAddress: 'Ram CNC Works, Gandhipuram',
-  },
-];
+type DriverStatus = 'online' | 'offline';
 
-function StatusBarBlock() {
-  return (
-    <View style={styles.statusBar}>
-     
-    </View>
-  );
+interface JobRequestFromDelivery {
+  id: string;
+  earnings: string;
+  pickupDistance: string;
+  age: string;
+  pickupTitle: string;
+  pickupTime: string;
+  pickupAddress: string;
+  dropTitle: string;
+  dropTime: string;
+  dropAddress: string;
+  prioritySet: number;
+  deliveryData: Delivery;
 }
 
-type DriverStatus = 'online' | 'offline';
+function StatusBarBlock() {
+  return <View style={styles.statusBar} />;
+}
 
 function OnlineToggle({
   status,
@@ -93,11 +96,15 @@ function Header({
   onTogglePress,
   onProfilePress,
   profilePhotoUrl,
+  todayEarnings,
+  isLoading,
 }: {
   driverStatus: DriverStatus;
   onTogglePress: () => void;
   onProfilePress: () => void;
   profilePhotoUrl: string | null;
+  todayEarnings: number;
+  isLoading: boolean;
 }) {
   return (
     <View style={styles.header}>
@@ -125,8 +132,14 @@ function Header({
 
       <View style={styles.earningRow}>
         <View>
-          <Text style={styles.totalEarning}>₹2,200</Text>
-          <Text style={styles.totalLabel}>Today total earning</Text>
+          {isLoading ? (
+            <ActivityIndicator size="small" color="#05c" />
+          ) : (
+            <>
+              <Text style={styles.totalEarning}>₹{todayEarnings.toLocaleString()}</Text>
+              <Text style={styles.totalLabel}>Today total earning</Text>
+            </>
+          )}
         </View>
         <OnlineToggle status={driverStatus} onPress={onTogglePress} />
       </View>
@@ -134,9 +147,9 @@ function Header({
   );
 }
 
-function Chip({ label, active }: { label: string; active?: boolean }) {
+function Chip({ label, active, onPress }: { label: string; active?: boolean; onPress?: () => void }) {
   return (
-    <Pressable style={[styles.chip, active ? styles.chipActive : styles.chipInactive]}>
+    <Pressable style={[styles.chip, active ? styles.chipActive : styles.chipInactive]} onPress={onPress}>
       <Text style={[styles.chipText, active ? styles.chipTextActive : styles.chipTextInactive]}>
         {label}
       </Text>
@@ -171,7 +184,12 @@ function RoutePoint({
   );
 }
 
-function JobCard({ job }: { job: (typeof jobRequests)[number] }) {
+function JobCard({ job, onAccept, onReject, isAccepting }: { 
+  job: JobRequestFromDelivery; 
+  onAccept: (delivery: Delivery) => void;
+  onReject: (deliveryId: string) => void;
+  isAccepting: boolean;
+}) {
   return (
     <View style={styles.jobCard}>
       <View style={styles.jobTopRow}>
@@ -207,28 +225,39 @@ function JobCard({ job }: { job: (typeof jobRequests)[number] }) {
       </View>
 
       <View style={styles.cardActions}>
-        <Pressable style={styles.rejectButton}>
+        <Pressable style={styles.rejectButton} onPress={() => onReject(job.id)}>
           <Text style={styles.rejectText}>Reject</Text>
         </Pressable>
-        <Pressable style={styles.acceptButton}>
-          <Text style={styles.acceptText}>Accept</Text>
+        <Pressable style={[styles.acceptButton, isAccepting && styles.actionButtonDisabled]} onPress={() => onAccept(job.deliveryData)} disabled={isAccepting}>
+          <Text style={styles.acceptText}>{isAccepting ? 'Accepting...' : 'Accept'}</Text>
         </Pressable>
       </View>
     </View>
   );
 }
 
-function DriverTabBar({ onProfilePress }: { onProfilePress: () => void }) {
+function DriverTabBar({
+  onProfilePress,
+  onDeliveriesPress,
+}: {
+  onProfilePress: () => void;
+  onDeliveriesPress: () => void;
+}) {
   return (
     <View style={styles.driverTabBar}>
       <View style={styles.tabItem}>
         <Image source={homeTabImage} style={styles.tabIcon} resizeMode="contain" />
         <Text style={styles.tabLabelActive}>Home</Text>
       </View>
-      <View style={styles.tabItem}>
+      <Pressable
+        style={styles.tabItem}
+        accessibilityRole="button"
+        accessibilityLabel="My Deliveries"
+        onPress={onDeliveriesPress}
+      >
         <Image source={deliveriesTabImage} style={styles.tabIcon} resizeMode="contain" />
         <Text style={styles.tabLabel}>My Deliveries</Text>
-      </View>
+      </Pressable>
       <Pressable
         style={styles.tabItem}
         accessibilityRole="button"
@@ -304,71 +333,542 @@ function StatusConfirmModal({
   );
 }
 
+// Helper function to calculate time ago
+function getTimeAgo(timestamp: any): string {
+  if (!timestamp) return 'Just now';
+  
+  let date: Date;
+  if (timestamp.toDate) {
+    date = timestamp.toDate();
+  } else if (timestamp instanceof Date) {
+    date = timestamp;
+  } else if (timestamp.seconds) {
+    date = new Date(timestamp.seconds * 1000);
+  } else if (timestamp._seconds) {
+    // Handle serialized Firestore Timestamp (e.g. from REST API / AsyncStorage)
+    date = new Date(timestamp._seconds * 1000);
+  } else if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+    date = new Date(timestamp);
+  } else {
+    return 'Just now';
+  }
+
+  // Guard against Invalid Date / NaN
+  if (!isFinite(date.getTime())) return 'Just now';
+
+  const now = new Date();
+  const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+  
+  if (diffInMinutes < 1) return 'Just now';
+  if (diffInMinutes === 1) return '1min ago';
+  if (diffInMinutes < 60) return `${diffInMinutes}min ago`;
+  if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}hr ago`;
+  return `${Math.floor(diffInMinutes / 1440)}d ago`;
+}
+
+// Helper function to get priority set based on timestamp
+function getPrioritySet(timestamp: any): number {
+  if (!timestamp) return 4;
+  
+  let date: Date;
+  if (timestamp.toDate) {
+    date = timestamp.toDate();
+  } else if (timestamp.seconds) {
+    date = new Date(timestamp.seconds * 1000);
+  } else if (timestamp._seconds) {
+    // Handle serialized Firestore Timestamp (e.g. from REST API)
+    date = new Date(timestamp._seconds * 1000);
+  } else if (timestamp instanceof Date) {
+    date = timestamp;
+  } else if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+    date = new Date(timestamp);
+  } else {
+    return 4;
+  }
+  
+  const now = new Date();
+  const ageInMinutes = (now.getTime() - date.getTime()) / (1000 * 60);
+  
+  if (ageInMinutes <= 20) return 1;
+  if (ageInMinutes <= 40) return 2;
+  if (ageInMinutes <= 60) return 3;
+  return 4;
+}
+
+// Helper function to format earnings
+function formatEarnings(amount: number): string {
+  return `₹${amount.toLocaleString('en-IN')}`;
+}
+
+// ── Haversine distance between two coordinates ──
+function getDistanceFromCoords(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number
+): number {
+  if (!isFinite(lat1) || !isFinite(lng1) || !isFinite(lat2) || !isFinite(lng2)) {
+    return NaN;
+  }
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+// Helper function to get pickup distance
+function getPickupDistance(delivery: Delivery, driverCoords?: { lat: number; lng: number } | null): string {
+  // Try to calculate from actual coords
+  if (driverCoords && isFinite(driverCoords.lat) && isFinite(driverCoords.lng)) {
+    const pickupCoords = delivery.locations?.pickup?.coords;
+    if (pickupCoords && isFinite(pickupCoords.lat) && isFinite(pickupCoords.lng)) {
+      const distance = getDistanceFromCoords(
+        driverCoords.lat, driverCoords.lng,
+        pickupCoords.lat, pickupCoords.lng
+      );
+      if (isFinite(distance)) {
+        return `${distance.toFixed(1)}km pickup`;
+      }
+    }
+  }
+  // Fallback to stored distance
+  if (delivery.distance?.pickup) {
+    const d = delivery.distance.pickup;
+    if (isFinite(d)) {
+      return `${Math.round(d)}km pickup`;
+    }
+  }
+  return '—';
+}
+
+// Helper function to get estimated times
+function getEstimatedTime(delivery: Delivery, type: 'pickup' | 'drop'): string {
+  if (type === 'pickup' && delivery.estimatedTime?.pickup) {
+    return `Approx. ${Math.round(delivery.estimatedTime.pickup)} mins`;
+  }
+  if (type === 'drop' && delivery.estimatedTime?.dropoff) {
+    return `Approx. ${Math.round(delivery.estimatedTime.dropoff)} mins`;
+  }
+  return type === 'pickup' ? 'Approx. 10 mins' : 'Approx. 60 mins';
+}
+
+// Convert Delivery to JobRequestFromDelivery
+function deliveryToJobRequest(delivery: Delivery, driverCoords?: { lat: number; lng: number } | null): JobRequestFromDelivery {
+  const earnings = formatEarnings(delivery.pricing?.total || 0);
+  const pickupDistance = getPickupDistance(delivery, driverCoords);
+  const age = getTimeAgo(delivery.timestamps?.createdAt);
+  const pickupAddress = delivery.locations?.pickup?.address || 'Pickup location';
+  const dropAddress = delivery.locations?.dropoff?.address || 'Dropoff location';
+  const pickupTime = getEstimatedTime(delivery, 'pickup');
+  const dropTime = getEstimatedTime(delivery, 'drop');
+  const prioritySet = getPrioritySet(delivery.timestamps?.createdAt);
+  
+  const isUrgent = delivery.priority === 'urgent';
+  const dropTitle = isUrgent ? 'Drop (Urgent)' : `Drop ${delivery.distance?.total ? Math.round(delivery.distance.total) + 'km' : '35 km'}`;
+
+  console.log(`Delivery ${delivery.id} - Age: ${age}, Pickup Distance: ${pickupDistance}, Priority Set: ${prioritySet}`);
+  
+  return {
+    id: delivery.id,
+    earnings,
+    pickupDistance,
+    age,
+    pickupTitle: 'To Pickup',
+    pickupTime,
+    pickupAddress,
+    dropTitle,
+    dropTime,
+    dropAddress,
+    prioritySet,
+    deliveryData: delivery,
+  };
+}
+
+
+// ── Get driver's current location ──
+async function getDriverLocation(): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      console.warn('Location permission denied');
+      return null;
+    }
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+    return {
+      lat: location.coords.latitude,
+      lng: location.coords.longitude,
+    };
+  } catch (error) {
+    console.error('Error getting driver location:', error);
+    return null;
+  }
+}
+
 export default function HomeScreen() {
   const router = useRouter();
-  const [driverStatus, setDriverStatus] = useState<DriverStatus>('online');
+  const [driverStatus, setDriverStatus] = useState<DriverStatus>('offline');
   const [pendingStatus, setPendingStatus] = useState<DriverStatus | null>(null);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+  const [jobRequests, setJobRequests] = useState<JobRequestFromDelivery[]>([]);
+  const [todayEarnings, setTodayEarnings] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState<'all' | 'nearest' | 'urgent'>('all');
+  const [assignedDeliveries, setAssignedDeliveries] = useState<Delivery[]>([]);
+  const hasActiveDelivery = assignedDeliveries.length > 0;
+
+  const loadDriverData = useCallback(async (showRefresh = false) => {
+    if (showRefresh) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
+
+    try {
+      const [storedUid, storedIdToken] = await Promise.all([
+        AsyncStorage.getItem('firebaseUid'),
+        AsyncStorage.getItem('firebaseIdToken'),
+      ]);
+      const uid = auth.currentUser?.uid || storedUid;
+      const idToken = auth.currentUser
+        ? await auth.currentUser.getIdToken().catch(() => storedIdToken)
+        : storedIdToken;
+
+      if (!uid) {
+        setProfilePhotoUrl(null);
+        setJobRequests([]);
+        setTodayEarnings(0);
+        setIsLoading(false);
+        setIsRefreshing(false);
+        return;
+      }
+
+      // Load profile data
+      const [cachedPhotoUrl, cachedStatus] = await Promise.all([
+        getCachedProfilePhotoUrl(uid),
+        getCachedAvailabilityStatus(uid),
+      ]);
+
+      if (cachedPhotoUrl) setProfilePhotoUrl(cachedPhotoUrl);
+      if (cachedStatus) setDriverStatus(cachedStatus);
+
+      // Load driver profile for photo URL
+      const driverProfile = await getDriverProfile(uid, idToken).catch((error) => {
+        console.error('Error loading driver profile:', error);
+        return null;
+      });
+
+      const savedPhotoUrl = driverProfile?.profilePhotoUrl ||
+        (driverProfile?.photoUri?.startsWith('http') ? driverProfile.photoUri : null);
+
+      if (savedPhotoUrl) {
+        await setCachedProfilePhotoUrl(uid, savedPhotoUrl);
+        setProfilePhotoUrl(savedPhotoUrl);
+      }
+
+      const earnings = await getDriverTodayEarnings(uid, idToken);
+      setTodayEarnings(earnings);
+
+      // Fetch assigned deliveries (accepted jobs that are in progress)
+      const assigned = await getDriverAssignedDeliveries(uid, idToken);
+      // "accepted" is normalized to "assigned" by the delivery service.
+      const activeAssigned = assigned.filter(d => d.status === 'assigned' || d.status === 'in_transit');
+      setAssignedDeliveries(activeAssigned);
+      console.log(`Found ${activeAssigned.length} active assigned deliveries`);
+
+      const activeDeliveries = await getDriverActiveDeliveries(uid, idToken);
+      
+      console.log(`Found ${activeDeliveries.length} active deliveries`);
+      
+      // ── Get driver's current location for real distance calculation ──
+      const driverCoords = await getDriverLocation();
+
+      console.log('Driver coordinates:', driverCoords);
+      console.log('Active deliveries before filtering:', activeDeliveries.map(d => ({
+        id: d.id,
+        createdAt: d.timestamps?.createdAt,
+        pickupCoords: d.locations?.pickup?.coords,
+        distancePickup: d.distance?.pickup,
+      })));
+      
+      // ── Pre-filter: exclude deliveries older than 2 hours or >15 km away ──
+      let filteredDeliveries = activeDeliveries.filter((delivery) => {
+        // Time filter: must be within 90 minutes (delivery expiry window)
+        const createdAt = delivery.timestamps?.createdAt;
+
+         // Vehicle type matching: driverProfile.vehicleType is { name: string } in Firestore
+         // delivery.vehicle.name is a direct string
+         const rawVehicleType = driverProfile?.vehicleType;
+         const driverVehicleName = (typeof rawVehicleType === 'object' && rawVehicleType !== null)
+           ? (rawVehicleType as { name?: string }).name
+           : (typeof rawVehicleType === 'string' ? rawVehicleType : undefined);
+         const deliveryVehicleRequirement = delivery?.vehicle?.name;
+       
+         if (driverVehicleName && deliveryVehicleRequirement) {
+           if (String(driverVehicleName).toLowerCase().trim() !== String(deliveryVehicleRequirement).toLowerCase().trim()) {
+             return false; // Skip if vehicle types don't match
+           }
+         }
+        if (createdAt) {
+          let date: Date;
+          if (createdAt.toDate) date = createdAt.toDate();
+          else if (createdAt instanceof Date) date = createdAt;
+          else if (createdAt.seconds) date = new Date(createdAt.seconds * 1000);
+          else if (createdAt._seconds) date = new Date(createdAt._seconds * 1000);
+          else if (typeof createdAt === 'string' || typeof createdAt === 'number') date = new Date(createdAt);
+          else return false; // Can't parse timestamp, skip delivery
+          const ageInMinutes = (Date.now() - date.getTime()) / (1000 * 60);
+          if (ageInMinutes > 90) return false; // Older than 90 min — delivery expired
+        }
+        
+        // Distance filter: must be within 15 km
+        if (driverCoords) {
+          const pickupCoords = delivery.locations?.pickup?.coords;
+          if (pickupCoords?.lat && pickupCoords?.lng) {
+            const distance = getDistanceFromCoords(
+              driverCoords.lat, driverCoords.lng,
+              pickupCoords.lat, pickupCoords.lng
+            );
+            if (distance > 15) return false; // Too far
+          }
+          // If no coords but distance.pickup exists, check that
+          else if (delivery.distance?.pickup && delivery.distance.pickup > 15) {
+            return false;
+          }
+        }
+        // If no driver coords, still show the delivery (fallback)
+        return true;
+      });
+      
+      // Apply additional filters and sorting based on selection
+      if (selectedFilter === 'urgent') {
+        filteredDeliveries = filteredDeliveries.filter(d => d.priority === 'urgent');
+      } else if (selectedFilter === 'nearest') {
+        filteredDeliveries.sort((a, b) => {
+          // Use actual calculated distance when driverCoords are available
+          const getDist = (d: Delivery) => {
+            if (driverCoords) {
+              const c = d.locations?.pickup?.coords;
+              if (c?.lat && c?.lng) {
+                return getDistanceFromCoords(driverCoords.lat, driverCoords.lng, c.lat, c.lng);
+              }
+            }
+            return d.distance?.pickup || Infinity;
+          };
+          return getDist(a) - getDist(b);
+        });
+      } else {
+        // Default 'all' filter: sort by created time descending (newest first)
+        filteredDeliveries.sort((a, b) => {
+          const getTime = (d: Delivery) => {
+            const ts = d.timestamps?.createdAt;
+            if (ts?.toDate) return ts.toDate().getTime();
+            if (ts instanceof Date) return ts.getTime();
+            if (ts && typeof ts === 'object' && 'seconds' in ts) return (ts.seconds || 0) * 1000;
+            return 0;
+          };
+          return getTime(b) - getTime(a);
+        });
+      }
+      
+      const jobRequestsData = filteredDeliveries.map(d => deliveryToJobRequest(d, driverCoords));
+      setJobRequests(jobRequestsData);
+
+      // Load latest availability status
+      const latestStatus = await getLatestDriverAvailability(uid, idToken).catch((error) => {
+        console.error('Error loading availability:', error);
+        return null;
+      });
+      
+      if (latestStatus) {
+        await setCachedAvailabilityStatus(uid, latestStatus);
+        setDriverStatus(latestStatus);
+      }
+    } catch (error) {
+      console.error('Error loading driver data:', error);
+      Alert.alert('Error', 'Failed to load data. Please try again.');
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [selectedFilter]);
 
   useFocusEffect(
-    React.useCallback(() => {
-      let isActive = true;
-
-      const loadProfilePhoto = async () => {
-        const [storedUid, storedIdToken] = await Promise.all([
-          AsyncStorage.getItem('firebaseUid'),
-          AsyncStorage.getItem('firebaseIdToken'),
-        ]);
-        const uid = auth.currentUser?.uid || storedUid;
-
-        if (!uid) {
-          if (isActive) {
-            setProfilePhotoUrl(null);
-          }
-          return;
-        }
-
-        const cachedPhotoUrl = await getCachedProfilePhotoUrl(uid);
-        if (isActive && cachedPhotoUrl) {
-          setProfilePhotoUrl(cachedPhotoUrl);
-        }
-
-        const driverProfile = await getDriverProfile(uid, storedIdToken);
-        const savedPhotoUrl =
-          driverProfile?.profilePhotoUrl ||
-          (driverProfile?.photoUri?.startsWith('http') ? driverProfile.photoUri : null);
-
-        if (savedPhotoUrl) {
-          await setCachedProfilePhotoUrl(uid, savedPhotoUrl);
-        }
-
-        if (isActive) {
-          setProfilePhotoUrl(savedPhotoUrl || cachedPhotoUrl || null);
-        }
-      };
-
-      loadProfilePhoto();
-
-      return () => {
-        isActive = false;
-      };
-    }, [])
+    useCallback(() => {
+      loadDriverData(false);
+    }, [loadDriverData])
   );
+
+  // Auto-refresh when driver is online
+  useEffect(() => {
+    let interval: number | null = null;
+    
+    if (driverStatus === 'online') {
+      interval = setInterval(() => {
+        loadDriverData(true);
+      }, 30000); // Refresh every 30 seconds
+    }
+    
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [driverStatus, loadDriverData]);
+
+  const handleRefresh = useCallback(() => {
+    loadDriverData(true);
+  }, [loadDriverData]);
 
   const handleTogglePress = () => {
     setPendingStatus(driverStatus === 'online' ? 'offline' : 'online');
   };
 
-  const handleConfirmStatus = () => {
+  const handleConfirmStatus = async () => {
     if (pendingStatus) {
+      const nextStatus = pendingStatus;
       setDriverStatus(pendingStatus);
       setPendingStatus(null);
+
+      const [storedUid, storedIdToken] = await Promise.all([
+        AsyncStorage.getItem('firebaseUid'),
+        AsyncStorage.getItem('firebaseIdToken'),
+      ]);
+      const uid = auth.currentUser?.uid || storedUid;
+
+      if (uid) {
+        await setCachedAvailabilityStatus(uid, nextStatus);
+        updateDriverAvailability(uid, nextStatus, storedIdToken);
+      }
     }
   };
 
   const handleProfilePress = () => {
     router.push('/profile');
   };
+
+  const openActiveDelivery = (delivery: Delivery) => {
+    router.push({
+      pathname: '/(tabs)/DeliverStepsConfirmation',
+      params: { deliveryId: delivery.id },
+    });
+  };
+
+  // const handleAcceptDelivery = async (delivery: Delivery) => {
+  //   setAcceptingDeliveryId(delivery.id);
+    
+  //   try {
+  //     const uid = auth.currentUser?.uid || await AsyncStorage.getItem('firebaseUid');
+  //     const idToken = auth.currentUser
+  //       ? await auth.currentUser.getIdToken().catch(() => null)
+  //       : await AsyncStorage.getItem('firebaseIdToken');
+
+  //     if (!uid) {
+  //       Alert.alert('Error', 'User not authenticated. Please sign in again.');
+  //       return;
+  //     }
+
+  //     // Fetch driver profile to get name, phone, photo, vehicle info
+  //     const driverProfile = await getDriverProfile(uid, idToken).catch(() => null);
+
+  //     await assignDriverToDelivery(delivery.id, uid, {
+  //       fullName: driverProfile?.fullName || driverProfile?.name || 'Driver',
+  //       phoneNumber: driverProfile?.phoneNumber || '',
+  //       photoUri: driverProfile?.profilePhotoUrl || driverProfile?.photoUri || '',
+  //       vehicleNumber: driverProfile?.vehicleNumber || '',
+  //     });
+
+  //     Alert.alert('Success', 'Delivery accepted successfully!');
+  //     await loadDriverData(true);
+  //   } catch (error) {
+  //     console.error('Error accepting delivery:', error);
+  //     Alert.alert('Error', 'Failed to accept delivery. Please try again.');
+  //   } finally {
+  //     setAcceptingDeliveryId(null);
+  //   }
+  // };
+
+  const handleAcceptDelivery = (delivery: Delivery) => {
+    const activeDelivery = assignedDeliveries[0];
+
+    if (activeDelivery) {
+      Alert.alert(
+        'Active delivery already running',
+        'Please finish your current delivery before accepting another trip.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open active trip', onPress: () => openActiveDelivery(activeDelivery) },
+        ]
+      );
+      return;
+    }
+
+  // We navigate and pass the data as parameters to the details screen
+  router.push({
+    pathname: "/delivery-details", // Make sure this matches your file name in app/
+    params: {
+      deliveryId: delivery.id,
+      earnings: formatEarnings(delivery.pricing?.total || 0),
+      pickupDist: getPickupDistance(delivery, null), // Helper from your code
+      pickupName: delivery.locations?.pickup?.name || "Sobi Engineering, Porur",
+      pickupAddr: delivery.locations?.pickup?.address || "Iyyanpanthangal,Porur, Chennai",
+      dropDist: delivery.distance?.total ? `${Math.round(delivery.distance.total)}km` : "35km",
+      dropTime: getEstimatedTime(delivery, 'drop'),
+      dropName: delivery.locations?.dropoff?.name || "Ram CNC Works, Gandhipuram",
+      dropAddr: delivery.locations?.dropoff?.address || "Iyyanpanthangal,Porur, Chennai",
+      // Fare breakdown data
+      baseFare: `₹${delivery.pricing?.baseFare || 700}`,
+      distanceFare: `₹${delivery.pricing?.distanceFare || 400}`,
+      fuelCost: `₹${delivery.pricing?.fuelCost || 800}`,
+      total: `₹${delivery.pricing?.total || 2000}`
+    }
+  });
+};
+
+  const handleRejectDelivery = async (deliveryId: string) => {
+    Alert.alert(
+      'Reject Delivery',
+      'Are you sure you want to reject this delivery?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reject',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setJobRequests(prev => prev.filter(job => job.id !== deliveryId));
+              Alert.alert('Success', 'Delivery rejected');
+            } catch (error) {
+              console.error('Error rejecting delivery:', error);
+              Alert.alert('Error', 'Failed to reject delivery');
+              await loadDriverData(true);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleFilterChange = (filter: 'all' | 'nearest' | 'urgent') => {
+    setSelectedFilter(filter);
+  };
+
+  if (isLoading && !isRefreshing) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#05c" />
+          <Text style={styles.loadingText}>Loading deliveries...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -377,30 +877,104 @@ export default function HomeScreen() {
         onTogglePress={handleTogglePress}
         onProfilePress={handleProfilePress}
         profilePhotoUrl={profilePhotoUrl}
+        todayEarnings={todayEarnings}
+        isLoading={isLoading}
       />
 
       <ScrollView
         style={styles.contentScroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={['#05c']}
+          />
+        }
       >
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Job Request</Text>
-          <Image source={filterImage} style={styles.filterIcon} resizeMode="contain" />
-        </View>
+        {hasActiveDelivery && (
+          <View style={styles.activeDeliverySection}>
+            <Text style={styles.activeDeliveryTitle}>Active Delivery</Text>
+            {assignedDeliveries.map((delivery) => (
+              <Pressable
+                key={delivery.id}
+                style={styles.activeDeliveryCard}
+                onPress={() => openActiveDelivery(delivery)}
+              >
+                <View style={styles.activeDeliveryTopRow}>
+                  <View style={styles.activeStatusBadge}>
+                    <Text style={styles.activeStatusText}>
+                      {delivery.status === 'assigned' ? 'HEAD TO PICKUP' : 'EN ROUTE'}
+                    </Text>
+                  </View>
+                  <Text style={styles.activeEarnings}>
+                    {formatEarnings(delivery.pricing?.total || 0)}
+                  </Text>
+                </View>
+                <View style={styles.activeDeliveryRoute}>
+                  <Text style={styles.activeRoutePickup} numberOfLines={1}>
+                    📍 {delivery.locations?.pickup?.address || 'Pickup'}
+                  </Text>
+                  <Text style={styles.activeRouteArrow}>↓</Text>
+                  <Text style={styles.activeRouteDropoff} numberOfLines={1}>
+                    📍 {delivery.locations?.dropoff?.address || 'Dropoff'}
+                  </Text>
+                </View>
+                <Text style={styles.activeDeliveryTapText}>Tap to view delivery steps →</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
 
-        <View style={styles.chipRow}>
-          <Chip label="All" active />
-          <Chip label="Nearest" />
-          <Chip label="Urgent" />
-        </View>
+        {!hasActiveDelivery && (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Job Request</Text>
+              <Image source={filterImage} style={styles.filterIcon} resizeMode="contain" />
+            </View>
 
-        {jobRequests.map((job) => (
-          <JobCard key={job.id} job={job} />
-        ))}
+            <View style={styles.chipRow}>
+              <Chip label="All" active={selectedFilter === 'all'} onPress={() => handleFilterChange('all')} />
+              <Chip label="Nearest" active={selectedFilter === 'nearest'} onPress={() => handleFilterChange('nearest')} />
+              <Chip label="Urgent" active={selectedFilter === 'urgent'} onPress={() => handleFilterChange('urgent')} />
+            </View>
+
+            {jobRequests.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyTitle}>No job requests</Text>
+                <Text style={styles.emptyText}>
+                  {driverStatus === 'online'
+                    ? 'You are online. New delivery requests will appear here.'
+                    : 'Go online to start receiving delivery requests.'}
+                </Text>
+              </View>
+            ) : (
+              jobRequests.map((job) => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  onAccept={handleAcceptDelivery}
+                  onReject={handleRejectDelivery}
+                  isAccepting={false}
+                />
+              ))
+            )}
+          </>
+        )}
+
+        {hasActiveDelivery && (
+          <View style={styles.lockedRequestNotice}>
+            <Text style={styles.lockedRequestTitle}>Finish active delivery first</Text>
+            <Text style={styles.lockedRequestText}>You can accept one trip at a time. Tap the active delivery card to continue the route.</Text>
+          </View>
+        )}
       </ScrollView>
 
-      <DriverTabBar onProfilePress={handleProfilePress} />
+      <DriverTabBar
+          onProfilePress={handleProfilePress}
+          onDeliveriesPress={() => router.push('/(tabs)/my-deliveries')}
+        />
       <StatusConfirmModal
         targetStatus={pendingStatus || 'online'}
         visible={pendingStatus !== null}
@@ -416,6 +990,38 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#eff2f6',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#606060',
+    fontFamily: 'Poppins',
+  },
+  emptyContainer: {
+    padding: 32,
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    marginTop: 20,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#606060',
+    fontFamily: 'Poppins',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   header: {
     backgroundColor: '#dbe6f7',
     borderBottomLeftRadius: 24,
@@ -429,19 +1035,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-  },
-  statusTime: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1d1b20',
-    fontFamily: 'Roboto',
-    lineHeight: 20,
-    letterSpacing: 0.14,
-  },
-  statusIcons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
   },
   locationRow: {
     flexDirection: 'row',
@@ -546,9 +1139,9 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 48,
+    paddingTop: 24,
     paddingBottom: 24,
-    gap: 16,
+    gap: 24,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -569,7 +1162,6 @@ const styles = StyleSheet.create({
   chipRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 8,
   },
   chip: {
     flex: 1,
@@ -613,6 +1205,8 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 0 },
     elevation: 4,
+    position: 'relative',
+    overflow: 'hidden',
   },
   jobTopRow: {
     flexDirection: 'row',
@@ -667,7 +1261,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#ffffff',
     padding: 8,
-    gap: 8,
+    gap: 0,
     overflow: 'hidden',
   },
   routePoint: {
@@ -717,6 +1311,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderStyle: 'dashed',
     borderColor: '#d6d6d6',
+    marginVertical: 8,
   },
   routeConnector: {
     position: 'absolute',
@@ -769,6 +1364,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontFamily: 'Poppins',
     letterSpacing: -0.5,
+  },
+  actionButtonDisabled: {
+    opacity: 0.64,
   },
   driverTabBar: {
     borderTopWidth: 1,
@@ -908,5 +1506,128 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontFamily: 'Poppins',
     letterSpacing: -0.5,
+  },
+  priorityBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderTopRightRadius: 16,
+    borderBottomLeftRadius: 8,
+    zIndex: 10,
+  },
+  priorityBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    fontFamily: 'Poppins',
+  },
+  lockedRequestNotice: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    gap: 4,
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
+  },
+  lockedRequestTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+  },
+  lockedRequestText: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#606060',
+    fontFamily: 'Poppins',
+    lineHeight: 21,
+  },
+  // ── Active Delivery Section Styles ──
+  activeDeliverySection: {
+    width: '100%',
+    gap: 12,
+  },
+  activeDeliveryTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+    letterSpacing: -0.5,
+  },
+  activeDeliveryCard: {
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    gap: 12,
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
+    borderLeftWidth: 4,
+    borderLeftColor: '#005CEE',
+  },
+  activeDeliveryTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  activeStatusBadge: {
+    backgroundColor: '#005CEE',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  activeStatusText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#ffffff',
+    fontFamily: 'Poppins',
+    letterSpacing: 0.5,
+  },
+  activeEarnings: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1fc16b',
+    fontFamily: 'Poppins',
+  },
+  activeDeliveryRoute: {
+    backgroundColor: '#f5f7fa',
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+  },
+  activeRoutePickup: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+    lineHeight: 20,
+  },
+  activeRouteArrow: {
+    fontSize: 16,
+    color: '#005CEE',
+    textAlign: 'center',
+    marginLeft: 4,
+  },
+  activeRouteDropoff: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins',
+    lineHeight: 20,
+  },
+  activeDeliveryTapText: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#005CEE',
+    fontFamily: 'Poppins',
+    textAlign: 'right',
   },
 });

@@ -1,7 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
-
-const { width, height } = Dimensions.get('window');
+import { View, StyleSheet } from 'react-native';
 
 interface PlaceholderImageProps {
   width?: number;

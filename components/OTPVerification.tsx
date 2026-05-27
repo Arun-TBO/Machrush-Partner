@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TextInput,
   Pressable,
-  Dimensions,
   Animated,
   Alert,
 } from 'react-native';
@@ -13,8 +12,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
 
 import { verifyOTP, resendOTP } from '@/lib/firebaseAuthService'; // Real Firebase
-
-const { width } = Dimensions.get('window');
 
 interface OTPVerificationProps {
   mobileNumber: string;
@@ -46,7 +43,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
       duration: 400,
       useNativeDriver: true,
     }).start();
-  }, []);
+  }, [fadeAnim]);
 
   // Resend timer with countdown
   useEffect(() => {

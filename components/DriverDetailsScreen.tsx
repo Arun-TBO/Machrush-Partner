@@ -11,8 +11,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Spacing, Radius } from '@/lib/theme';
+import { Colors } from '@/lib/theme';
 
 interface DriverDetailsScreenProps {
   onContinue?: (data: DriverDetailsData) => void;
@@ -35,7 +34,6 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
   const [drivingLicenseUri, setDrivingLicenseUri] = useState<string | undefined>();
   const [identityProofUri, setIdentityProofUri] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(false);
-  const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // Fade in animation on mount
@@ -46,7 +44,7 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
       duration: 400,
       useNativeDriver: true,
     }).start();
-  }, []);
+  }, [fadeAnim]);
 
   // Request permissions
   useEffect(() => {

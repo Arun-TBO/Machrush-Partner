@@ -18,7 +18,12 @@ import { useRouter } from 'expo-router';
 import { signOutUser } from '@/lib/firebaseAuthService';
 import { auth } from '@/lib/firebase';
 import { getDriverProfile, updateDriverProfilePhoto } from '@/lib/firestoreOnboardingService';
-import { getCachedProfilePhotoUrl, setCachedProfilePhotoUrl } from '@/lib/profilePhotoCache';
+import {
+  getCachedDriverName,
+  getCachedProfilePhotoUrl,
+  setCachedDriverName,
+  setCachedProfilePhotoUrl,
+} from '@/lib/profileCache';
 
 const profileAvatarImage = require('@/assets/images/profile/profile-avatar.png');
 const backImage = require('@/assets/images/profile/back.png');
@@ -238,6 +243,7 @@ export default function ProfileScreen() {
   const [isSupportVisible, setIsSupportVisible] = React.useState(false);
   const [isLogoutVisible, setIsLogoutVisible] = React.useState(false);
   const [profilePhotoUrl, setProfilePhotoUrl] = React.useState<string | null>(null);
+  const [driverName, setDriverName] = React.useState('Driver');
   const [isPhotoUploading, setIsPhotoUploading] = React.useState(false);
   const router = useRouter();
 
@@ -289,22 +295,34 @@ export default function ProfileScreen() {
         return;
       }
 
-      const cachedPhotoUrl = await getCachedProfilePhotoUrl(uid);
+      const [cachedPhotoUrl, cachedDriverName] = await Promise.all([
+        getCachedProfilePhotoUrl(uid),
+        getCachedDriverName(uid),
+      ]);
+
       if (isMounted && cachedPhotoUrl) {
         setProfilePhotoUrl(cachedPhotoUrl);
+      }
+      if (isMounted && cachedDriverName) {
+        setDriverName(cachedDriverName);
       }
 
       const driverProfile = await getDriverProfile(uid, idToken);
       const savedPhotoUrl =
         driverProfile?.profilePhotoUrl ||
         (driverProfile?.photoUri?.startsWith('http') ? driverProfile.photoUri : null);
+      const savedDriverName = driverProfile?.fullName?.trim();
 
       if (savedPhotoUrl) {
         await setCachedProfilePhotoUrl(uid, savedPhotoUrl);
       }
+      if (savedDriverName) {
+        await setCachedDriverName(uid, savedDriverName);
+      }
 
       if (isMounted) {
         setProfilePhotoUrl(savedPhotoUrl || cachedPhotoUrl || null);
+        setDriverName(savedDriverName || cachedDriverName || 'Driver');
       }
     };
 
@@ -317,12 +335,22 @@ export default function ProfileScreen() {
 
   const handleEditProfilePhoto = async () => {
     try {
-      const { uid, idToken } = await getCurrentProfileSession();
+      let { uid, idToken } = await getCurrentProfileSession();
 
       if (!uid) {
         Alert.alert('Login required', 'Please login again before updating your profile picture.');
         router.replace('/phone-number');
         return;
+      }
+
+      // Refresh the ID token to ensure it's not expired
+      if (auth.currentUser) {
+        try {
+          idToken = await auth.currentUser.getIdToken(true);
+          await AsyncStorage.setItem('firebaseIdToken', idToken);
+        } catch {
+          // Use whatever we have from session
+        }
       }
 
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -345,9 +373,16 @@ export default function ProfileScreen() {
       }
 
       const selectedAsset = result.assets[0];
-      const selectedUri = selectedAsset?.base64
-        ? `data:${selectedAsset.mimeType || 'image/jpeg'};base64,${selectedAsset.base64}`
-        : selectedAsset?.uri;
+
+      // Use the file URI directly on native (not the base64 data URL)
+      // This ensures reliable blob conversion in the SDK storage upload path
+      let selectedUri = selectedAsset?.uri;
+
+      // Only fall back to base64 data URL if we need the backend path
+      // (i.e. auth.currentUser is not set, requiring the REST path with idToken)
+      if (!auth.currentUser && selectedAsset?.base64) {
+        selectedUri = `data:${selectedAsset.mimeType || 'image/jpeg'};base64,${selectedAsset.base64}`;
+      }
 
       if (!selectedUri) {
         return;
@@ -368,13 +403,15 @@ export default function ProfileScreen() {
   };
 
   const handleConfirmLogout = async () => {
-    await Promise.allSettled([
-      signOutUser(),
-      AsyncStorage.clear(),
-    ]);
-
-    setIsLogoutVisible(false);
-    router.replace('/phone-number');
+    try {
+      await AsyncStorage.clear();
+      await signOutUser();
+    } catch (error) {
+      console.error('Error during logout:', error);
+    } finally {
+      setIsLogoutVisible(false);
+      router.replace('/');
+    }
   };
 
   return (
@@ -392,7 +429,7 @@ export default function ProfileScreen() {
             <View style={styles.profileRow}>
               <View style={styles.identity}>
                 <View style={styles.nameRow}>
-                  <Text style={styles.driverName}>Ralph Edwards</Text>
+                  <Text style={styles.driverName}>{driverName}</Text>
                   <Image source={verifiedBadgeImage} style={styles.verifiedBadge} resizeMode="contain" />
                 </View>
                 <Text style={styles.viewProfile}>View Profile</Text>

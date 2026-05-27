@@ -26,7 +26,7 @@ export interface OnboardingData {
 
   // Vehicle Details
   vehicleNumber: string;
-  vehicleType: string;
+  vehicleType: { name: string } | string;
   vehicleCapacity: string;
   bodyType: string;
   rcBookUri: string;
@@ -60,6 +60,7 @@ export interface DriverReportData {
 }
 
 type VerificationStatus = 'pending' | 'verified' | 'rejected';
+export type DriverAvailabilityStatus = 'online' | 'offline';
 
 const getApiBaseUrl = () => {
   return (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
@@ -86,6 +87,26 @@ const getApiErrorMessage = (responseBody: unknown, fallback: string) => {
   }
 
   return fallback;
+};
+
+/**
+ * Convert a base64 data URL to a Blob without using fetch(dataUrl).blob(),
+ * which is unreliable on React Native.
+ */
+const dataUrlToBlob = (dataUrl: string): Blob => {
+  const parts = dataUrl.split(',');
+  if (parts.length !== 2) {
+    throw new Error('Invalid data URL format');
+  }
+  const mimeMatch = parts[0].match(/data:(.*?);/);
+  const mimeType = (mimeMatch && mimeMatch[1]) || 'image/jpeg';
+  const byteString = atob(parts[1]);
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i);
+  }
+  return new Blob([ab], { type: mimeType });
 };
 
 const uploadProfilePhotoViaBackend = async (
@@ -176,22 +197,27 @@ export const updateDriverProfilePhoto = async (
     throw new Error('Firebase UID is required');
   }
 
+  // Prefer backend path when we have both a data URL and an idToken
   if (localImageUri.startsWith('data:image') && idToken) {
     return uploadProfilePhotoViaBackend(uid, localImageUri, idToken);
   }
 
+  // Web path: resize then update via REST
   if (Platform.OS === 'web') {
     if (!idToken) {
       throw new Error('Firebase ID token is required to update profile photo on web');
     }
-
     const profilePhotoUrl = await resizeWebImageToDataUrl(localImageUri);
     await updateDriverProfilePhotoViaRest(uid, profilePhotoUrl, idToken);
     return profilePhotoUrl;
   }
 
-  const response = await fetch(localImageUri);
-  const blob = await response.blob();
+  // Native path: upload directly to Firebase Storage using the SDK
+  // Use dataUrlToBlob to avoid the broken fetch(dataUrl).blob() on React Native
+  const blob = localImageUri.startsWith('data:')
+    ? dataUrlToBlob(localImageUri)
+    : await fetch(localImageUri).then((r) => r.blob());
+
   const storageRef = ref(storage, `drivers/${uid}/profile-photo.jpg`);
 
   await uploadBytes(storageRef, blob, {
@@ -227,14 +253,17 @@ const uploadReportImage = async (
   reportSeed: number,
   index: number
 ) => {
+  // For data URLs (from the picker with base64: true), the backend already
+  // receives them as is; for client-side storage, convert to blob properly.
   if (localImageUri.startsWith('data:image')) {
-    return localImageUri;
+    return localImageUri; // Will be sent as data URL to the report submission path
   }
 
   if (Platform.OS === 'web') {
     return resizeWebImageToDataUrl(localImageUri, 720, 0.76);
   }
 
+  // Use dataUrlToBlob for consistency, though this path may not trigger for reports
   const response = await fetch(localImageUri);
   const blob = await response.blob();
   const storageRef = ref(storage, `driver-reports/${uid}/${reportSeed}-${index + 1}.jpg`);
@@ -520,6 +549,127 @@ const updateDriverProfilePhotoViaRest = async (
   }
 };
 
+const createDriverAvailabilityLogViaRest = async (
+  uid: string,
+  status: DriverAvailabilityStatus,
+  idToken: string
+) => {
+  const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID;
+
+  if (!projectId) {
+    throw new Error('Firebase project ID is not configured');
+  }
+
+  const now = Timestamp.now();
+  const logId = `${uid}_${now.toMillis()}_${status}`;
+  const fields = {
+    uid: toFirestoreRestValue(uid),
+    status: toFirestoreRestValue(status),
+    changedAt: toFirestoreRestValue(now),
+    createdAt: toFirestoreRestValue(now),
+  };
+
+  const response = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/driverAvailabilityLogs?documentId=${encodeURIComponent(logId)}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fields }),
+    }
+  );
+
+  const responseBody = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    console.error('Firestore REST availability log create failed:', responseBody);
+    throw new Error(responseBody?.error?.message || 'Failed to create driver availability log');
+  }
+};
+
+const setDriverAvailabilityStateViaRest = async (
+  uid: string,
+  status: DriverAvailabilityStatus,
+  idToken: string,
+  changedAt: Timestamp
+) => {
+  const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID;
+
+  if (!projectId) {
+    throw new Error('Firebase project ID is not configured');
+  }
+
+  const fields = {
+    uid: toFirestoreRestValue(uid),
+    status: toFirestoreRestValue(status),
+    changedAt: toFirestoreRestValue(changedAt),
+    updatedAt: toFirestoreRestValue(Timestamp.now()),
+  };
+
+  const response = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/driverAvailabilityStates/${encodeURIComponent(uid)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fields }),
+    }
+  );
+
+  const responseBody = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    console.error('Firestore REST availability state update failed:', responseBody);
+    throw new Error(responseBody?.error?.message || 'Failed to update driver availability state');
+  }
+};
+
+const getDriverAvailabilityStateViaRest = async (
+  uid: string,
+  idToken: string
+): Promise<DriverAvailabilityStatus | null> => {
+  const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID;
+
+  if (!projectId) {
+    throw new Error('Firebase project ID is not configured');
+  }
+
+  const response = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/driverAvailabilityStates/${encodeURIComponent(uid)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+    }
+  );
+
+  // Handle auth errors (401/403) and not-found (404) gracefully — token may be expired
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    console.warn(
+      `Driver availability state read returned ${response.status}; token may be expired.`
+    );
+    return null;
+  }
+
+  const responseBody = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    console.error('Firestore REST availability state read failed:', responseBody);
+    throw new Error(responseBody?.error?.message || 'Failed to fetch driver availability');
+  }
+
+  const data = fromFirestoreRestFields(responseBody.fields || {});
+  return data.status === 'online' || data.status === 'offline' ? data.status : null;
+};
+
 const resizeWebImageToDataUrl = async (
   imageUri: string,
   size = 256,
@@ -709,7 +859,7 @@ export const getVerificationStatus = async (uidOrPhone: string, idToken?: string
         : await getDriverByUidViaRest(uidOrPhone, idToken);
 
       if (!data) {
-        console.warn(`âš ï¸ No verification status found for: ${uidOrPhone}`);
+        console.warn(`⚠️ No verification status found for: ${uidOrPhone}`);
         return null;
       }
 
@@ -774,16 +924,8 @@ export const getVerificationStatus = async (uidOrPhone: string, idToken?: string
  * Can use either UID (preferred) or phone number (for admin queries)
  */
 export const getDriverProfile = async (uidOrPhone: string, idToken?: string | null) => {
+  // 1. Try SDK path first (fastest, works if Firestore rules allow)
   try {
-    if (idToken && auth.currentUser?.uid !== uidOrPhone) {
-      const data = isPhoneIdentifier(uidOrPhone)
-        ? await getDriverByPhoneViaRest(uidOrPhone, idToken)
-        : await getDriverByUidViaRest(uidOrPhone, idToken);
-
-      return data;
-    }
-
-    // Try as UID first
     let docSnap = await getDoc(doc(db, 'drivers', uidOrPhone));
 
     // If not found and looks like a phone number, search by phone field
@@ -802,10 +944,101 @@ export const getDriverProfile = async (uidOrPhone: string, idToken?: string | nu
     if (docSnap.exists()) {
       return docSnap.data() as OnboardingData;
     }
+  } catch (error) {
+    console.warn('SDK getDriverProfile failed, trying REST fallback:', error);
+  }
+
+  // 2. Fallback: Try Firestore REST API if idToken is available
+  //    This works even when SDK fails due to missing composite index or transient errors
+  if (idToken) {
+    try {
+      const data = isPhoneIdentifier(uidOrPhone)
+        ? await getDriverByPhoneViaRest(uidOrPhone, idToken)
+        : await getDriverByUidViaRest(uidOrPhone, idToken);
+      if (data) {
+        return data as OnboardingData;
+      }
+    } catch (restError) {
+      console.warn('REST getDriverProfile fallback also failed:', restError);
+    }
+  }
+
+  return null;
+};
+
+export const updateDriverAvailability = async (
+  uid: string,
+  status: DriverAvailabilityStatus,
+  idToken?: string | null
+) => {
+  try {
+    if (!uid) {
+      throw new Error('Firebase UID is required');
+    }
+
+    const now = Timestamp.now();
+    const logId = `${uid}_${now.toMillis()}_${status}`;
+    const availabilityLog = {
+      uid,
+      status,
+      changedAt: now,
+      createdAt: now,
+    };
+
+    if (auth.currentUser?.uid === uid) {
+      await setDoc(
+        doc(db, 'driverAvailabilityLogs', logId),
+        availabilityLog
+      );
+      await setDoc(doc(db, 'driverAvailabilityStates', uid), {
+        uid,
+        status,
+        changedAt: now,
+        updatedAt: now,
+      });
+      return { success: true };
+    }
+
+    if (idToken) {
+      await createDriverAvailabilityLogViaRest(uid, status, idToken);
+      await setDriverAvailabilityStateViaRest(uid, status, idToken, now);
+      return { success: true };
+    }
+
+    throw new Error('Firebase user is not signed in and no ID token was provided');
+  } catch (error: any) {
+    console.error('Error updating driver availability:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to update driver availability',
+    };
+  }
+};
+
+export const getLatestDriverAvailability = async (
+  uid: string,
+  idToken?: string | null
+): Promise<DriverAvailabilityStatus | null> => {
+  try {
+    if (!uid) {
+      return null;
+    }
+
+    if (auth.currentUser?.uid === uid) {
+      const docSnap = await getDoc(doc(db, 'driverAvailabilityStates', uid));
+      const latest = docSnap.exists() ? docSnap.data() : null;
+      return latest?.status === 'online' || latest?.status === 'offline'
+        ? latest.status
+        : null;
+    }
+
+    if (idToken) {
+      return getDriverAvailabilityStateViaRest(uid, idToken);
+    }
 
     return null;
   } catch (error) {
-    console.error('Error fetching driver profile:', error);
+    console.error('Error fetching latest driver availability:', error);
     return null;
   }
 };

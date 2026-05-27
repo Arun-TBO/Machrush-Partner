@@ -285,12 +285,23 @@ export default function ReportProblemScreen() {
         AsyncStorage.getItem('firebaseUid'),
         AsyncStorage.getItem('firebaseIdToken'),
       ]);
-      const uid = auth.currentUser?.uid || storedUid;
+      let uid = auth.currentUser?.uid || storedUid;
+      let idToken = storedIdToken;
 
       if (!uid) {
         Alert.alert('Login required', 'Please login again before submitting a report.');
         router.replace('/phone-number');
         return;
+      }
+
+      // Refresh the ID token to ensure it's not expired
+      if (auth.currentUser) {
+        try {
+          idToken = await auth.currentUser.getIdToken(true);
+          await AsyncStorage.setItem('firebaseIdToken', idToken);
+        } catch (error) {
+          console.warn('Could not refresh idToken for report, using stored:', error);
+        }
       }
 
       const reportResult = await submitDriverReport(
@@ -301,7 +312,7 @@ export default function ReportProblemScreen() {
           description: trimmedDescription,
           imageUris: selectedImages.filter((imageUri): imageUri is string => Boolean(imageUri)),
         },
-        storedIdToken
+        idToken
       );
 
       if (!reportResult.success) {
