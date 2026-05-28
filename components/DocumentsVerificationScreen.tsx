@@ -14,6 +14,7 @@ import { Ionicons, MaterialIcons, Octicons } from '@expo/vector-icons';
 import { getVerificationStatus } from '@/lib/firestoreOnboardingService';
 
 const verifiedImage = require('@/assets/images/verified.png');
+const backImage = require('@/assets/images/profile/back.png');
 
 interface DocumentsVerificationScreenProps {
   phoneNumber?: string;
@@ -98,6 +99,8 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={styles.statusSpacer} />
+
       <View style={styles.topNav}>
         <Pressable
           style={styles.navIconButton}
@@ -105,7 +108,7 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
           disabled={!onBack}
           hitSlop={8}
         >
-          <Ionicons name="arrow-back" size={24} color="#9d9d9d" />
+          <Image source={backImage} style={styles.backIcon} resizeMode="contain" />
         </Pressable>
         <Text style={styles.navTitle}>Onboarding</Text>
         <Pressable
@@ -177,10 +180,6 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
                 {buttonLabel}
               </Text>
             </Pressable>
-
-            <View style={styles.navigationHandle}>
-              <View style={styles.handleBar} />
-            </View>
           </View>
         </View>
       )}
@@ -193,10 +192,6 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
       >
         <Pressable style={styles.modalOverlay} onPress={() => setShowSupportModal(false)}>
           <Pressable style={styles.supportSheet} onPress={(event) => event.stopPropagation()}>
-            <View style={styles.sheetHeader}>
-              <View style={styles.sheetHandle} />
-            </View>
-
             <View style={styles.supportIntro}>
               <Text style={styles.supportTitle}>Contact support</Text>
               <Text style={styles.supportSubtitle}>
@@ -237,6 +232,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#eff2f6',
   },
+  statusSpacer: {
+    height: 52,
+    backgroundColor: '#ffffff',
+  },
   topNav: {
     height: 64,
     backgroundColor: '#ffffff',
@@ -252,6 +251,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  backIcon: {
+    width: 24,
+    height: 24,
+  },
   navTitle: {
     flex: 1,
     fontSize: 20,
@@ -266,7 +269,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 16,
-    paddingTop: 24,
+    paddingTop: 16,
     paddingBottom: 24,
   },
   loadingContainer: {
@@ -286,8 +289,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 16,
     paddingHorizontal: 16,
-    paddingVertical: 24,
-    gap: 10,
+    paddingVertical: 40,
+    gap: 16,
     alignItems: 'center',
     overflow: 'hidden',
   },
@@ -310,6 +313,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins',
     textAlign: 'center',
     letterSpacing: -0.5,
+    lineHeight: 27,
   },
   actionRequiredBox: {
     height: 140,
@@ -353,6 +357,7 @@ const styles = StyleSheet.create({
   },
   bottomArea: {
     paddingHorizontal: 16,
+    paddingBottom: 24,
   },
   continueButton: {
     width: '100%',
@@ -381,17 +386,6 @@ const styles = StyleSheet.create({
   continueButtonTextActive: {
     color: '#ffffff',
   },
-  navigationHandle: {
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  handleBar: {
-    width: 108,
-    height: 4,
-    backgroundColor: '#1d1b20',
-    borderRadius: 12,
-  },
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -407,17 +401,6 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     gap: 24,
     overflow: 'hidden',
-  },
-  sheetHeader: {
-    width: '100%',
-    padding: 16,
-    alignItems: 'center',
-  },
-  sheetHandle: {
-    width: 32,
-    height: 4,
-    borderRadius: 100,
-    backgroundColor: '#79747e',
   },
   supportIntro: {
     width: '100%',

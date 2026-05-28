@@ -393,11 +393,6 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
             </Text>
           </Pressable>
         </View>
-
-        {/* Navigation Handle (Bottom) */}
-        <View style={styles.navigationHandle}>
-          <View style={styles.handleBar} />
-        </View>
       </Animated.View>
     )
   );
@@ -515,19 +510,5 @@ const styles = StyleSheet.create({
     color: Colors.neutral100,
     fontFamily: 'Poppins',
     letterSpacing: -0.5,
-  },
-
-  // Navigation Handle
-  navigationHandle: {
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: Spacing.sm,
-  },
-  handleBar: {
-    width: 108,
-    height: 4,
-    backgroundColor: '#1d1b20',
-    borderRadius: 12,
   },
 });

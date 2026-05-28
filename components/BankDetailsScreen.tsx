@@ -5,12 +5,14 @@ import {
   StyleSheet,
   TextInput,
   Pressable,
+  Image,
   ScrollView,
   Modal,
   FlatList,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
+
+const backImage = require('@/assets/images/profile/back.png');
 
 interface BankDetailsScreenProps {
   onContinue?: (bankData: BankDetailsData) => void;
@@ -46,8 +48,6 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
   const [ifscCode, setIfscCode] = useState('');
   const [upiId, setUpiId] = useState('');
   const [showBankModal, setShowBankModal] = useState(false);
-
-  const insets = useSafeAreaInsets();
 
   const handleBankSelect = (bank: string) => {
     setBankName(bank);
@@ -85,14 +85,20 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
+      <View style={styles.statusSpacer} />
+
       {/* Top Navigation */}
       <View style={styles.topNav}>
-        <Pressable style={styles.backButton} onPress={onBack}>
-          <Text style={styles.backIcon}>←</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          style={styles.backButton}
+          onPress={onBack}
+        >
+          <Image source={backImage} style={styles.backIcon} resizeMode="contain" />
         </Pressable>
         <Text style={styles.navTitle}>Onboarding</Text>
-        <View style={{ width: 48 }} />
       </View>
 
       {/* Main Content */}
@@ -215,11 +221,6 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
           </View>
         </Pressable>
       </Modal>
-
-      {/* Navigation Handle */}
-      <View style={styles.navigationHandle}>
-        <View style={styles.handleBar} />
-      </View>
     </View>
   );
 };
@@ -227,20 +228,21 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.neutral100,
+    backgroundColor: '#eff2f6',
+  },
+  statusSpacer: {
+    height: 52,
+    backgroundColor: '#ffffff',
   },
 
   // Top Navigation
   topNav: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: 4,
+    paddingVertical: 8,
     height: 64,
-    backgroundColor: Colors.neutral100,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    backgroundColor: '#ffffff',
   },
   backButton: {
     width: 48,
@@ -249,14 +251,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   backIcon: {
-    fontSize: 24,
-    color: Colors.neutral900,
+    width: 24,
+    height: 24,
   },
   navTitle: {
     fontSize: 20,
     fontWeight: '500',
-    color: Colors.neutral900,
+    color: '#1c1c1c',
     fontFamily: 'Poppins',
+    lineHeight: 32,
   },
 
   // Scroll View
@@ -413,20 +416,6 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     color: Colors.neutral900,
     fontFamily: 'Poppins',
-  },
-
-  // Navigation Handle
-  navigationHandle: {
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: Spacing.sm,
-  },
-  handleBar: {
-    width: 108,
-    height: 4,
-    backgroundColor: Colors.neutral900,
-    borderRadius: 12,
   },
 });
 

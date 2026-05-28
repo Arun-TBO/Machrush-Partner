@@ -57,6 +57,14 @@ export default function RootLayout() {
     }
   };
 
+  const handleWalkthroughSkip = async () => {
+    try {
+      await AsyncStorage.setItem('walkthroughCompleted', 'true');
+    } catch (error) {
+      console.error('Error saving walkthrough status:', error);
+    }
+  };
+
   if (isLoading) {
     return null; // Or show a loading screen
   }
@@ -65,7 +73,7 @@ export default function RootLayout() {
     return (
       <WalkthroughScreen
         onComplete={handleWalkthroughComplete}
-        onSkip={handleWalkthroughComplete}
+        onSkip={handleWalkthroughSkip}
       />
     );
   }
@@ -78,6 +86,7 @@ export default function RootLayout() {
         <Stack.Screen name="documents" options={{ headerShown: false }} />
         <Stack.Screen name="bank-details" options={{ headerShown: false }} />
         <Stack.Screen name="vehicle-details" options={{ headerShown: false }} />
+        <Stack.Screen name="accepted-trip" options={{ headerShown: false }} />
         <Stack.Screen name="report-problem" options={{ headerShown: false }} />
         <Stack.Screen name="phone-number" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />

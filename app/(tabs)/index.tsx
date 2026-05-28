@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 import {
   Image,
   ImageSourcePropType,
@@ -13,8 +14,17 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { auth } from '@/lib/firebase';
-import { getDriverProfile } from '@/lib/firestoreOnboardingService';
-import { getCachedProfilePhotoUrl, setCachedProfilePhotoUrl } from '@/lib/profilePhotoCache';
+import {
+  getDriverProfile,
+  getLatestDriverAvailability,
+  updateDriverAvailability,
+} from '@/lib/firestoreOnboardingService';
+import {
+  getCachedAvailabilityStatus,
+  getCachedProfilePhotoUrl,
+  setCachedAvailabilityStatus,
+  setCachedProfilePhotoUrl,
+} from '@/lib/profileCache';
 
 const profileImage = require('@/assets/images/home-profile.png');
 const mapPinImage = require('@/assets/images/home-map-pin.png');
@@ -26,6 +36,11 @@ const deliveriesTabImage = require('@/assets/images/home-tab-deliveries.png');
 const profileTabImage = require('@/assets/images/home-tab-profile.png');
 const onlineImportantImage = require('@/assets/images/driver-online-important.png');
 const offlineImportantImage = require('@/assets/images/driver-offline-important.png');
+
+type CurrentLocationLabel = {
+  area: string;
+  district: string;
+};
 
 const jobRequests = [
   {
@@ -53,6 +68,182 @@ const jobRequests = [
     dropAddress: 'Ram CNC Works, Gandhipuram',
   },
 ];
+
+type DeliveryTimestamp =
+  | string
+  | number
+  | Date
+  | {
+      seconds?: number;
+      _seconds?: number;
+      toDate?: () => Date;
+    };
+
+type OpenDelivery = {
+  id?: string;
+  driverId?: string | null;
+  status?: string;
+  sender?: {
+    name?: string;
+    phone?: string;
+  };
+  receiver?: {
+    name?: string;
+    phone?: string;
+  };
+  locations?: {
+    pickup?: {
+      address?: string;
+      coords?: {
+        lat?: number;
+        lng?: number;
+      } | null;
+    };
+    dropoff?: {
+      address?: string;
+      coords?: {
+        lat?: number;
+        lng?: number;
+      } | null;
+    };
+  };
+  pickupTime?: string | null;
+  dropoffTime?: string | null;
+  pricing?: {
+    tripFare?: number | string;
+    total?: number | string;
+    distanceKm?: number | string;
+    distance?: number | string;
+  };
+  timestamps?: {
+    createdAt?: DeliveryTimestamp;
+  };
+};
+
+type DeliveryLocation = NonNullable<OpenDelivery['locations']>;
+type DeliveryPoint = DeliveryLocation['pickup'];
+
+type JobRequest = {
+  id: string;
+  deliveryId: string;
+  isResumeTrip: boolean;
+  earnings: string;
+  pickupDistance: string;
+  age: string;
+  pickupTitle: string;
+  pickupTime: string;
+  pickupAddress: string;
+  dropTitle: string;
+  dropTime: string;
+  dropAddress: string;
+};
+
+const getApiBaseUrl = () => {
+  return (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
+};
+
+const formatCurrency = (value: unknown) => {
+  const amount = Number(value);
+
+  if (!Number.isFinite(amount)) {
+    return '\u20b90';
+  }
+
+  return `\u20b9${amount.toLocaleString('en-IN', {
+    maximumFractionDigits: 0,
+  })}`;
+};
+
+const readTimestampMs = (value: DeliveryTimestamp | undefined) => {
+  if (!value) return 0;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') return new Date(value).getTime() || 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value.toDate === 'function') return value.toDate().getTime();
+  if (typeof value._seconds === 'number') return value._seconds * 1000;
+  if (typeof value.seconds === 'number') return value.seconds * 1000;
+  return 0;
+};
+
+const formatAge = (createdAt: DeliveryTimestamp | undefined) => {
+  const createdMs = readTimestampMs(createdAt);
+
+  if (!createdMs) {
+    return 'Just now';
+  }
+
+  const diffMinutes = Math.max(0, Math.floor((Date.now() - createdMs) / 60000));
+
+  if (diffMinutes < 1) return 'Just now';
+  if (diffMinutes < 60) return `${diffMinutes}min ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}hr ago`;
+
+  return `${Math.floor(diffHours / 24)}d ago`;
+};
+
+const getDistanceKm = (
+  pickup?: DeliveryPoint,
+  dropoff?: DeliveryPoint
+) => {
+  const pickupLat = pickup?.coords?.lat;
+  const pickupLng = pickup?.coords?.lng;
+  const dropLat = dropoff?.coords?.lat;
+  const dropLng = dropoff?.coords?.lng;
+
+  if (
+    typeof pickupLat !== 'number' ||
+    typeof pickupLng !== 'number' ||
+    typeof dropLat !== 'number' ||
+    typeof dropLng !== 'number'
+  ) {
+    return null;
+  }
+
+  const earthRadiusKm = 6371;
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const latDistance = toRadians(dropLat - pickupLat);
+  const lngDistance = toRadians(dropLng - pickupLng);
+  const startLat = toRadians(pickupLat);
+  const endLat = toRadians(dropLat);
+  const a =
+    Math.sin(latDistance / 2) * Math.sin(latDistance / 2) +
+    Math.cos(startLat) *
+      Math.cos(endLat) *
+      Math.sin(lngDistance / 2) *
+      Math.sin(lngDistance / 2);
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const mapDeliveryToJobRequest = (delivery: OpenDelivery, index: number): JobRequest => {
+  const pickup = delivery.locations?.pickup;
+  const dropoff = delivery.locations?.dropoff;
+  const dbDistance = Number(delivery.pricing?.distanceKm ?? delivery.pricing?.distance);
+  const calculatedDistance = getDistanceKm(pickup, dropoff);
+  const distance = Number.isFinite(dbDistance) && dbDistance > 0 ? dbDistance : calculatedDistance;
+  const distanceLabel = distance ? `Drop ${Math.round(distance)} km` : 'Drop';
+  const isResumeTrip =
+    delivery.status === 'assigned' ||
+    delivery.status === 'arrived' ||
+    delivery.status === 'in_transit';
+
+  return {
+    id: delivery.id || `delivery-${index}`,
+    deliveryId: delivery.id || '',
+    isResumeTrip,
+    earnings: formatCurrency(delivery.pricing?.tripFare ?? delivery.pricing?.total),
+    pickupDistance: distance ? `${Math.round(distance)}km pickup` : 'Open job',
+    age: isResumeTrip ? 'Resume trip' : formatAge(delivery.timestamps?.createdAt),
+    pickupTitle: 'To Pickup',
+    pickupTime: delivery.pickupTime || 'Pickup time not set',
+    pickupAddress: pickup?.address || 'Pickup address unavailable',
+    dropTitle: distanceLabel,
+    dropTime: delivery.dropoffTime || 'Drop time not set',
+    dropAddress: dropoff?.address || 'Drop address unavailable',
+  };
+};
 
 function StatusBarBlock() {
   return (
@@ -93,11 +284,13 @@ function Header({
   onTogglePress,
   onProfilePress,
   profilePhotoUrl,
+  currentLocation,
 }: {
   driverStatus: DriverStatus;
   onTogglePress: () => void;
   onProfilePress: () => void;
   profilePhotoUrl: string | null;
+  currentLocation: CurrentLocationLabel;
 }) {
   return (
     <View style={styles.header}>
@@ -106,9 +299,9 @@ function Header({
         <View style={styles.locationTextWrap}>
           <View style={styles.locationTitleRow}>
             <Image source={mapPinImage} style={styles.locationIcon} resizeMode="contain" />
-            <Text style={styles.locationTitle}>Porur, Chennai</Text>
+            <Text style={styles.locationTitle}>{currentLocation.area}</Text>
           </View>
-          <Text style={styles.locationSubtitle}>Papanthangal, Chennai, Tamil Nadu, India</Text>
+          <Text style={styles.locationSubtitle}>{currentLocation.district}</Text>
         </View>
         <Pressable
           accessibilityRole="button"
@@ -171,9 +364,15 @@ function RoutePoint({
   );
 }
 
-function JobCard({ job }: { job: (typeof jobRequests)[number] }) {
-  return (
-    <View style={styles.jobCard}>
+function JobCard({
+  job,
+  onAccept,
+}: {
+  job: JobRequest;
+  onAccept: (job: JobRequest) => void;
+}) {
+  const cardContent = (
+    <>
       <View style={styles.jobTopRow}>
         <View>
           <Text style={styles.estimateLabel}>Estimated earnings</Text>
@@ -206,14 +405,38 @@ function JobCard({ job }: { job: (typeof jobRequests)[number] }) {
         </View>
       </View>
 
-      <View style={styles.cardActions}>
-        <Pressable style={styles.rejectButton}>
-          <Text style={styles.rejectText}>Reject</Text>
-        </Pressable>
-        <Pressable style={styles.acceptButton}>
-          <Text style={styles.acceptText}>Accept</Text>
-        </Pressable>
-      </View>
+      {!job.isResumeTrip ? (
+        <View style={styles.cardActions}>
+          <Pressable style={styles.rejectButton}>
+            <Text style={styles.rejectText}>Reject</Text>
+          </Pressable>
+          <Pressable
+            style={styles.acceptButton}
+            onPress={() => onAccept(job)}
+          >
+            <Text style={styles.acceptText}>Accept</Text>
+          </Pressable>
+        </View>
+      ) : null}
+    </>
+  );
+
+  if (job.isResumeTrip) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Resume accepted trip"
+        style={({ pressed }) => [styles.jobCard, pressed ? styles.jobCardPressed : null]}
+        onPress={() => onAccept(job)}
+      >
+        {cardContent}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={styles.jobCard}>
+      {cardContent}
     </View>
   );
 }
@@ -306,15 +529,159 @@ function StatusConfirmModal({
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [driverStatus, setDriverStatus] = useState<DriverStatus>('online');
+  const [driverStatus, setDriverStatus] = useState<DriverStatus>('offline');
   const [pendingStatus, setPendingStatus] = useState<DriverStatus | null>(null);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<CurrentLocationLabel>({
+    area: 'Fetching location...',
+    district: '',
+  });
+  const [jobRequestList, setJobRequestList] = useState<JobRequest[]>(
+    () => jobRequests.slice(0, 0) as JobRequest[]
+  );
+  const [isLoadingJobs, setIsLoadingJobs] = useState(true);
+
+  React.useEffect(() => {
+    let isActive = true;
+
+    const loadCurrentLocation = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+
+        if (status !== Location.PermissionStatus.GRANTED) {
+          if (isActive) {
+            setCurrentLocation({
+              area: 'Location unavailable',
+              district: 'Permission required',
+            });
+          }
+          return;
+        }
+
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        const [address] = await Location.reverseGeocodeAsync(position.coords);
+
+        const area =
+          address?.district ||
+          address?.name ||
+          address?.street ||
+          address?.city ||
+          'Current location';
+        const district =
+          address?.city ||
+          address?.subregion ||
+          address?.region ||
+          'District unavailable';
+
+        if (isActive) {
+          setCurrentLocation({
+            area,
+            district,
+          });
+        }
+      } catch (error) {
+        console.error('Error loading current location:', error);
+        if (isActive) {
+          setCurrentLocation({
+            area: 'Location unavailable',
+            district: 'Try again later',
+          });
+        }
+      }
+    };
+
+    loadCurrentLocation();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   useFocusEffect(
     React.useCallback(() => {
       let isActive = true;
 
-      const loadProfilePhoto = async () => {
+      const loadOpenJobRequests = async () => {
+        try {
+          setIsLoadingJobs(true);
+          const storedUid = await AsyncStorage.getItem('firebaseUid');
+          const uid = auth.currentUser?.uid || storedUid;
+
+          const openResponse = await fetch(`${getApiBaseUrl()}/api/deliveries/open`);
+          const openBody = (await openResponse.json().catch(() => null)) as {
+            success?: boolean;
+            data?: OpenDelivery[];
+            error?: string;
+          } | null;
+
+          if (!openResponse.ok || openBody?.success === false) {
+            throw new Error(openBody?.error || 'Unable to load job requests');
+          }
+
+          const openDeliveries = Array.isArray(openBody?.data) ? openBody.data : [];
+          let activeDriverDeliveries: OpenDelivery[] = [];
+
+          if (uid) {
+            const activeResponse = await fetch(
+              `${getApiBaseUrl()}/api/deliveries/driver/${encodeURIComponent(uid)}?type=active`
+            );
+            const activeBody = (await activeResponse.json().catch(() => null)) as {
+              success?: boolean;
+              data?: OpenDelivery[];
+              error?: string;
+            } | null;
+
+            if (!activeResponse.ok || activeBody?.success === false) {
+              throw new Error(activeBody?.error || 'Unable to load active trips');
+            }
+
+            activeDriverDeliveries = Array.isArray(activeBody?.data) ? activeBody.data : [];
+          }
+
+          const deliveryMap = new Map<string, OpenDelivery>();
+          [...activeDriverDeliveries, ...openDeliveries].forEach((delivery, index) => {
+            const id = delivery.id || `delivery-${index}`;
+            if (!deliveryMap.has(id)) {
+              deliveryMap.set(id, delivery);
+            }
+          });
+
+          const deliveries = Array.from(deliveryMap.values()).sort((a, b) => {
+            const aTime = readTimestampMs(a.timestamps?.createdAt);
+            const bTime = readTimestampMs(b.timestamps?.createdAt);
+            return bTime - aTime;
+          });
+
+          if (isActive) {
+            setJobRequestList(deliveries.map(mapDeliveryToJobRequest));
+          }
+        } catch (error) {
+          console.error('Error loading job requests:', error);
+          if (isActive) {
+            setJobRequestList([]);
+          }
+        } finally {
+          if (isActive) {
+            setIsLoadingJobs(false);
+          }
+        }
+      };
+
+      loadOpenJobRequests();
+
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
+
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+
+      const loadDriverHomeState = async () => {
         const [storedUid, storedIdToken] = await Promise.all([
           AsyncStorage.getItem('firebaseUid'),
           AsyncStorage.getItem('firebaseIdToken'),
@@ -328,12 +695,28 @@ export default function HomeScreen() {
           return;
         }
 
-        const cachedPhotoUrl = await getCachedProfilePhotoUrl(uid);
+        const [cachedPhotoUrl, cachedStatus] = await Promise.all([
+          getCachedProfilePhotoUrl(uid),
+          getCachedAvailabilityStatus(uid),
+        ]);
+
         if (isActive && cachedPhotoUrl) {
           setProfilePhotoUrl(cachedPhotoUrl);
         }
+        if (isActive && cachedStatus) {
+          setDriverStatus(cachedStatus);
+        }
 
-        const driverProfile = await getDriverProfile(uid, storedIdToken);
+        const [driverProfile, latestStatus] = await Promise.all([
+          getDriverProfile(uid, storedIdToken).catch((error) => {
+            console.error('Error loading driver profile on home:', error);
+            return null;
+          }),
+          getLatestDriverAvailability(uid, storedIdToken).catch((error) => {
+            console.error('Error loading driver availability on home:', error);
+            return null;
+          }),
+        ]);
         const savedPhotoUrl =
           driverProfile?.profilePhotoUrl ||
           (driverProfile?.photoUri?.startsWith('http') ? driverProfile.photoUri : null);
@@ -341,13 +724,17 @@ export default function HomeScreen() {
         if (savedPhotoUrl) {
           await setCachedProfilePhotoUrl(uid, savedPhotoUrl);
         }
+        if (latestStatus) {
+          await setCachedAvailabilityStatus(uid, latestStatus);
+        }
 
         if (isActive) {
           setProfilePhotoUrl(savedPhotoUrl || cachedPhotoUrl || null);
+          setDriverStatus(latestStatus || cachedStatus || 'offline');
         }
       };
 
-      loadProfilePhoto();
+      loadDriverHomeState();
 
       return () => {
         isActive = false;
@@ -359,15 +746,38 @@ export default function HomeScreen() {
     setPendingStatus(driverStatus === 'online' ? 'offline' : 'online');
   };
 
-  const handleConfirmStatus = () => {
+  const handleConfirmStatus = async () => {
     if (pendingStatus) {
+      const nextStatus = pendingStatus;
       setDriverStatus(pendingStatus);
       setPendingStatus(null);
+
+      const [storedUid, storedIdToken] = await Promise.all([
+        AsyncStorage.getItem('firebaseUid'),
+        AsyncStorage.getItem('firebaseIdToken'),
+      ]);
+      const uid = auth.currentUser?.uid || storedUid;
+
+      if (uid) {
+        await setCachedAvailabilityStatus(uid, nextStatus);
+        updateDriverAvailability(uid, nextStatus, storedIdToken);
+      }
     }
   };
 
   const handleProfilePress = () => {
     router.push('/profile');
+  };
+
+  const handleAcceptJob = async (job: JobRequest) => {
+    if (!job.deliveryId) {
+      return;
+    }
+
+    router.push({
+      pathname: '/accepted-trip',
+      params: { deliveryId: job.deliveryId },
+    });
   };
 
   return (
@@ -377,6 +787,7 @@ export default function HomeScreen() {
         onTogglePress={handleTogglePress}
         onProfilePress={handleProfilePress}
         profilePhotoUrl={profilePhotoUrl}
+        currentLocation={currentLocation}
       />
 
       <ScrollView
@@ -395,9 +806,23 @@ export default function HomeScreen() {
           <Chip label="Urgent" />
         </View>
 
-        {jobRequests.map((job) => (
-          <JobCard key={job.id} job={job} />
-        ))}
+        {isLoadingJobs ? (
+          <View style={styles.emptyJobsCard}>
+            <Text style={styles.emptyJobsText}>Loading job requests...</Text>
+          </View>
+        ) : jobRequestList.length > 0 ? (
+          jobRequestList.map((job) => (
+            <JobCard
+              key={job.id}
+              job={job}
+              onAccept={handleAcceptJob}
+            />
+          ))
+        ) : (
+          <View style={styles.emptyJobsCard}>
+            <Text style={styles.emptyJobsText}>No job requests available</Text>
+          </View>
+        )}
       </ScrollView>
 
       <DriverTabBar onProfilePress={handleProfilePress} />
@@ -614,6 +1039,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     elevation: 4,
   },
+  jobCardPressed: {
+    opacity: 0.85,
+  },
   jobTopRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -769,6 +1197,23 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontFamily: 'Poppins',
     letterSpacing: -0.5,
+  },
+  emptyJobsCard: {
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyJobsText: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#606060',
+    fontFamily: 'Poppins',
+    lineHeight: 21,
+    textAlign: 'center',
   },
   driverTabBar: {
     borderTopWidth: 1,

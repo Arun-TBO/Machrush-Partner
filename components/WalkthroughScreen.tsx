@@ -153,6 +153,7 @@ export const WalkthroughScreen: React.FC<WalkthroughScreenProps> = ({
   };
 
   const handleSkip = () => {
+    setShowVerification(true);
     onSkip?.();
   };
 
@@ -227,11 +228,6 @@ export const WalkthroughScreen: React.FC<WalkthroughScreenProps> = ({
 
         {/* Bottom Sheet Section */}
         <View style={[styles.bottomSheet, Shadows.default]}>
-          {/* Handle */}
-          <View style={styles.handleContainer}>
-            <View style={styles.handle} />
-          </View>
-
           {/* Progress Indicator */}
           <View style={styles.indicatorContainer}>
             <ProgressIndicator total={WALKTHROUGH_SCREENS.length} current={currentStep} />
@@ -265,7 +261,6 @@ export const WalkthroughScreen: React.FC<WalkthroughScreenProps> = ({
             )}
           </View>
 
-          {/* Navigation Handle */}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -348,20 +343,6 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
     maxHeight: '50%',
     zIndex: 20,
-  },
-
-  // Handle
-  handleContainer: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: 18,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: Radius.full,
-    backgroundColor: 'rgba(41, 41, 43, 0.05)',
   },
 
   // Progress Indicator
@@ -459,11 +440,4 @@ const styles = StyleSheet.create({
     flexWrap: 'nowrap',
   },
 
-  // Navigation
-  navigationHandle: {
-    width: 108,
-    height: 4,
-    borderRadius: Radius.full,
-    backgroundColor: '#29292B',
-  },
 });

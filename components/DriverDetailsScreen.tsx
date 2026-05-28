@@ -11,8 +11,9 @@ import {
   SafeAreaView,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Spacing, Radius } from '@/lib/theme';
+import { Colors } from '@/lib/theme';
+
+const backImage = require('@/assets/images/profile/back.png');
 
 interface DriverDetailsScreenProps {
   onContinue?: (data: DriverDetailsData) => void;
@@ -35,7 +36,6 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
   const [drivingLicenseUri, setDrivingLicenseUri] = useState<string | undefined>();
   const [identityProofUri, setIdentityProofUri] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(false);
-  const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // Fade in animation on mount
@@ -124,11 +124,18 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={styles.statusSpacer} />
+
       {/* Header */}
 
       <View style={styles.header}>
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backButtonText}>←</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          onPress={onBack}
+          style={styles.backButton}
+        >
+          <Image source={backImage} style={styles.backIcon} resizeMode="contain" />
         </Pressable>
         <Text style={styles.headerTitle}>Onboarding</Text>
       </View>
@@ -215,9 +222,6 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
           </View>
         </ScrollView>
       </Animated.View>
-
-      {/* Navigation Handle */}
-   
     </SafeAreaView>
   );
 };
@@ -287,41 +291,36 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#eff2f6',
   },
+  statusSpacer: {
+    height: 52,
+    backgroundColor: '#ffffff',
+  },
 
-  
-  // Header
   header: {
-    height: 100,
-    paddingHorizontal: 24,
+    height: 64,
+    paddingHorizontal: 4,
     paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    gap: 12,
+    backgroundColor: '#ffffff',
   },
   backButton: {
-    width: 38,
-    height: 38,
+    width: 48,
+    height: 48,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  backButtonText: {
-    fontSize: 24,
-    color: '#1c1c1c',
-    fontWeight: '400',
+  backIcon: {
+    width: 24,
+    height: 24,
   },
   headerTitle: {
-    fontSize: 30,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '500',
     color: '#1c1c1c',
     fontFamily: 'Poppins',
     lineHeight: 32,
-    textAlign: 'center',
-    flex: -1,
-    alignSelf: 'center',
   },
   // Content Wrapper
   contentWrapper: {
@@ -335,8 +334,8 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 8,
+    paddingTop: 16,
+    paddingBottom: 40,
     gap: 40,
   },
 
@@ -406,17 +405,19 @@ const styles = StyleSheet.create({
 
   // Document Item
   documentItem: {
-    gap: 12,
-    paddingVertical: 12,
+    minHeight: 113,
+    gap: 16,
+    paddingVertical: 24,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#d2d2d2',
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
   documentInfo: {
     gap: 4,
     flex: 1,
+    minWidth: 0,
   },
   documentTitle: {
     fontSize: 18,
@@ -456,14 +457,14 @@ const styles = StyleSheet.create({
   documentUploadBox: {
     width: 64,
     height: 64,
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
   },
   uploadButton: {
     width: 64,
     height: 64,
     backgroundColor: 'white',
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 0.5,
     borderColor: '#a4a4a4',
     borderStyle: 'dashed',
@@ -481,13 +482,13 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     position: 'relative',
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
   },
   uploadedImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 8,
+    borderRadius: 12,
   },
   removeButton: {
     position: 'absolute',
@@ -528,21 +529,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins',
     lineHeight: 20,
     letterSpacing: -0.5,
-  },
-
-  // Navigation Handle
-  navigationHandle: {
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: 16,
-    backgroundColor: '#eff2f6',
-  },
-  handleBar: {
-    width: 108,
-    height: 4,
-    backgroundColor: '#1d1b20',
-    borderRadius: 12,
   },
 });
 
