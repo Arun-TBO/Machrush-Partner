@@ -333,6 +333,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#eff2f6',
   },
   contentContainer: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 40,

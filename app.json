@@ -5,6 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
+    "backgroundColor": "#eff2f6",
     "scheme": "macrushmobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -13,6 +14,7 @@
     },
     "android": {
       "package": "com.machrush01",
+      "backgroundColor": "#eff2f6",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -28,6 +30,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-system-ui",
       [
         "expo-location",
         {

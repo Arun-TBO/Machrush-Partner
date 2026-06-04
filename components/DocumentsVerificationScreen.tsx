@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Image,
@@ -10,11 +10,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Ionicons, MaterialIcons, Octicons } from '@expo/vector-icons';
+import { MaterialIcons, Octicons } from '@expo/vector-icons';
 import { getVerificationStatus } from '@/lib/firestoreOnboardingService';
 
 const verifiedImage = require('@/assets/images/verified.png');
 const backImage = require('@/assets/images/profile/back.png');
+const supportCallImage = require('@/assets/images/profile/support-call.png');
 
 interface DocumentsVerificationScreenProps {
   phoneNumber?: string;
@@ -23,10 +24,11 @@ interface DocumentsVerificationScreenProps {
   onBack?: () => void;
   onVerificationComplete?: () => void;
   onRetryUpload?: () => void;
+  onSuspended?: () => void;
 }
 
 interface VerificationData {
-  status: 'pending' | 'verified' | 'rejected';
+  status: 'pending' | 'verified' | 'rejected' | 'suspended';
   rejectionReason?: string;
   rejectedDocuments?: string[];
   reviewedAt?: string;
@@ -39,12 +41,13 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
   onBack,
   onVerificationComplete,
   onRetryUpload,
+  onSuspended,
 }) => {
   const [verificationData, setVerificationData] = useState<VerificationData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showSupportModal, setShowSupportModal] = useState(false);
 
-  const fetchVerificationStatus = async () => {
+  const fetchVerificationStatus = useCallback(async () => {
     try {
       const identifier = uid || phoneNumber;
 
@@ -64,6 +67,12 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
         return;
       }
 
+      if (data.status === 'suspended') {
+        onSuspended?.();
+        setIsLoading(false);
+        return;
+      }
+
       setVerificationData({
         status: data.status,
         rejectionReason: data.rejectionReason,
@@ -76,13 +85,13 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
       console.error('Error fetching verification status:', error);
       setIsLoading(false);
     }
-  };
+  }, [idToken, onSuspended, phoneNumber, uid]);
 
   useEffect(() => {
     fetchVerificationStatus();
     const interval = setInterval(fetchVerificationStatus, 5000);
     return () => clearInterval(interval);
-  }, [uid, phoneNumber, idToken]);
+  }, [fetchVerificationStatus]);
 
   const status = verificationData?.status || 'pending';
   const isVerified = status === 'verified';
@@ -202,7 +211,7 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
             <View style={styles.supportOptions}>
               <View style={styles.supportRow}>
                 <View style={styles.supportIconCircle}>
-                  <Ionicons name="call" size={22} color="#05c" />
+                  <Image source={supportCallImage} style={styles.supportIconImage} resizeMode="contain" />
                 </View>
                 <View style={styles.supportTextGroup}>
                   <Text style={styles.supportLabel}>Call us (24x7)</Text>
@@ -267,6 +276,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     flexGrow: 1,
     paddingHorizontal: 16,
     paddingTop: 16,
@@ -356,6 +368,9 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   bottomArea: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     paddingHorizontal: 16,
     paddingBottom: 24,
   },
@@ -393,6 +408,8 @@ const styles = StyleSheet.create({
   },
   supportSheet: {
     width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
@@ -444,9 +461,12 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 40,
-    backgroundColor: 'rgba(27, 124, 255, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  supportIconImage: {
+    width: 52,
+    height: 52,
   },
   supportTextGroup: {
     flex: 1,

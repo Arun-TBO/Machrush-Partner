@@ -267,6 +267,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.lg,
     paddingBottom: Spacing.xl,
@@ -380,6 +383,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     backgroundColor: Colors.neutral100,
     borderTopLeftRadius: Radius.lg,
     borderTopRightRadius: Radius.lg,

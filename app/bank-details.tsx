@@ -232,6 +232,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     flexGrow: 1,
     paddingHorizontal: 16,
     paddingTop: 16,
@@ -322,10 +325,12 @@ const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.28)',
+    backgroundColor: 'rgba(0, 0, 0, 0.12)',
   },
   supportSheet: {
     width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     gap: 24,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,

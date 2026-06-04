@@ -16,6 +16,7 @@ import { DriverDetailsScreen } from './DriverDetailsScreen';
 import { VehicleDetailsScreen } from './VehicleDetailsScreen';
 import { BankDetailsScreen } from './BankDetailsScreen';
 import { DocumentsVerificationScreen } from './DocumentsVerificationScreen';
+import { SuspendedScreen } from './SuspendedScreen';
 import {
   storeOnboardingData,
   getVerificationStatus,
@@ -40,6 +41,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
   const [showVehicleDetails, setShowVehicleDetails] = useState(false);
   const [showBankDetails, setShowBankDetails] = useState(false);
   const [showVerification, setShowVerification] = useState(false);
+  const [showSuspended, setShowSuspended] = useState(false);
 
   // Collect data from all screens
   const [driverData, setDriverData] = useState<any>(null);
@@ -165,6 +167,17 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
       if (verificationStatus?.status === 'verified') {
         console.log('✅ Existing driver already verified, going to app');
         onVerify?.(result.phoneNumber);
+        return;
+      }
+
+      if (verificationStatus?.status === 'suspended') {
+        console.log('Blocked driver account detected; showing suspended screen');
+        setShowSuspended(true);
+        setShowOTP(false);
+        setShowVerification(false);
+        setShowDriverDetails(false);
+        setShowVehicleDetails(false);
+        setShowBankDetails(false);
         return;
       }
 
@@ -301,13 +314,19 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
   };
 
   return (
-    showVerification ? (
+    showSuspended ? (
+      <SuspendedScreen />
+    ) : showVerification ? (
       <DocumentsVerificationScreen
         uid={firebaseUid || undefined}
         phoneNumber={`+91${mobileNumber}`}
         idToken={firebaseIdToken || undefined}
         onVerificationComplete={handleVerificationComplete}
         onRetryUpload={handleRetryUpload}
+        onSuspended={() => {
+          setShowVerification(false);
+          setShowSuspended(true);
+        }}
       />
     ) : showBankDetails ? (
       <BankDetailsScreen
@@ -370,16 +389,17 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
             </View>
 
             {/* Mobile Number Input */}
-            <TextInput
-              style={styles.mobileNumberInput}
-              placeholder="Mobile Number"
-              placeholderTextColor={Colors.neutral700}
-              keyboardType="number-pad"
-              maxLength={10}
-              value={mobileNumber}
-              onChangeText={setMobileNumber}
-              editable={!isLoading}
-            />
+            <View style={styles.mobileNumberBox}>
+              <Text style={styles.mobileNumberLabel}>Mobile Number</Text>
+              <TextInput
+                style={styles.mobileNumberInput}
+                keyboardType="number-pad"
+                maxLength={10}
+                value={mobileNumber}
+                onChangeText={setMobileNumber}
+                editable={!isLoading}
+              />
+            </View>
           </View>
 
           {/* Verify & Continue Button */}
@@ -420,6 +440,9 @@ const styles = StyleSheet.create({
   // Content Container
   contentContainer: {
     flex: 1,
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     paddingHorizontal: Spacing.sm,
     paddingTop: Spacing.lg,
     gap: Spacing.lg,
@@ -430,11 +453,11 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   title: {
-    fontSize: 40,
+    fontSize: 32,
     fontWeight: '500',
     color: Colors.neutral900,
     fontFamily: 'Poppins',
-    lineHeight: 48,
+    lineHeight: 40,
     letterSpacing: 0,
   },
   description: {
@@ -449,7 +472,7 @@ const styles = StyleSheet.create({
   // Input Container
   inputContainer: {
     flexDirection: 'row',
-    gap: Spacing.md,
+    gap: 8,
     alignItems: 'center',
   },
 
@@ -461,7 +484,8 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    paddingVertical: Spacing.sm,
+    paddingTop: 8,
+    paddingBottom: 9,
   },
   countryCodeLabel: {
     fontSize: 12,
@@ -478,13 +502,27 @@ const styles = StyleSheet.create({
   },
 
   // Mobile Number Input
-  mobileNumberInput: {
+  mobileNumberBox: {
     flex: 1,
     height: 60,
     backgroundColor: 'white',
     borderRadius: Radius.md,
     paddingHorizontal: 16,
-    paddingVertical: Spacing.sm,
+    paddingTop: 8,
+    paddingBottom: 7,
+    justifyContent: 'space-between',
+  },
+  mobileNumberLabel: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#9d9d8a',
+    fontFamily: 'DM Sans',
+    lineHeight: 16,
+  },
+  mobileNumberInput: {
+    height: 24,
+    padding: 0,
+    margin: 0,
     fontSize: 14,
     fontWeight: '500',
     color: Colors.neutral900,

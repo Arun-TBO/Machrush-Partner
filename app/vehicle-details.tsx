@@ -204,6 +204,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 40,
@@ -267,8 +270,9 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   bodyTypesRow: {
-    width: 264,
-    height: 140,
+    width: '100%',
+    maxWidth: 320,
+    minHeight: 140,
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 16,

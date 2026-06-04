@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import {
+  Alert,
   Image,
   ImageSourcePropType,
   Modal,
@@ -26,14 +27,10 @@ import {
   setCachedProfilePhotoUrl,
 } from '@/lib/profileCache';
 
-const profileImage = require('@/assets/images/home-profile.png');
+const profileImage = require('@/assets/images/home-profile.jpg');
 const mapPinImage = require('@/assets/images/home-map-pin.png');
-const filterImage = require('@/assets/images/home-filter.png');
 const pickupImage = require('@/assets/images/home-pickup.png');
 const dropImage = require('@/assets/images/home-drop.png');
-const homeTabImage = require('@/assets/images/home-tab-home.png');
-const deliveriesTabImage = require('@/assets/images/home-tab-deliveries.png');
-const profileTabImage = require('@/assets/images/home-tab-profile.png');
 const onlineImportantImage = require('@/assets/images/driver-online-important.png');
 const offlineImportantImage = require('@/assets/images/driver-offline-important.png');
 
@@ -91,6 +88,13 @@ type OpenDelivery = {
     name?: string;
     phone?: string;
   };
+  vehicle?: {
+    id?: string;
+    name?: string;
+    imageKey?: string;
+    type?: string;
+    vehicleType?: string;
+  };
   locations?: {
     pickup?: {
       address?: string;
@@ -117,6 +121,7 @@ type OpenDelivery = {
   };
   timestamps?: {
     createdAt?: DeliveryTimestamp;
+    deliveredAt?: DeliveryTimestamp;
   };
 };
 
@@ -163,6 +168,21 @@ const readTimestampMs = (value: DeliveryTimestamp | undefined) => {
   if (typeof value._seconds === 'number') return value._seconds * 1000;
   if (typeof value.seconds === 'number') return value.seconds * 1000;
   return 0;
+};
+
+const isSameLocalDay = (leftMs: number, rightMs: number) => {
+  if (!leftMs || !rightMs) {
+    return false;
+  }
+
+  const leftDate = new Date(leftMs);
+  const rightDate = new Date(rightMs);
+
+  return (
+    leftDate.getFullYear() === rightDate.getFullYear() &&
+    leftDate.getMonth() === rightDate.getMonth() &&
+    leftDate.getDate() === rightDate.getDate()
+  );
 };
 
 const formatAge = (createdAt: DeliveryTimestamp | undefined) => {
@@ -285,12 +305,14 @@ function Header({
   onProfilePress,
   profilePhotoUrl,
   currentLocation,
+  todayEarnings,
 }: {
   driverStatus: DriverStatus;
   onTogglePress: () => void;
   onProfilePress: () => void;
   profilePhotoUrl: string | null;
   currentLocation: CurrentLocationLabel;
+  todayEarnings: string;
 }) {
   return (
     <View style={styles.header}>
@@ -318,22 +340,12 @@ function Header({
 
       <View style={styles.earningRow}>
         <View>
-          <Text style={styles.totalEarning}>₹2,200</Text>
+          <Text style={styles.totalEarning}>{todayEarnings}</Text>
           <Text style={styles.totalLabel}>Today total earning</Text>
         </View>
         <OnlineToggle status={driverStatus} onPress={onTogglePress} />
       </View>
     </View>
-  );
-}
-
-function Chip({ label, active }: { label: string; active?: boolean }) {
-  return (
-    <Pressable style={[styles.chip, active ? styles.chipActive : styles.chipInactive]}>
-      <Text style={[styles.chipText, active ? styles.chipTextActive : styles.chipTextInactive]}>
-        {label}
-      </Text>
-    </Pressable>
   );
 }
 
@@ -367,9 +379,11 @@ function RoutePoint({
 function JobCard({
   job,
   onAccept,
+  canAcceptNewJobs,
 }: {
   job: JobRequest;
   onAccept: (job: JobRequest) => void;
+  canAcceptNewJobs: boolean;
 }) {
   const cardContent = (
     <>
@@ -402,6 +416,7 @@ function JobCard({
         />
         <View style={styles.routeConnector}>
           <View style={styles.routeDash} />
+          <View style={styles.routeArrowHead} />
         </View>
       </View>
 
@@ -411,7 +426,8 @@ function JobCard({
             <Text style={styles.rejectText}>Reject</Text>
           </Pressable>
           <Pressable
-            style={styles.acceptButton}
+            style={[styles.acceptButton, !canAcceptNewJobs ? styles.acceptButtonDisabled : null]}
+            disabled={!canAcceptNewJobs}
             onPress={() => onAccept(job)}
           >
             <Text style={styles.acceptText}>Accept</Text>
@@ -437,30 +453,6 @@ function JobCard({
   return (
     <View style={styles.jobCard}>
       {cardContent}
-    </View>
-  );
-}
-
-function DriverTabBar({ onProfilePress }: { onProfilePress: () => void }) {
-  return (
-    <View style={styles.driverTabBar}>
-      <View style={styles.tabItem}>
-        <Image source={homeTabImage} style={styles.tabIcon} resizeMode="contain" />
-        <Text style={styles.tabLabelActive}>Home</Text>
-      </View>
-      <View style={styles.tabItem}>
-        <Image source={deliveriesTabImage} style={styles.tabIcon} resizeMode="contain" />
-        <Text style={styles.tabLabel}>My Deliveries</Text>
-      </View>
-      <Pressable
-        style={styles.tabItem}
-        accessibilityRole="button"
-        accessibilityLabel="Open profile"
-        onPress={onProfilePress}
-      >
-        <Image source={profileTabImage} style={styles.tabIcon} resizeMode="contain" />
-        <Text style={styles.tabLabel}>Profile</Text>
-      </Pressable>
     </View>
   );
 }
@@ -540,6 +532,8 @@ export default function HomeScreen() {
     () => jobRequests.slice(0, 0) as JobRequest[]
   );
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
+  const [todayTotalEarnings, setTodayTotalEarnings] = useState(formatCurrency(0));
+  const [hasTripInProgress, setHasTripInProgress] = useState(false);
 
   React.useEffect(() => {
     let isActive = true;
@@ -606,39 +600,70 @@ export default function HomeScreen() {
       const loadOpenJobRequests = async () => {
         try {
           setIsLoadingJobs(true);
-          const storedUid = await AsyncStorage.getItem('firebaseUid');
+          const [storedUid, storedIdToken] = await Promise.all([
+            AsyncStorage.getItem('firebaseUid'),
+            AsyncStorage.getItem('firebaseIdToken'),
+          ]);
           const uid = auth.currentUser?.uid || storedUid;
-
-          const openResponse = await fetch(`${getApiBaseUrl()}/api/deliveries/open`);
-          const openBody = (await openResponse.json().catch(() => null)) as {
-            success?: boolean;
-            data?: OpenDelivery[];
-            error?: string;
-          } | null;
-
-          if (!openResponse.ok || openBody?.success === false) {
-            throw new Error(openBody?.error || 'Unable to load job requests');
-          }
-
-          const openDeliveries = Array.isArray(openBody?.data) ? openBody.data : [];
-          let activeDriverDeliveries: OpenDelivery[] = [];
+          let driverVehicleType = '';
+          let openDeliveries: OpenDelivery[] = [];
+          let driverDeliveries: OpenDelivery[] = [];
 
           if (uid) {
-            const activeResponse = await fetch(
-              `${getApiBaseUrl()}/api/deliveries/driver/${encodeURIComponent(uid)}?type=active`
+            const driverProfile = await getDriverProfile(uid, storedIdToken).catch((error) => {
+              console.error('Error loading driver vehicle type:', error);
+              return null;
+            });
+            driverVehicleType = driverProfile?.vehicleType || '';
+          }
+
+          if (uid) {
+            const driverResponse = await fetch(
+              `${getApiBaseUrl()}/api/deliveries/driver/${encodeURIComponent(uid)}?type=all`
             );
-            const activeBody = (await activeResponse.json().catch(() => null)) as {
+            const driverBody = (await driverResponse.json().catch(() => null)) as {
               success?: boolean;
               data?: OpenDelivery[];
               error?: string;
             } | null;
 
-            if (!activeResponse.ok || activeBody?.success === false) {
-              throw new Error(activeBody?.error || 'Unable to load active trips');
+            if (!driverResponse.ok || driverBody?.success === false) {
+              throw new Error(driverBody?.error || 'Unable to load driver deliveries');
             }
 
-            activeDriverDeliveries = Array.isArray(activeBody?.data) ? activeBody.data : [];
+            driverDeliveries = Array.isArray(driverBody?.data) ? driverBody.data : [];
           }
+
+          if (driverVehicleType) {
+            const openResponse = await fetch(
+              `${getApiBaseUrl()}/api/deliveries/open?vehicleType=${encodeURIComponent(driverVehicleType)}`
+            );
+            const openBody = (await openResponse.json().catch(() => null)) as {
+              success?: boolean;
+              data?: OpenDelivery[];
+              error?: string;
+            } | null;
+
+            if (!openResponse.ok || openBody?.success === false) {
+              throw new Error(openBody?.error || 'Unable to load job requests');
+            }
+
+            openDeliveries = Array.isArray(openBody?.data) ? openBody.data : [];
+          }
+
+          const activeDriverDeliveries = driverDeliveries.filter((delivery) =>
+            ['assigned', 'arrived', 'in_transit'].includes(delivery.status || '')
+          );
+          const today = Date.now();
+          const todayEarningsAmount = driverDeliveries
+            .filter((delivery) => ['delivered', 'completed'].includes(delivery.status || ''))
+            .filter((delivery) =>
+              isSameLocalDay(readTimestampMs(delivery.timestamps?.deliveredAt), today)
+            )
+            .reduce((sum, delivery) => {
+              const amount = Number(delivery.pricing?.tripFare ?? delivery.pricing?.total);
+              return sum + (Number.isFinite(amount) ? amount : 0);
+            }, 0);
 
           const deliveryMap = new Map<string, OpenDelivery>();
           [...activeDriverDeliveries, ...openDeliveries].forEach((delivery, index) => {
@@ -656,11 +681,15 @@ export default function HomeScreen() {
 
           if (isActive) {
             setJobRequestList(deliveries.map(mapDeliveryToJobRequest));
+            setTodayTotalEarnings(formatCurrency(todayEarningsAmount));
+            setHasTripInProgress(activeDriverDeliveries.length > 0);
           }
         } catch (error) {
           console.error('Error loading job requests:', error);
           if (isActive) {
             setJobRequestList([]);
+            setTodayTotalEarnings(formatCurrency(0));
+            setHasTripInProgress(false);
           }
         } finally {
           if (isActive) {
@@ -743,11 +772,28 @@ export default function HomeScreen() {
   );
 
   const handleTogglePress = () => {
+    if (driverStatus === 'online' && hasTripInProgress) {
+      Alert.alert(
+        'Trip in progress',
+        'You cannot go offline while a delivery is in progress. Complete the trip first.'
+      );
+      return;
+    }
+
     setPendingStatus(driverStatus === 'online' ? 'offline' : 'online');
   };
 
   const handleConfirmStatus = async () => {
     if (pendingStatus) {
+      if (pendingStatus === 'offline' && hasTripInProgress) {
+        setPendingStatus(null);
+        Alert.alert(
+          'Trip in progress',
+          'You cannot go offline while a delivery is in progress. Complete the trip first.'
+        );
+        return;
+      }
+
       const nextStatus = pendingStatus;
       setDriverStatus(pendingStatus);
       setPendingStatus(null);
@@ -766,11 +812,16 @@ export default function HomeScreen() {
   };
 
   const handleProfilePress = () => {
-    router.push('/profile');
+    router.push('/(tabs)/profile');
   };
 
   const handleAcceptJob = async (job: JobRequest) => {
     if (!job.deliveryId) {
+      return;
+    }
+
+    if (!job.isResumeTrip && driverStatus !== 'online') {
+      Alert.alert('You are offline', 'Go online before accepting a new trip.');
       return;
     }
 
@@ -780,6 +831,9 @@ export default function HomeScreen() {
     });
   };
 
+  const inProgressJobs = jobRequestList.filter((job) => job.isResumeTrip);
+  const openJobRequests = jobRequestList.filter((job) => !job.isResumeTrip);
+
   return (
     <SafeAreaView style={styles.container}>
       <Header
@@ -788,6 +842,7 @@ export default function HomeScreen() {
         onProfilePress={handleProfilePress}
         profilePhotoUrl={profilePhotoUrl}
         currentLocation={currentLocation}
+        todayEarnings={todayTotalEarnings}
       />
 
       <ScrollView
@@ -795,37 +850,53 @@ export default function HomeScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Job Request</Text>
-          <Image source={filterImage} style={styles.filterIcon} resizeMode="contain" />
-        </View>
-
-        <View style={styles.chipRow}>
-          <Chip label="All" active />
-          <Chip label="Nearest" />
-          <Chip label="Urgent" />
-        </View>
-
         {isLoadingJobs ? (
           <View style={styles.emptyJobsCard}>
-            <Text style={styles.emptyJobsText}>Loading job requests...</Text>
+            <Text style={styles.emptyJobsText}>Loading jobs...</Text>
           </View>
-        ) : jobRequestList.length > 0 ? (
-          jobRequestList.map((job) => (
-            <JobCard
-              key={job.id}
-              job={job}
-              onAccept={handleAcceptJob}
-            />
-          ))
         ) : (
-          <View style={styles.emptyJobsCard}>
-            <Text style={styles.emptyJobsText}>No job requests available</Text>
-          </View>
+          <>
+            {inProgressJobs.length > 0 ? (
+              <View style={styles.homeSection}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>In progress</Text>
+                </View>
+
+                {inProgressJobs.map((job) => (
+                  <JobCard
+                    key={job.id}
+                    job={job}
+                    onAccept={handleAcceptJob}
+                    canAcceptNewJobs
+                  />
+                ))}
+              </View>
+            ) : null}
+
+            <View style={styles.homeSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Job Request</Text>
+              </View>
+
+              {openJobRequests.length > 0 ? (
+                openJobRequests.map((job) => (
+                  <JobCard
+                    key={job.id}
+                    job={job}
+                    onAccept={handleAcceptJob}
+                    canAcceptNewJobs={driverStatus === 'online'}
+                  />
+                ))
+              ) : (
+                <View style={styles.emptyJobsCard}>
+                  <Text style={styles.emptyJobsText}>No job requests available</Text>
+                </View>
+              )}
+            </View>
+          </>
         )}
       </ScrollView>
 
-      <DriverTabBar onProfilePress={handleProfilePress} />
       <StatusConfirmModal
         targetStatus={pendingStatus || 'online'}
         visible={pendingStatus !== null}
@@ -970,15 +1041,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     paddingHorizontal: 16,
     paddingTop: 48,
-    paddingBottom: 24,
+    paddingBottom: 110,
     gap: 16,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
   },
   sectionTitle: {
     fontSize: 24,
@@ -987,45 +1061,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins',
     letterSpacing: -1,
   },
-  filterIcon: {
-    width: 24,
-    height: 24,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
-  },
-  chip: {
-    flex: 1,
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 8,
-  },
-  chipActive: {
-    backgroundColor: '#1c1c1c',
-  },
-  chipInactive: {
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.15)',
-    backgroundColor: 'transparent',
-  },
-  chipText: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  chipTextActive: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#ffffff',
-    fontFamily: 'Poppins',
-    lineHeight: 18,
-  },
-  chipTextInactive: {
-    fontWeight: '400',
-    color: '#5e5e58',
-    fontFamily: 'DM Sans',
+  homeSection: {
+    width: '100%',
+    gap: 16,
   },
   jobCard: {
     width: '100%',
@@ -1148,18 +1186,30 @@ const styles = StyleSheet.create({
   },
   routeConnector: {
     position: 'absolute',
-    left: 17,
+    left: 18,
     top: 29,
     height: 58,
-    width: 1,
+    width: 10,
     alignItems: 'center',
+    zIndex: 1,
   },
   routeDash: {
     width: 1,
-    height: 58,
+    height: 50,
     borderLeftWidth: 1,
     borderStyle: 'dashed',
     borderColor: '#2f8dff',
+  },
+  routeArrowHead: {
+    width: 0,
+    height: 0,
+    marginTop: -1,
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderTopWidth: 8,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#2f8dff',
   },
   cardActions: {
     flexDirection: 'row',
@@ -1191,6 +1241,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  acceptButtonDisabled: {
+    opacity: 0.45,
+  },
   acceptText: {
     fontSize: 16,
     fontWeight: '500',
@@ -1214,39 +1267,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins',
     lineHeight: 21,
     textAlign: 'center',
-  },
-  driverTabBar: {
-    borderTopWidth: 1,
-    borderTopColor: '#a4cbff',
-    backgroundColor: '#eff2f6',
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 16,
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 8,
-  },
-  tabIcon: {
-    width: 28,
-    height: 28,
-  },
-  tabLabelActive: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
-    lineHeight: 21,
-  },
-  tabLabel: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
-    lineHeight: 21,
   },
   confirmOverlay: {
     flex: 1,

@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { signOutUser } from '@/lib/firebaseAuthService';
 import { auth } from '@/lib/firebase';
 import { getDriverProfile, updateDriverProfilePhoto } from '@/lib/firestoreOnboardingService';
@@ -25,7 +25,7 @@ import {
   setCachedProfilePhotoUrl,
 } from '@/lib/profileCache';
 
-const profileAvatarImage = require('@/assets/images/profile/profile-avatar.png');
+const profileAvatarImage = require('@/assets/images/profile/profile-avatar.jpg');
 const backImage = require('@/assets/images/profile/back.png');
 const verifiedBadgeImage = require('@/assets/images/profile/verified-badge.png');
 const editImage = require('@/assets/images/profile/edit.png');
@@ -39,9 +39,6 @@ const reportImage = require('@/assets/images/profile/report.png');
 const helpImage = require('@/assets/images/profile/help.png');
 const termsImage = require('@/assets/images/profile/terms.png');
 const logoutImage = require('@/assets/images/profile/logout.png');
-const tabHomeImage = require('@/assets/images/profile/tab-home.png');
-const tabEarningsImage = require('@/assets/images/profile/tab-earnings.png');
-const tabProfileActiveImage = require('@/assets/images/profile/tab-profile-active.png');
 const supportCallImage = require('@/assets/images/profile/support-call.png');
 const supportEmailImage = require('@/assets/images/profile/support-email.png');
 
@@ -53,6 +50,23 @@ const menuRows = [
   { id: 'help', label: 'Get Help', icon: helpImage, iconSize: 24 },
   { id: 'terms', label: 'Terms & conditions', icon: termsImage, iconSize: 24 },
 ];
+
+type DeliveryRecord = {
+  status?: string;
+  review?: {
+    rating?: number | string | null;
+    isSubmitted?: boolean;
+  } | null;
+};
+
+const getApiBaseUrl = () => {
+  return (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
+};
+
+const isCompletedDelivery = (status?: string) => {
+  const normalizedStatus = String(status || '').toLowerCase();
+  return normalizedStatus === 'delivered' || normalizedStatus === 'completed' || normalizedStatus === 'paid';
+};
 
 function TopNav() {
   const router = useRouter();
@@ -213,37 +227,13 @@ function LogoutModal({
   );
 }
 
-function BottomTabBar() {
-  const router = useRouter();
-
-  return (
-    <View style={styles.tabBar}>
-      <Pressable
-        style={styles.tabItem}
-        accessibilityRole="button"
-        accessibilityLabel="Open home"
-        onPress={() => router.push('/(tabs)')}
-      >
-        <Image source={tabHomeImage} style={styles.tabIcon} resizeMode="contain" />
-        <Text style={styles.tabLabel}>Home</Text>
-      </Pressable>
-      <View style={styles.tabItem}>
-        <Image source={tabEarningsImage} style={styles.tabIcon} resizeMode="contain" />
-        <Text style={styles.tabLabel}>Earnings</Text>
-      </View>
-      <View style={styles.tabItem}>
-        <Image source={tabProfileActiveImage} style={styles.tabIcon} resizeMode="contain" />
-        <Text style={styles.tabLabelActive}>Profile</Text>
-      </View>
-    </View>
-  );
-}
-
 export default function ProfileScreen() {
   const [isSupportVisible, setIsSupportVisible] = React.useState(false);
   const [isLogoutVisible, setIsLogoutVisible] = React.useState(false);
   const [profilePhotoUrl, setProfilePhotoUrl] = React.useState<string | null>(null);
   const [driverName, setDriverName] = React.useState('Driver');
+  const [averageRating, setAverageRating] = React.useState('0.0');
+  const [completedDeliveryCount, setCompletedDeliveryCount] = React.useState(0);
   const [isPhotoUploading, setIsPhotoUploading] = React.useState(false);
   const router = useRouter();
 
@@ -332,6 +322,67 @@ export default function ProfileScreen() {
       isMounted = false;
     };
   }, [getCurrentProfileSession]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+
+      const loadProfileStats = async () => {
+        const { uid } = await getCurrentProfileSession();
+
+        if (!uid) {
+          if (isActive) {
+            setAverageRating('0.0');
+            setCompletedDeliveryCount(0);
+          }
+          return;
+        }
+
+        try {
+          const response = await fetch(
+            `${getApiBaseUrl()}/api/deliveries/driver/${encodeURIComponent(uid)}?type=all`
+          );
+          const body = (await response.json().catch(() => null)) as {
+            success?: boolean;
+            data?: DeliveryRecord[];
+            error?: string;
+          } | null;
+
+          if (!response.ok || body?.success === false) {
+            throw new Error(body?.error || 'Unable to load profile stats');
+          }
+
+          const deliveries = Array.isArray(body?.data) ? body.data : [];
+          const completedCount = deliveries.filter((delivery) =>
+            isCompletedDelivery(delivery.status)
+          ).length;
+          const ratings = deliveries
+            .map((delivery) => Number(delivery.review?.rating))
+            .filter((rating) => Number.isFinite(rating) && rating > 0);
+          const rating = ratings.length
+            ? ratings.reduce((sum, value) => sum + value, 0) / ratings.length
+            : 0;
+
+          if (isActive) {
+            setCompletedDeliveryCount(completedCount);
+            setAverageRating(rating.toFixed(1));
+          }
+        } catch (error) {
+          console.error('Error loading profile stats:', error);
+          if (isActive) {
+            setCompletedDeliveryCount(0);
+            setAverageRating('0.0');
+          }
+        }
+      };
+
+      loadProfileStats();
+
+      return () => {
+        isActive = false;
+      };
+    }, [getCurrentProfileSession])
+  );
 
   const handleEditProfilePhoto = async () => {
     try {
@@ -442,14 +493,14 @@ export default function ProfileScreen() {
             <View style={styles.statsRow}>
               <StatCard title="Review">
                 <View style={styles.reviewValueRow}>
-                  <Text style={styles.statValue}>4.8</Text>
+                  <Text style={styles.statValue}>{averageRating}</Text>
                   <Image source={starImage} style={styles.starIcon} resizeMode="contain" />
                 </View>
               </StatCard>
 
               <StatCard title="Delivery's">
                 <View style={styles.deliveryValueRow}>
-                  <Text style={styles.statValue}>12</Text>
+                  <Text style={styles.statValue}>{completedDeliveryCount}</Text>
                   <Text style={styles.completedText}>Completed</Text>
                 </View>
               </StatCard>
@@ -482,7 +533,6 @@ export default function ProfileScreen() {
         <Text style={styles.poweredText}>Powered by thebrandopedia</Text>
       </ScrollView>
 
-      <BottomTabBar />
       <SupportModal visible={isSupportVisible} onClose={() => setIsSupportVisible(false)} />
       <LogoutModal
         visible={isLogoutVisible}
@@ -502,6 +552,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     paddingBottom: 108,
   },
   header: {
@@ -744,45 +797,6 @@ const styles = StyleSheet.create({
     color: '#8e8e8e',
     textAlign: 'center',
   },
-  tabBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    gap: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#a4cbff',
-    backgroundColor: '#eff2f6',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 16,
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 8,
-  },
-  tabIcon: {
-    width: 28,
-    height: 28,
-  },
-  tabLabel: {
-    fontFamily: 'Poppins',
-    fontSize: 14,
-    fontWeight: '400',
-    lineHeight: 21,
-    color: '#606060',
-    textAlign: 'center',
-  },
-  tabLabelActive: {
-    fontFamily: 'Poppins',
-    fontSize: 14,
-    fontWeight: '500',
-    lineHeight: 21,
-    color: '#1c1c1c',
-    textAlign: 'center',
-  },
   modalBackdrop: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -790,6 +804,8 @@ const styles = StyleSheet.create({
   },
   supportSheet: {
     width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     gap: 24,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
@@ -875,6 +891,8 @@ const styles = StyleSheet.create({
   },
   logoutSheet: {
     width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     gap: 32,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,

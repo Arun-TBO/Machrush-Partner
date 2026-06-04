@@ -12,7 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { auth } from '@/lib/firebase';
 import { submitDriverReport } from '@/lib/firestoreOnboardingService';
@@ -194,8 +194,21 @@ function ImageSlot({
 
 export default function ReportProblemScreen() {
   const router = useRouter();
-  const [description, setDescription] = React.useState('');
-  const [selectedCategory, setSelectedCategory] = React.useState('');
+  const {
+    deliveryId,
+    deliveryTitle,
+    prefillCategory,
+  } = useLocalSearchParams<{
+    deliveryId?: string;
+    deliveryTitle?: string;
+    prefillCategory?: string;
+  }>();
+  const initialDescription =
+    deliveryId || deliveryTitle
+      ? `Delivery: ${deliveryTitle || deliveryId}${deliveryId ? `\nDelivery ID: ${deliveryId}` : ''}\n`
+      : '';
+  const [description, setDescription] = React.useState(initialDescription);
+  const [selectedCategory, setSelectedCategory] = React.useState(prefillCategory || '');
   const [selectedIssue, setSelectedIssue] = React.useState('');
   const [openDropdown, setOpenDropdown] = React.useState<'category' | 'issue' | null>(null);
   const [selectedImages, setSelectedImages] = React.useState<(string | null)[]>([null, null, null]);
@@ -335,7 +348,11 @@ export default function ReportProblemScreen() {
         <View style={styles.formContent}>
           <View style={styles.header}>
             <Text style={styles.title}>Report your quality issue</Text>
-            <Text style={styles.subtitle}>Describe the problem with the finished product</Text>
+            <Text style={styles.subtitle}>
+              {deliveryTitle
+                ? `Describe the problem for ${deliveryTitle}`
+                : 'Describe the problem with the finished product'}
+            </Text>
           </View>
 
           <SelectField
@@ -457,6 +474,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 104,
@@ -692,6 +712,7 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     width: '100%',
+    maxWidth: 720,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

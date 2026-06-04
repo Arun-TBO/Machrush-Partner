@@ -40,7 +40,7 @@ export interface OnboardingData {
   upiId?: string;
 
   // Verification Status
-  verificationStatus: 'pending' | 'verified' | 'rejected';
+  verificationStatus: 'pending' | 'verified' | 'rejected' | 'suspended';
   rejectionReason?: string;
   rejectedDocuments?: string[];
   verificationNotes?: string;
@@ -59,7 +59,7 @@ export interface DriverReportData {
   imageUris: string[];
 }
 
-type VerificationStatus = 'pending' | 'verified' | 'rejected';
+type VerificationStatus = 'pending' | 'verified' | 'rejected' | 'suspended';
 export type DriverAvailabilityStatus = 'online' | 'offline';
 
 const getApiBaseUrl = () => {
@@ -163,6 +163,15 @@ const normalizeVerificationStatus = (status: unknown): VerificationStatus | null
 
   if (normalized === 'rejected') {
     return 'rejected';
+  }
+
+  if (
+    normalized === 'suspend' ||
+    normalized === 'suspended' ||
+    normalized === 'blocked' ||
+    normalized === 'block'
+  ) {
+    return 'suspended';
   }
 
   return null;
@@ -1010,7 +1019,7 @@ export const getLatestDriverAvailability = async (
  */
 export const updateVerificationStatus = async (
   uidOrPhone: string,
-  status: 'pending' | 'verified' | 'rejected',
+  status: 'pending' | 'verified' | 'rejected' | 'suspended',
   rejectionReason?: string,
   rejectedDocuments?: string[]
 ): Promise<{ success: boolean; error?: string }> => {

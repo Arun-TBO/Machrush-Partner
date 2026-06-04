@@ -22,5 +22,12 @@ module.exports = {
         },
       },
     },
+    extra: {
+      ...appJson.expo.extra,
+      eas: {
+        ...appJson.expo.extra?.eas,
+        projectId: 'b6c4c1d3-4595-4e89-94ce-a70a4facd70a',
+      },
+    },
   },
 };

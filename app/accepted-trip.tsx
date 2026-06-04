@@ -2,8 +2,15 @@ import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Alert,
+  Animated,
+  Dimensions,
+  Easing,
   Image,
+  InteractionManager,
+  Keyboard,
   Linking,
+  Modal,
+  PanResponder,
   Platform,
   Pressable,
   SafeAreaView,
@@ -15,18 +22,30 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type MapViewRef } from '@/components/NativeMap';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { auth } from '@/lib/firebase';
 import { getDriverProfile } from '@/lib/firestoreOnboardingService';
 
-const customerAvatarImage = require('@/assets/images/delivery/customer-avatar.png');
+const customerAvatarImage = require('@/assets/images/delivery/customer-avatar.jpg');
+const tripCompletedBanknoteImage = require('@/assets/images/delivery/trip-completed-banknote.png');
+const tripCompletedTickImage = require('@/assets/images/delivery/trip-completed-tick.png');
+const trackingLocationImage = require('@/assets/images/profile/Location.png');
+const supportCallImage = require('@/assets/images/profile/phone.png');
+const tableLocationImage = require('@/assets/images/profile/tablelocation.png');
+const otpResetImage = require('@/assets/images/profile/mdi_password-reset.png');
 const BYPASS_PICKUP_GEOFENCE_FOR_TESTING = false;
+const BYPASS_DROP_GEOFENCE_FOR_TESTING = true;
 const PICKUP_ARRIVAL_RADIUS_METERS = 100;
 const DROP_ARRIVAL_RADIUS_METERS = 120;
 const OFF_ROUTE_THRESHOLD_METERS = 60;
 const REROUTE_COOLDOWN_MS = 15000;
+const DRIVER_LOCATION_SYNC_INTERVAL_MS = 10000;
 const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+const TRACKING_SHEET_HEIGHT = Math.min(520, Math.max(480, Dimensions.get('window').height * 0.54));
+const TRACKING_SHEET_COLLAPSED_VISIBLE_HEIGHT = 149;
+const TRACKING_SHEET_COLLAPSED_OFFSET =
+  TRACKING_SHEET_HEIGHT - TRACKING_SHEET_COLLAPSED_VISIBLE_HEIGHT;
 
 type LatLng = {
   lat: number;
@@ -44,6 +63,12 @@ type NavigationStep = {
 type RouteSegment = {
   coordinates: LatLng[];
   color: string;
+};
+
+type DriverLocationMetadata = {
+  heading?: number | null;
+  accuracy?: number | null;
+  speed?: number | null;
 };
 
 type RoutesApiResponse = {
@@ -162,6 +187,8 @@ type DeliveryDetails = {
     phoneNumber?: string;
     photoUri?: string;
     vehicleNumber?: string;
+    vehicleType?: string;
+    vehicleCapacity?: string;
   };
   vehicle?: {
     name?: string;
@@ -223,6 +250,11 @@ const formatCurrency = (value: unknown) => {
 const getCurrencyNumber = (value: unknown) => {
   const amount = Number(value);
   return Number.isFinite(amount) ? amount : 0;
+};
+
+const hasCurrencyValue = (value: unknown) => {
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount > 0;
 };
 
 const getAddressParts = (address: string) => {
@@ -553,7 +585,11 @@ const getDistanceKm = (delivery: DeliveryDetails | null) => {
   return Math.round(earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
 
-function TopNav() {
+function TopNav({
+  onBack,
+}: {
+  onBack?: () => void;
+}) {
   const router = useRouter();
 
   return (
@@ -564,7 +600,7 @@ function TopNav() {
           accessibilityRole="button"
           accessibilityLabel="Go back"
           style={styles.backButton}
-          onPress={() => router.replace('/(tabs)')}
+          onPress={onBack || (() => router.back())}
         >
           <Ionicons name="arrow-back" size={24} color="#9f9f9f" />
         </Pressable>
@@ -620,37 +656,40 @@ function OtpVerificationCard({
   error,
   onChange,
   onSubmit,
+  isLoading,
 }: {
   value: string;
   error: string | null;
   onChange: (value: string) => void;
   onSubmit: () => void;
+  isLoading?: boolean;
 }) {
   const inputRef = React.useRef<TextInput>(null);
   const digits = Array.from({ length: 4 }, (_, index) => value[index] || '');
 
   React.useEffect(() => {
-    if (value.length === 4) {
+    const focusInput = () => {
+      inputRef.current?.focus();
+    };
+    const interactionHandle = InteractionManager.runAfterInteractions(focusInput);
+    const focusTimers = [120, 350, 700].map((delay) => setTimeout(focusInput, delay));
+
+    return () => {
+      interactionHandle.cancel();
+      focusTimers.forEach(clearTimeout);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (value.length === 4 && !isLoading) {
       onSubmit();
     }
-  }, [onSubmit, value]);
+  }, [isLoading, onSubmit, value]);
 
   return (
     <Pressable style={styles.otpCard} onPress={() => inputRef.current?.focus()}>
-      <TextInput
-        ref={inputRef}
-        value={value}
-        onChangeText={(nextValue) => onChange(nextValue.replace(/\D/g, '').slice(0, 4))}
-        keyboardType="number-pad"
-        maxLength={4}
-        style={styles.hiddenOtpInput}
-        autoFocus
-      />
       <View style={styles.otpIconWrap}>
-        <Ionicons name="refresh" size={30} color="#0055cc" />
-        <View style={styles.otpLockCircle}>
-          <Ionicons name="lock-closed" size={18} color="#ffffff" />
-        </View>
+        <Image source={otpResetImage} style={styles.otpIconImage} resizeMode="contain" />
       </View>
       <Text style={styles.otpTitle}>Enter OTP</Text>
       <View style={styles.otpBoxRow}>
@@ -659,7 +698,21 @@ function OtpVerificationCard({
             <Text style={styles.otpDigit}>{digit}</Text>
           </View>
         ))}
+        <TextInput
+          ref={inputRef}
+          value={value}
+          onChangeText={(nextValue) => onChange(nextValue.replace(/\D/g, '').slice(0, 4))}
+          keyboardType="number-pad"
+          inputMode="numeric"
+          maxLength={4}
+          style={styles.hiddenOtpInput}
+          autoFocus
+          caretHidden
+          editable={!isLoading}
+          showSoftInputOnFocus
+        />
       </View>
+      {isLoading ? <Text style={styles.otpHelpText}>Verifying OTP...</Text> : null}
       {error ? <Text style={styles.otpError}>{error}</Text> : null}
     </Pressable>
   );
@@ -677,6 +730,7 @@ function AcceptedPickupView({
   onArrivedPickupPoint,
   onVerifyPickupOtp,
   onCompleteDrop,
+  onOpenDeliveryDetails,
 }: {
   delivery: DeliveryDetails | null;
   deliveryId?: string;
@@ -689,12 +743,16 @@ function AcceptedPickupView({
   onArrivedPickupPoint: () => void;
   onVerifyPickupOtp: (otp: string) => Promise<boolean>;
   onCompleteDrop: () => void;
+  onOpenDeliveryDetails: () => void;
 }) {
-  const mapRef = React.useRef<MapView>(null);
+  const mapRef = React.useRef<MapViewRef>(null);
   const previousLocationRef = React.useRef<LatLng | null>(null);
   const driverLocationRef = React.useRef<LatLng | null>(null);
   const headingRef = React.useRef(0);
   const lastRerouteAtRef = React.useRef(0);
+  const lastDriverLocationSyncAtRef = React.useRef(0);
+  const sheetTranslateY = React.useRef(new Animated.Value(0)).current;
+  const sheetPositionRef = React.useRef(0);
   const [driverLocation, setDriverLocation] = React.useState<LatLng | null>(() => {
     if (
       typeof delivery?.tracking?.driverLat === 'number' &&
@@ -716,9 +774,11 @@ function AcceptedPickupView({
   const [routeStartLocation, setRouteStartLocation] = React.useState<LatLng | null>(null);
   const [routeRefreshIndex, setRouteRefreshIndex] = React.useState(0);
   const [locationError, setLocationError] = React.useState<string | null>(null);
+  const [hasLiveDriverLocation, setHasLiveDriverLocation] = React.useState(false);
   const [pickupOtp, setPickupOtp] = React.useState('');
   const [otpError, setOtpError] = React.useState<string | null>(null);
   const [isVerifyingOtp, setIsVerifyingOtp] = React.useState(false);
+  const [isOtpModalVisible, setIsOtpModalVisible] = React.useState(false);
   const bookingPerson = delivery?.sender?.name ? delivery.sender : delivery?.receiver;
   const bookingName = bookingPerson?.name || 'Customer';
   const bookingPhone = bookingPerson?.phone || '';
@@ -747,7 +807,13 @@ function AcceptedPickupView({
     BYPASS_PICKUP_GEOFENCE_FOR_TESTING ||
     (pickupDistanceMeters !== null && pickupDistanceMeters <= PICKUP_ARRIVAL_RADIUS_METERS);
   const hasArrivedAtDrop =
-    isInTransit && dropDistanceMeters !== null && dropDistanceMeters <= DROP_ARRIVAL_RADIUS_METERS;
+    isInTransit &&
+    (BYPASS_DROP_GEOFENCE_FOR_TESTING ||
+      (hasLiveDriverLocation &&
+        driverLocation !== null &&
+        dropLocation !== null &&
+        dropDistanceMeters !== null &&
+        dropDistanceMeters <= DROP_ARRIVAL_RADIUS_METERS));
   const etaText =
     routeDuration ||
     delivery?.tracking?.estimatedArrival?.replace('~', '') ||
@@ -756,6 +822,60 @@ function AcceptedPickupView({
   const etaTitle = etaText.toLowerCase().includes('away') ? etaText : `${etaText} away`;
   const nextInstruction =
     locationError || getNextInstruction(driverLocation, routeDestination, routeSteps);
+
+  React.useEffect(() => {
+    if (isArrived) {
+      setIsOtpModalVisible(true);
+      return;
+    }
+
+    setIsOtpModalVisible(false);
+    setPickupOtp('');
+    setOtpError(null);
+  }, [isArrived]);
+
+  const snapTrackingSheet = React.useCallback(
+    (toValue: number) => {
+      sheetPositionRef.current = toValue;
+      Animated.spring(sheetTranslateY, {
+        toValue,
+        useNativeDriver: true,
+        tension: 78,
+        friction: 12,
+      }).start();
+    },
+    [sheetTranslateY]
+  );
+
+  const sheetPanResponder = React.useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 8,
+      onPanResponderMove: (_, gestureState) => {
+        const nextValue = Math.min(
+          TRACKING_SHEET_COLLAPSED_OFFSET,
+          Math.max(0, sheetPositionRef.current + gestureState.dy)
+        );
+        sheetTranslateY.setValue(nextValue);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        const projectedValue = sheetPositionRef.current + gestureState.dy;
+        const shouldCollapse =
+          gestureState.vy > 0.45 ||
+          projectedValue > TRACKING_SHEET_COLLAPSED_OFFSET * 0.45;
+
+        snapTrackingSheet(shouldCollapse ? TRACKING_SHEET_COLLAPSED_OFFSET : 0);
+      },
+      onPanResponderTerminate: (_, gestureState) => {
+        const projectedValue = sheetPositionRef.current + gestureState.dy;
+        snapTrackingSheet(
+          projectedValue > TRACKING_SHEET_COLLAPSED_OFFSET * 0.5
+            ? TRACKING_SHEET_COLLAPSED_OFFSET
+            : 0
+        );
+      },
+    })
+  ).current;
 
   React.useEffect(() => {
     let isActive = true;
@@ -802,10 +922,15 @@ function AcceptedPickupView({
     let isActive = true;
     let subscription: Location.LocationSubscription | null = null;
 
-    const updateDriverLocation = (nextLocation: LatLng) => {
+    const updateDriverLocation = (
+      nextLocation: LatLng,
+      metadata: DriverLocationMetadata = {}
+    ) => {
       const previousLocation = previousLocationRef.current;
       const nextHeading =
-        previousLocation && getDistanceMeters(previousLocation, nextLocation) > 2
+        typeof metadata.heading === 'number'
+          ? metadata.heading
+          : previousLocation && getDistanceMeters(previousLocation, nextLocation) > 2
           ? getBearing(previousLocation, nextLocation)
           : headingRef.current;
 
@@ -815,6 +940,7 @@ function AcceptedPickupView({
 
       if (isActive) {
         setDriverLocation(nextLocation);
+        setHasLiveDriverLocation(true);
         setLocationError(null);
       }
 
@@ -831,14 +957,27 @@ function AcceptedPickupView({
         { duration: 700 }
       );
 
-      if (deliveryId) {
+      const now = Date.now();
+      const shouldSyncDriverLocation =
+        deliveryId &&
+        (lastDriverLocationSyncAtRef.current === 0 ||
+          now - lastDriverLocationSyncAtRef.current >= DRIVER_LOCATION_SYNC_INTERVAL_MS);
+
+      if (shouldSyncDriverLocation) {
+        lastDriverLocationSyncAtRef.current = now;
         fetch(`${getApiBaseUrl()}/api/deliveries/${deliveryId}/location`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(nextLocation),
+          body: JSON.stringify({
+            ...nextLocation,
+            heading: nextHeading,
+            accuracy: metadata.accuracy,
+            speed: metadata.speed,
+          }),
         }).catch((error) => {
+          lastDriverLocationSyncAtRef.current = 0;
           console.error('Error updating driver location:', error);
         });
       }
@@ -863,19 +1002,30 @@ function AcceptedPickupView({
           lng: position.coords.longitude,
         };
 
-        updateDriverLocation(nextLocation);
+        updateDriverLocation(nextLocation, {
+          heading: position.coords.heading,
+          accuracy: position.coords.accuracy,
+          speed: position.coords.speed,
+        });
 
         subscription = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.High,
-            distanceInterval: 10,
-            timeInterval: 5000,
+            distanceInterval: 0,
+            timeInterval: DRIVER_LOCATION_SYNC_INTERVAL_MS,
           },
           (location) => {
-            updateDriverLocation({
-              lat: location.coords.latitude,
-              lng: location.coords.longitude,
-            });
+            updateDriverLocation(
+              {
+                lat: location.coords.latitude,
+                lng: location.coords.longitude,
+              },
+              {
+                heading: location.coords.heading,
+                accuracy: location.coords.accuracy,
+                speed: location.coords.speed,
+              }
+            );
           }
         );
       } catch (error) {
@@ -1135,6 +1285,9 @@ function AcceptedPickupView({
     if (!isValid) {
       setOtpError('Invalid OTP');
       setPickupOtp('');
+    } else {
+      Keyboard.dismiss();
+      setIsOtpModalVisible(false);
     }
 
     setIsVerifyingOtp(false);
@@ -1163,7 +1316,7 @@ function AcceptedPickupView({
               description={isInTransit ? getAddressParts(pickupAddress).primaryAddress : primaryAddress}
             >
               <View style={styles.pickupMapMarker}>
-                <Ionicons name="location" size={18} color="#ffffff" />
+                <Image source={trackingLocationImage} style={styles.pickupMapMarkerImage} resizeMode="contain" />
               </View>
             </Marker>
           ) : null}
@@ -1191,137 +1344,171 @@ function AcceptedPickupView({
         </MapView>
       </View>
 
-      <View style={styles.pickupSheet}>
-        <View style={styles.arrivalCard}>
-          <View style={styles.dragHandleWrap}>
-            <View style={styles.dragHandle} />
+      <Animated.View
+        style={[
+          styles.pickupSheet,
+          {
+            height: TRACKING_SHEET_HEIGHT,
+            transform: [{ translateY: sheetTranslateY }],
+          },
+        ]}
+      >
+        <View style={styles.pickupSheetContent}>
+          <View style={styles.arrivalCard} {...sheetPanResponder.panHandlers}>
+            <View style={styles.dragHandleWrap}>
+              <View style={styles.dragHandle} />
+            </View>
+
+            <View style={styles.arrivalInfoRow}>
+              <View style={styles.arrivalCopy}>
+                <Text style={styles.arrivalTitle}>{etaTitle}</Text>
+                <Text style={styles.arrivalSubtitle} numberOfLines={1}>
+                  {nextInstruction}
+                </Text>
+              </View>
+
+              <View style={styles.distanceBadge}>
+                <Image source={trackingLocationImage} style={styles.distanceBadgeIcon} resizeMode="contain" />
+                <Text style={styles.distanceBadgeText}>{arrivalDistance}</Text>
+              </View>
+            </View>
           </View>
 
-          <View style={styles.arrivalInfoRow}>
-            <View style={styles.arrivalCopy}>
-              <Text style={styles.arrivalTitle}>{etaTitle}</Text>
-              <Text style={styles.arrivalSubtitle} numberOfLines={1}>
-                {nextInstruction}
+          <View style={styles.bookingPersonRow}>
+            <Image
+              source={bookingPhotoUri ? { uri: bookingPhotoUri } : customerAvatarImage}
+              style={styles.bookingAvatar}
+              resizeMode="cover"
+            />
+            <View style={styles.bookingCopy}>
+              <Text style={styles.bookingName} numberOfLines={1}>
+                {bookingName}
               </Text>
+              <View style={styles.bookingMetaRow}>
+                <View style={styles.bookingDot} />
+                <Text style={styles.bookingMeta} numberOfLines={1}>
+                  Vehicle booked by this customer
+                </Text>
+              </View>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Call booking customer"
+              style={styles.callButton}
+              onPress={handleCallBookingPerson}
+            >
+              <Image source={supportCallImage} style={styles.callButtonIcon} resizeMode="contain" />
+            </Pressable>
+          </View>
+
+          <View style={styles.headingCard}>
+            <View style={styles.headingHeader}>
+              <View style={styles.headingTitleRow}>
+                <Image source={tableLocationImage} style={styles.headingTitleIcon} resizeMode="contain" />
+                <Text style={styles.headingTitle}>Heading to</Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open delivery details"
+                style={styles.headingDetailsButton}
+                onPress={onOpenDeliveryDetails}
+              >
+                <Text style={styles.headingDetailsText}>Delivery details</Text>
+                <Ionicons name="arrow-forward" size={18} color="#606060" />
+              </Pressable>
             </View>
 
-            <View style={styles.distanceBadge}>
-              <Ionicons name="location-outline" size={24} color="#f7931e" />
-              <Text style={styles.distanceBadgeText}>{arrivalDistance}</Text>
-            </View>
+            <Pressable
+              style={styles.headingAddressBox}
+              accessibilityRole="button"
+              accessibilityLabel="Open directions"
+              onPress={handleOpenDirections}
+            >
+              <Text style={styles.headingAddressTitle} numberOfLines={1}>
+                {isInTransit ? 'Drop' : 'Pickup'}-{routeDistance || pickupDistance} away
+              </Text>
+              <Text style={styles.headingAddressPrimary} numberOfLines={1}>
+                {primaryAddress}
+              </Text>
+              {secondaryAddress ? (
+                <Text style={styles.headingAddressSecondary} numberOfLines={1}>
+                  {secondaryAddress}
+                </Text>
+              ) : null}
+            </Pressable>
           </View>
         </View>
 
-        <View style={styles.bookingPersonRow}>
-          <Image
-            source={bookingPhotoUri ? { uri: bookingPhotoUri } : customerAvatarImage}
-            style={styles.bookingAvatar}
-            resizeMode="cover"
-          />
-          <View style={styles.bookingCopy}>
-            <Text style={styles.bookingName} numberOfLines={1}>
-              {bookingName}
-            </Text>
-            <View style={styles.bookingMetaRow}>
-              <View style={styles.bookingDot} />
-              <Text style={styles.bookingMeta} numberOfLines={1}>
-                Vehicle booked by this customer
-              </Text>
+        <View style={styles.pickupActionArea}>
+          {isArrived ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Enter pickup OTP"
+              style={styles.arrivedButton}
+              onPress={() => setIsOtpModalVisible(true)}
+            >
+              <Text style={styles.arrivedButtonText}>Enter pickup OTP</Text>
+            </Pressable>
+          ) : isInTransit ? (
+            <View style={styles.inTransitCard}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Arrived drop location"
+                style={[
+                  styles.completeDropButton,
+                  isUpdatingStatus || !hasArrivedAtDrop ? styles.arrivedButtonDisabled : null,
+                ]}
+                disabled={isUpdatingStatus || !hasArrivedAtDrop}
+                onPress={onCompleteDrop}
+              >
+                <Text style={styles.completeDropButtonText}>
+                  {isUpdatingStatus
+                    ? 'Completing trip...'
+                    : hasArrivedAtDrop
+                      ? 'Arrived drop location'
+                      : 'Reach drop location'}
+                </Text>
+              </Pressable>
             </View>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Call booking customer"
-            style={styles.callButton}
-            onPress={handleCallBookingPerson}
-          >
-            <Ionicons name="call" size={22} color="#ffffff" />
-          </Pressable>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Arrived pickup point"
+              style={[
+                styles.arrivedButton,
+                isUpdatingStatus || !canArrive ? styles.arrivedButtonDisabled : null,
+              ]}
+              disabled={!deliveryId || isUpdatingStatus || !canArrive}
+              onPress={onArrivedPickupPoint}
+            >
+              <Text style={styles.arrivedButtonText}>
+                {isUpdatingStatus ? 'Updating...' : 'Arrived pickup point'}
+              </Text>
+            </Pressable>
+          )}
         </View>
+      </Animated.View>
 
-        <Pressable style={styles.headingCard} accessibilityRole="button" onPress={handleOpenDirections}>
-          <View style={styles.turnInstructionRow}>
-            <View style={styles.turnIconBox}>
-              <Ionicons name="navigate" size={18} color="#ffffff" />
-            </View>
-            <Text style={styles.turnInstructionText} numberOfLines={2}>
-              {nextInstruction}
-            </Text>
-          </View>
-
-          <View style={styles.headingHeader}>
-            <View style={styles.headingTitleRow}>
-              <Ionicons name="navigate" size={20} color="#1c1c1c" />
-              <Text style={styles.headingTitle}>Heading to</Text>
-            </View>
-            <View style={styles.headingDetailsRow}>
-              <Text style={styles.headingDetailsText}>Delivery details</Text>
-              <Ionicons name="arrow-forward" size={18} color="#606060" />
-            </View>
-          </View>
-
-          <View style={styles.headingAddressBox}>
-            <Text style={styles.headingAddressTitle} numberOfLines={1}>
-              {isInTransit ? 'Drop' : 'Pickup'}-{routeDistance || pickupDistance} away
-            </Text>
-            <Text style={styles.headingAddressPrimary} numberOfLines={1}>
-              {primaryAddress}
-            </Text>
-            {secondaryAddress ? (
-              <Text style={styles.headingAddressSecondary} numberOfLines={1}>
-                {secondaryAddress}
-              </Text>
-            ) : null}
-          </View>
-        </Pressable>
-
-        {isArrived ? (
+      <Modal
+        visible={isArrived && isOtpModalVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => undefined}
+      >
+        <View style={styles.otpModalBackdrop}>
           <OtpVerificationCard
             value={pickupOtp}
             error={otpError}
+            isLoading={isVerifyingOtp}
             onChange={(nextValue) => {
               setPickupOtp(nextValue);
               setOtpError(null);
             }}
             onSubmit={handleVerifyOtp}
           />
-        ) : isInTransit ? (
-          <View style={styles.inTransitCard}>
-            <Ionicons name="checkmark-circle" size={28} color="#1fc16b" />
-            <Text style={styles.inTransitText}>
-              {hasArrivedAtDrop ? 'You have arrived at drop point.' : 'OTP verified. Heading to drop point.'}
-            </Text>
-            {hasArrivedAtDrop ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Complete delivery"
-                style={styles.completeDropButton}
-                disabled={isUpdatingStatus}
-                onPress={onCompleteDrop}
-              >
-                <Text style={styles.completeDropButtonText}>
-                  {isUpdatingStatus ? 'Completing...' : 'Complete delivery'}
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
-        ) : (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Arrived pickup point"
-            style={[
-              styles.arrivedButton,
-              isUpdatingStatus || !canArrive ? styles.arrivedButtonDisabled : null,
-            ]}
-            disabled={!deliveryId || isUpdatingStatus || !canArrive}
-            onPress={onArrivedPickupPoint}
-          >
-            <Text style={styles.arrivedButtonText}>
-              {isUpdatingStatus ? 'Updating...' : 'Arrived pickup point'}
-            </Text>
-          </Pressable>
-        )}
-      </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1335,9 +1522,173 @@ function FareLine({ label, value, strong }: { label: string; value: string; stro
   );
 }
 
+function CompletedDropScreen({
+  totalEarning,
+  onFindNewJobs,
+}: {
+  totalEarning: number;
+  onFindNewJobs: () => void;
+}) {
+  return (
+    <SafeAreaView style={styles.completedContainer}>
+      <View style={styles.completedMain}>
+        <View style={styles.completedStatusSpacer} />
+        <View style={styles.completedTopNav}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to jobs"
+            style={styles.completedBackButton}
+            onPress={onFindNewJobs}
+          >
+            <Ionicons name="arrow-back" size={24} color="#1c1c1c" />
+          </Pressable>
+          <Text style={styles.completedNavTitle}>Trip Completed</Text>
+        </View>
+
+        <View style={styles.completedBody}>
+          <Image
+            source={tripCompletedBanknoteImage}
+            style={styles.completedIllustration}
+            resizeMode="contain"
+          />
+
+          <View style={styles.completedCopyBlock}>
+            <View style={styles.completedSuccessRow}>
+              <Image
+                source={tripCompletedTickImage}
+                style={styles.completedTickIcon}
+                resizeMode="contain"
+              />
+              <Text style={styles.completedSuccessText}>Delivery completed</Text>
+            </View>
+            <View style={styles.completedEarningCopy}>
+              <Text style={styles.completedEarningValue}>{formatCurrency(totalEarning)} earned</Text>
+              <Text style={styles.completedSubtitle}>
+                Payment will be sent to your bank account within 24 hours.
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.completedCtaBar}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Find new jobs"
+          style={styles.completedHomeButton}
+          onPress={onFindNewJobs}
+        >
+          <Text style={styles.completedHomeText}>Find New Jobs</Text>
+        </Pressable>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function SlideAcceptButton({
+  isLoading,
+  isDisabled,
+  onAccept,
+}: {
+  isLoading: boolean;
+  isDisabled: boolean;
+  onAccept: () => Promise<void>;
+}) {
+  const slideX = React.useRef(new Animated.Value(0)).current;
+  const [trackWidth, setTrackWidth] = React.useState(0);
+  const isAcceptingRef = React.useRef(false);
+  const maxSlideDistance = Math.max(trackWidth - 52, 0);
+  const acceptThreshold = maxSlideDistance * 0.82;
+
+  const resetSlide = React.useCallback(() => {
+    Animated.timing(slideX, {
+      toValue: 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [slideX]);
+
+  React.useEffect(() => {
+    if (!isLoading) {
+      isAcceptingRef.current = false;
+      resetSlide();
+    }
+  }, [isLoading, resetSlide]);
+
+  const completeSlide = React.useCallback(() => {
+    if (isAcceptingRef.current) {
+      return;
+    }
+
+    isAcceptingRef.current = true;
+    Animated.timing(slideX, {
+      toValue: maxSlideDistance,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (!finished) {
+        isAcceptingRef.current = false;
+        return;
+      }
+
+      onAccept().finally(() => {
+        isAcceptingRef.current = false;
+        resetSlide();
+      });
+    });
+  }, [maxSlideDistance, onAccept, resetSlide, slideX]);
+
+  const slidePanResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => !isDisabled && !isLoading && maxSlideDistance > 0,
+        onMoveShouldSetPanResponder: (_, gestureState) =>
+          !isDisabled && !isLoading && maxSlideDistance > 0 && Math.abs(gestureState.dx) > 4,
+        onPanResponderMove: (_, gestureState) => {
+          const nextValue = Math.min(maxSlideDistance, Math.max(0, gestureState.dx));
+          slideX.setValue(nextValue);
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          const finalValue = Math.min(maxSlideDistance, Math.max(0, gestureState.dx));
+
+          if (finalValue >= acceptThreshold) {
+            completeSlide();
+            return;
+          }
+
+          resetSlide();
+        },
+        onPanResponderTerminate: resetSlide,
+      }),
+    [acceptThreshold, completeSlide, isDisabled, isLoading, maxSlideDistance, resetSlide, slideX]
+  );
+
+  return (
+    <View
+      accessibilityLabel="Slide to accept trip"
+      style={[styles.acceptButton, isDisabled ? styles.acceptButtonDisabled : null]}
+      onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
+    >
+      <Text style={styles.acceptText}>{isLoading ? 'Accepting...' : 'Slide to accept'}</Text>
+      <Animated.View
+        {...slidePanResponder.panHandlers}
+        style={[
+          styles.acceptIconBox,
+          styles.acceptSlideIconBox,
+          { transform: [{ translateX: slideX }] },
+        ]}
+      >
+        <Ionicons name="arrow-forward" size={20} color="#ffffff" />
+      </Animated.View>
+    </View>
+  );
+}
+
 export default function AcceptedTripScreen() {
   const router = useRouter();
-  const { deliveryId } = useLocalSearchParams<{ deliveryId?: string }>();
+  const { deliveryId, view } = useLocalSearchParams<{ deliveryId?: string; view?: string }>();
   const [delivery, setDelivery] = React.useState<DeliveryDetails | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isAccepting, setIsAccepting] = React.useState(false);
@@ -1387,16 +1738,38 @@ export default function AcceptedTripScreen() {
   }, [deliveryId]);
 
   const distanceKm = getDistanceKm(delivery);
-  const tripFare = formatCurrency(delivery?.pricing?.tripFare ?? delivery?.pricing?.total);
   const totalAmount = getCurrencyNumber(delivery?.pricing?.tripFare ?? delivery?.pricing?.total);
-  const baseFare = getCurrencyNumber(delivery?.pricing?.baseFare) || 700;
-  const distanceFare = getCurrencyNumber(delivery?.pricing?.distanceFare) || 400;
-  const fuelCost =
-    getCurrencyNumber(delivery?.pricing?.fuelCost) ||
-    Math.max(totalAmount - baseFare - distanceFare, 0) ||
-    800;
-  const totalEarning =
-    totalAmount || baseFare + distanceFare + fuelCost || getCurrencyNumber(delivery?.pricing?.total);
+  const baseFare = getCurrencyNumber(delivery?.pricing?.baseFare);
+  const distanceFare = getCurrencyNumber(delivery?.pricing?.distanceFare);
+  const fuelCost = getCurrencyNumber(delivery?.pricing?.fuelCost);
+  const fareLineSubtotal = baseFare + distanceFare + fuelCost;
+  const totalEarning = totalAmount || fareLineSubtotal;
+  const fareRows = [
+    hasCurrencyValue(delivery?.pricing?.baseFare)
+      ? {
+          label: distanceKm ? `Base fare ${distanceKm}km` : 'Base fare',
+          value: baseFare,
+        }
+      : null,
+    hasCurrencyValue(delivery?.pricing?.distanceFare)
+      ? {
+          label: 'Distance fare',
+          value: distanceFare,
+        }
+      : null,
+    hasCurrencyValue(delivery?.pricing?.fuelCost)
+      ? {
+          label: 'Fuel cost',
+          value: fuelCost,
+        }
+      : null,
+  ].filter((row): row is { label: string; value: number } => Boolean(row));
+  const visibleFareRows =
+    fareRows.length > 0
+      ? fareRows
+      : totalEarning > 0
+        ? [{ label: 'Estimated amount', value: totalEarning }]
+        : [];
   const pickupDistanceKm = Number(delivery?.pricing?.pickupDistanceKm);
   const pickupAddress = delivery?.locations?.pickup?.address || 'Pickup address unavailable';
   const pickupLocation = isValidCoord(delivery?.locations?.pickup?.coords)
@@ -1407,11 +1780,32 @@ export default function AcceptedTripScreen() {
     ? delivery.locations.dropoff.coords
     : null;
   const dropTime = delivery?.dropoffTime || 'Approx. 50 mins';
+  const isCompletedDelivery =
+    delivery?.status === 'delivered' || delivery?.status === 'completed';
   const isAccepted =
     delivery?.status === 'assigned' ||
     delivery?.status === 'arrived' ||
     delivery?.status === 'in_transit' ||
-    Boolean(delivery?.driver);
+    (!isCompletedDelivery && Boolean(delivery?.driver));
+  const isDetailsView = view === 'details';
+  const showTrackingView = isAccepted && !isCompletedDelivery && !isDetailsView;
+
+  const handleReportIssue = () => {
+    if (!deliveryId) {
+      return;
+    }
+
+    const deliveryTitle = pickupAddress || dropAddress;
+
+    router.push({
+      pathname: '/report-problem',
+      params: {
+        deliveryId,
+        deliveryTitle,
+        prefillCategory: 'Delivery Issue',
+      },
+    });
+  };
 
   const handleAcceptDelivery = async () => {
     if (!deliveryId || isAccepting || isAccepted) {
@@ -1445,6 +1839,8 @@ export default function AcceptedTripScreen() {
             phoneNumber: profile?.phoneNumber || '',
             photoUri: profile?.profilePhotoUrl || profile?.photoUri || '',
             vehicleNumber: profile?.vehicleNumber || '',
+            vehicleType: profile?.vehicleType || '',
+            vehicleCapacity: profile?.vehicleCapacity || '',
           },
         }),
       });
@@ -1476,6 +1872,8 @@ export default function AcceptedTripScreen() {
                   phoneNumber: profile?.phoneNumber || '',
                   photoUri: profile?.profilePhotoUrl || profile?.photoUri || '',
                   vehicleNumber: profile?.vehicleNumber || '',
+                  vehicleType: profile?.vehicleType || '',
+                  vehicleCapacity: profile?.vehicleCapacity || '',
                 },
               }
             : current
@@ -1606,7 +2004,6 @@ export default function AcceptedTripScreen() {
             }
           : current
       );
-      router.replace('/(tabs)');
     } catch (error) {
       console.error('Error completing delivery:', error);
       Alert.alert('Complete failed', error instanceof Error ? error.message : 'Please try again.');
@@ -1615,7 +2012,16 @@ export default function AcceptedTripScreen() {
     }
   };
 
-  if (isAccepted) {
+  if (isCompletedDelivery && !isDetailsView) {
+    return (
+      <CompletedDropScreen
+        totalEarning={totalEarning}
+        onFindNewJobs={() => router.replace('/(tabs)')}
+      />
+    );
+  }
+
+  if (showTrackingView) {
     return (
       <AcceptedPickupView
         delivery={delivery}
@@ -1629,13 +2035,34 @@ export default function AcceptedTripScreen() {
         onArrivedPickupPoint={handleArrivedPickupPoint}
         onVerifyPickupOtp={handleVerifyPickupOtp}
         onCompleteDrop={handleCompleteDrop}
+        onOpenDeliveryDetails={() =>
+          router.push({
+            pathname: '/accepted-trip',
+            params: {
+              deliveryId,
+              view: 'details',
+            },
+          })
+        }
       />
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <TopNav />
+      <TopNav
+        onBack={
+          isAccepted && isDetailsView
+            ? () =>
+                router.replace({
+                  pathname: '/accepted-trip',
+                  params: { deliveryId },
+                })
+            : isCompletedDelivery || isDetailsView
+              ? () => router.back()
+            : undefined
+        }
+      />
 
       <ScrollView
         style={styles.scroll}
@@ -1643,13 +2070,15 @@ export default function AcceptedTripScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.earningBlock}>
-          <Text style={styles.earningLabel}>Estimated earnings</Text>
-          <Text style={styles.earningValue}>{isLoading ? '...' : tripFare}</Text>
+          <Text style={styles.earningLabel}>
+            {isCompletedDelivery ? 'Total earning' : 'Estimated earnings'}
+          </Text>
+          <Text style={styles.earningValue}>{isLoading ? '...' : formatCurrency(totalEarning)}</Text>
         </View>
 
         <View style={styles.routeCard}>
           <View style={styles.routeHeader}>
-            <Ionicons name="navigate" size={20} color="#1c1c1c" />
+            <Image source={tableLocationImage} style={styles.routeHeaderIcon} resizeMode="contain" />
             <Text style={styles.sectionTitle}>Route</Text>
           </View>
 
@@ -1678,9 +2107,9 @@ export default function AcceptedTripScreen() {
         <View style={styles.fareSection}>
           <Text style={styles.sectionTitle}>Fare Breakdown</Text>
           <View style={styles.fareList}>
-            <FareLine label="Base fare 50km" value={formatCurrency(baseFare)} />
-            <FareLine label="Distance fare" value={formatCurrency(distanceFare)} />
-            <FareLine label="Fuel Cost" value={formatCurrency(fuelCost)} />
+            {visibleFareRows.map((row) => (
+              <FareLine key={row.label} label={row.label} value={formatCurrency(row.value)} />
+            ))}
             <View style={styles.fareDivider} />
             <FareLine label="Total earning" value={formatCurrency(totalEarning)} strong />
             <View style={styles.fareDivider} />
@@ -1689,35 +2118,158 @@ export default function AcceptedTripScreen() {
       </ScrollView>
 
       <View style={styles.ctaBar}>
-        <Pressable
-          style={[
-            styles.acceptButton,
-            isAccepted || isAccepting || isLoading ? styles.acceptButtonDisabled : null,
-          ]}
-          disabled={isAccepted || isAccepting || isLoading}
-          onPress={handleAcceptDelivery}
-        >
-          <View style={styles.acceptIconBox}>
-            <Ionicons name="arrow-forward" size={20} color="#ffffff" />
-          </View>
-          <Text style={styles.acceptText}>
-            {isAccepted ? 'Accepted' : isAccepting ? 'Accepting...' : 'Accept'}
-          </Text>
-          <View style={styles.acceptIconGhost} />
-        </Pressable>
+        {isCompletedDelivery ? (
+          <Pressable style={styles.reportButton} onPress={handleReportIssue}>
+            <Text style={styles.reportButtonText}>Report issue</Text>
+            <Ionicons name="arrow-forward" size={20} color="#d00416" />
+          </Pressable>
+        ) : !isAccepted ? (
+          <SlideAcceptButton
+            isLoading={isAccepting}
+            isDisabled={isAccepting || isLoading}
+            onAccept={handleAcceptDelivery}
+          />
+        ) : (
+          <Pressable
+            style={styles.acceptButton}
+            onPress={() =>
+              router.replace({
+                pathname: '/accepted-trip',
+                params: { deliveryId },
+              })
+            }
+          >
+            <View style={styles.acceptIconBox}>
+              <Ionicons name="navigate" size={20} color="#ffffff" />
+            </View>
+            <Text style={styles.acceptText}>Back to tracking</Text>
+            <View style={styles.acceptIconGhost} />
+          </Pressable>
+        )}
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  completedContainer: {
+    flex: 1,
+    backgroundColor: '#eff2f6',
+  },
+  completedMain: {
+    flex: 1,
+  },
+  completedStatusSpacer: {
+    height: 52,
+  },
+  completedTopNav: {
+    height: 64,
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+  },
+  completedBackButton: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completedNavTitle: {
+    fontFamily: 'Poppins',
+    fontSize: 20,
+    fontWeight: '500',
+    lineHeight: 32,
+    color: '#1c1c1c',
+  },
+  completedBody: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 40,
+  },
+  completedIllustration: {
+    width: '100%',
+    height: 334,
+  },
+  completedCopyBlock: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  completedSuccessRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  completedTickIcon: {
+    width: 24,
+    height: 24,
+  },
+  completedSuccessText: {
+    fontFamily: 'Poppins',
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#007f3c',
+    letterSpacing: -0.5,
+  },
+  completedEarningCopy: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 4,
+  },
+  completedEarningValue: {
+    fontFamily: 'Poppins',
+    fontSize: 40,
+    fontWeight: '500',
+    lineHeight: 48,
+    color: '#1c1c1c',
+    textAlign: 'center',
+  },
+  completedSubtitle: {
+    width: '100%',
+    fontFamily: 'Poppins',
+    fontSize: 16,
+    fontWeight: '400',
+    lineHeight: 24,
+    color: '#1c1c1c',
+    textAlign: 'center',
+  },
+  completedCtaBar: {
+    alignItems: 'center',
+    paddingBottom: 24,
+    paddingHorizontal: 16,
+  },
+  completedHomeButton: {
+    height: 60,
+    width: '100%',
+    maxWidth: 361,
+    borderRadius: 12,
+    backgroundColor: '#05c',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completedHomeText: {
+    fontFamily: 'Poppins',
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#ffffff',
+    letterSpacing: -0.5,
+  },
   acceptedContainer: {
     flex: 1,
     backgroundColor: '#eff2f6',
   },
   mapPanel: {
-    height: 418,
-    width: '100%',
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: '#eff2f6',
     overflow: 'hidden',
   },
@@ -1742,12 +2294,13 @@ const styles = StyleSheet.create({
   pickupMapMarker: {
     width: 34,
     height: 34,
-    borderRadius: 17,
-    borderWidth: 3,
-    borderColor: '#ffffff',
-    backgroundColor: '#f7931e',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  pickupMapMarkerImage: {
+    width: 36,
+    height: 36,
+    marginTop: -4,
   },
   dropMapMarker: {
     width: 34,
@@ -1796,15 +2349,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pickupSheet: {
-    flex: 1,
-    marginTop: -1,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     backgroundColor: '#ffffff',
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 24,
-    gap: 32,
+    zIndex: 10,
+  },
+  pickupSheetContent: {
+    flex: 1,
+    gap: 24,
+  },
+  pickupActionArea: {
+    marginTop: 'auto',
+    paddingTop: 8,
+    paddingBottom: 10,
   },
   arrivalCard: {
     width: '100%',
@@ -1853,15 +2417,22 @@ const styles = StyleSheet.create({
   distanceBadge: {
     width: 40,
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 4,
     paddingVertical: 5,
   },
+  distanceBadgeIcon: {
+    width: 28,
+    height: 28,
+  },
   distanceBadgeText: {
+    width: '100%',
     marginTop: -4,
     fontFamily: 'Poppins',
     fontSize: 10,
     fontWeight: '600',
     color: '#1c1c1c',
+    textAlign: 'center',
   },
   bookingPersonRow: {
     width: '100%',
@@ -1909,50 +2480,28 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#0055cc',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  callButtonIcon: {
+    width: 52,
+    height: 52,
   },
   headingCard: {
     width: '100%',
     borderWidth: 1,
     borderColor: '#e8e8e8',
     borderRadius: 12,
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
     paddingVertical: 12,
     gap: 12,
     backgroundColor: '#ffffff',
   },
-  turnInstructionRow: {
-    minHeight: 48,
-    borderRadius: 10,
-    backgroundColor: '#0055cc',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  turnIconBox: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  turnInstructionText: {
-    flex: 1,
-    fontFamily: 'Poppins',
-    fontSize: 15,
-    fontWeight: '600',
-    lineHeight: 20,
-    color: '#ffffff',
-  },
   headingHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'space-between',
+    gap: 12,
   },
   headingTitleRow: {
     flex: 1,
@@ -1961,6 +2510,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  headingTitleIcon: {
+    width: 20,
+    height: 20,
+  },
   headingTitle: {
     fontFamily: 'Poppins',
     fontSize: 16,
@@ -1968,9 +2521,11 @@ const styles = StyleSheet.create({
     color: '#1c1c1c',
     letterSpacing: -0.5,
   },
-  headingDetailsRow: {
+  headingDetailsButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 2,
+    flexShrink: 0,
   },
   headingDetailsText: {
     fontFamily: 'Poppins',
@@ -2029,6 +2584,7 @@ const styles = StyleSheet.create({
   },
   otpCard: {
     width: '100%',
+    maxWidth: 356,
     borderRadius: 8,
     backgroundColor: '#ffffff',
     padding: 12,
@@ -2038,9 +2594,15 @@ const styles = StyleSheet.create({
   },
   hiddenOtpInput: {
     position: 'absolute',
-    width: 1,
-    height: 1,
-    opacity: 0,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2,
+    minHeight: 44,
+    color: 'transparent',
+    backgroundColor: 'transparent',
+    opacity: 0.01,
   },
   otpIconWrap: {
     width: 60,
@@ -2048,14 +2610,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  otpLockCircle: {
-    position: 'absolute',
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#0055cc',
-    alignItems: 'center',
-    justifyContent: 'center',
+  otpIconImage: {
+    width: 60,
+    height: 60,
   },
   otpTitle: {
     width: '100%',
@@ -2063,7 +2620,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '500',
     color: '#1c1c1c',
-    letterSpacing: -1,
+    letterSpacing: 0,
     textAlign: 'center',
   },
   otpBoxRow: {
@@ -2072,6 +2629,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
+    position: 'relative',
   },
   otpBox: {
     width: 44,
@@ -2092,7 +2650,15 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '500',
     color: '#1c1c1c',
-    letterSpacing: -1,
+    letterSpacing: 0,
+  },
+  otpHelpText: {
+    fontFamily: 'Poppins',
+    fontSize: 12,
+    fontWeight: '400',
+    lineHeight: 18,
+    color: '#606060',
+    textAlign: 'center',
   },
   otpError: {
     fontFamily: 'Poppins',
@@ -2102,38 +2668,31 @@ const styles = StyleSheet.create({
     color: '#d00416',
     textAlign: 'center',
   },
-  inTransitCard: {
-    width: '100%',
-    minHeight: 52,
-    borderRadius: 8,
-    backgroundColor: 'rgba(31, 193, 107, 0.12)',
+  otpModalBackdrop: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.32)',
+    paddingHorizontal: 24,
   },
-  inTransitText: {
-    flex: 1,
-    fontFamily: 'Poppins',
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1c1c1c',
-    textAlign: 'center',
+  inTransitCard: {
+    width: '100%',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
   },
   completeDropButton: {
     width: '100%',
-    minHeight: 44,
-    borderRadius: 8,
+    minHeight: 48,
+    borderRadius: 12,
     backgroundColor: '#1fc16b',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
   },
   completeDropButtonText: {
     fontFamily: 'Poppins',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     color: '#ffffff',
     textAlign: 'center',
@@ -2174,6 +2733,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   content: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     paddingHorizontal: 8,
     paddingTop: 8,
     gap: 24,
@@ -2210,6 +2772,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  routeHeaderIcon: {
+    width: 20,
+    height: 20,
   },
   sectionTitle: {
     fontFamily: 'Poppins',
@@ -2353,6 +2919,7 @@ const styles = StyleSheet.create({
   },
   ctaBar: {
     backgroundColor: '#eff2f6',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 16,
@@ -2360,6 +2927,7 @@ const styles = StyleSheet.create({
   acceptButton: {
     height: 52,
     width: '100%',
+    maxWidth: 720,
     backgroundColor: '#1fc16b',
     borderRadius: 12,
     padding: 4,
@@ -2367,6 +2935,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
+    overflow: 'hidden',
+    position: 'relative',
   },
   acceptButtonDisabled: {
     opacity: 0.65,
@@ -2378,6 +2948,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#00a54d',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  acceptSlideIconBox: {
+    position: 'absolute',
+    left: 4,
+    top: 4,
+    zIndex: 2,
   },
   acceptIconGhost: {
     height: 44,
@@ -2393,5 +2969,27 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     textAlign: 'center',
     letterSpacing: -0.5,
+  },
+  reportButton: {
+    width: '100%',
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#d00416',
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  reportButtonText: {
+    fontFamily: 'Poppins',
+    fontSize: 16,
+    fontWeight: '500',
+    letterSpacing: -0.5,
+    color: '#d00416',
+    textAlign: 'center',
   },
 });
