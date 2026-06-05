@@ -2471,7 +2471,7 @@ const styles = StyleSheet.create({
   },
   bookingMeta: {
     flex: 1,
-    fontFamily: 'Satoshi',
+    fontFamily: 'Poppins',
     fontSize: 12,
     fontWeight: '500',
     color: '#616161',
@@ -2849,7 +2849,7 @@ const styles = StyleSheet.create({
   },
   routeTime: {
     flex: 1,
-    fontFamily: 'Satoshi',
+    fontFamily: 'Poppins',
     fontSize: 12,
     fontWeight: '500',
     color: '#05c',

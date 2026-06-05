@@ -1,9 +1,11 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { useFonts } from 'expo-font';
 import { Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import 'react-native-reanimated';
 import { useEffect, useState } from 'react';
+import { Text, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -15,8 +17,14 @@ import { getVerificationStatus } from '@/lib/firestoreOnboardingService';
 import '@/lib/firebase';
 
 const APP_BACKGROUND = '#eff2f6';
+const DEFAULT_FONT_STYLE = { fontFamily: 'Poppins_400Regular' };
 
 SystemUI.setBackgroundColorAsync(APP_BACKGROUND);
+
+(Text as any).defaultProps = (Text as any).defaultProps || {};
+(Text as any).defaultProps.style = [DEFAULT_FONT_STYLE, (Text as any).defaultProps.style];
+(TextInput as any).defaultProps = (TextInput as any).defaultProps || {};
+(TextInput as any).defaultProps.style = [DEFAULT_FONT_STYLE, (TextInput as any).defaultProps.style];
 
 const appLightTheme = {
   ...DefaultTheme,
@@ -42,6 +50,18 @@ export const unstable_settings = {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const pathname = usePathname();
+  const [fontsLoaded] = useFonts({
+    Poppins: require('../Poppins/Poppins-Regular.ttf'),
+    Poppins_100Thin: require('../Poppins/Poppins-Thin.ttf'),
+    Poppins_200ExtraLight: require('../Poppins/Poppins-ExtraLight.ttf'),
+    Poppins_300Light: require('../Poppins/Poppins-Light.ttf'),
+    Poppins_400Regular: require('../Poppins/Poppins-Regular.ttf'),
+    Poppins_500Medium: require('../Poppins/Poppins-Medium.ttf'),
+    Poppins_600SemiBold: require('../Poppins/Poppins-SemiBold.ttf'),
+    Poppins_700Bold: require('../Poppins/Poppins-Bold.ttf'),
+    Poppins_800ExtraBold: require('../Poppins/Poppins-ExtraBold.ttf'),
+    Poppins_900Black: require('../Poppins/Poppins-Black.ttf'),
+  });
   const [showWalkthrough, setShowWalkthrough] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isAccountSuspended, setIsAccountSuspended] = useState(false);
@@ -125,7 +145,7 @@ export default function RootLayout() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || !fontsLoaded) {
     return null; // Or show a loading screen
   }
 

@@ -930,7 +930,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#1d1b20',
-    fontFamily: 'Roboto',
+    fontFamily: 'Poppins',
     lineHeight: 20,
     letterSpacing: 0.14,
   },
@@ -961,7 +961,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: '#1c1c1a',
-    fontFamily: 'Lato',
+    fontFamily: 'Poppins',
     lineHeight: 19.2,
   },
   locationSubtitle: {
@@ -969,7 +969,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '400',
     color: '#5e5e58',
-    fontFamily: 'Lato',
+    fontFamily: 'Poppins',
   },
   profileImage: {
     width: 44,
@@ -1168,7 +1168,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: '#05c',
-    fontFamily: 'Satoshi',
+    fontFamily: 'Poppins',
   },
   routeAddress: {
     fontSize: 16,

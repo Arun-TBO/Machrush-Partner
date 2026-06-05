@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: Colors.neutral900,
-    fontFamily: 'Roboto',
+    fontFamily: 'Poppins',
   },
   statusIcons: {
     flexDirection: 'row',
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#316aff', // Blue color from design
-    fontFamily: 'DM Sans',
+    fontFamily: 'Poppins',
     textAlign: 'center',
   },
   resendOtpTextDisabled: {
@@ -413,6 +413,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#05c',
-    fontFamily: 'DM Sans',
+    fontFamily: 'Poppins',
   },
 });

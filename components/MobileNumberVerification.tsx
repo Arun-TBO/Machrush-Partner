@@ -491,13 +491,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '400',
     color: '#9d9d8a',
-    fontFamily: 'DM Sans',
+    fontFamily: 'Poppins',
   },
   countryCode: {
     fontSize: 14,
     fontWeight: '500',
     color: Colors.neutral900,
-    fontFamily: 'DM Sans',
+    fontFamily: 'Poppins',
     lineHeight: 21,
   },
 
@@ -516,7 +516,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '400',
     color: '#9d9d8a',
-    fontFamily: 'DM Sans',
+    fontFamily: 'Poppins',
     lineHeight: 16,
   },
   mobileNumberInput: {
@@ -526,7 +526,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: Colors.neutral900,
-    fontFamily: 'DM Sans',
+    fontFamily: 'Poppins',
     lineHeight: 21,
   },
 

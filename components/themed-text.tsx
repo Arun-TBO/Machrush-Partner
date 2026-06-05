@@ -35,24 +35,26 @@ export function ThemedText({
 
 const styles = StyleSheet.create({
   default: {
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     lineHeight: 24,
   },
   defaultSemiBold: {
+    fontFamily: 'Poppins_600SemiBold',
     fontSize: 16,
     lineHeight: 24,
-    fontWeight: '600',
   },
   title: {
+    fontFamily: 'Poppins_700Bold',
     fontSize: 32,
-    fontWeight: 'bold',
     lineHeight: 32,
   },
   subtitle: {
+    fontFamily: 'Poppins_700Bold',
     fontSize: 20,
-    fontWeight: 'bold',
   },
   link: {
+    fontFamily: 'Poppins_400Regular',
     lineHeight: 30,
     fontSize: 16,
     color: '#0a7ea4',

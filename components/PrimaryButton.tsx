@@ -7,7 +7,7 @@ import {
   TextStyle,
   GestureResponderEvent,
 } from 'react-native';
-import { Colors, Spacing, Radius, Typography } from '@/lib/theme';
+import { Colors, Spacing, Radius } from '@/lib/theme';
 
 export type ButtonVariant = 'primary' | 'secondary';
 

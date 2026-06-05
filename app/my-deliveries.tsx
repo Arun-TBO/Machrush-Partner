@@ -801,7 +801,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   segmentText: {
-    fontFamily: 'DM Sans',
+    fontFamily: 'Poppins',
     fontSize: 12,
     fontWeight: '400',
     lineHeight: 18,
