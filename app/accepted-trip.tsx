@@ -27,6 +27,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { auth } from '@/lib/firebase';
 import { getDriverProfile } from '@/lib/firestoreOnboardingService';
 
+const pickAndDropIcon = require('@/assets/images/pickAndDropIcon.png');
 const customerAvatarImage = require('@/assets/images/delivery/customer-avatar.jpg');
 const tripCompletedBanknoteImage = require('@/assets/images/delivery/trip-completed-banknote.png');
 const tripCompletedTickImage = require('@/assets/images/delivery/trip-completed-tick.png');
@@ -625,14 +626,7 @@ function RouteRow({
 
   return (
     <View style={styles.routeRow}>
-      <View style={styles.routeMarkerWrap}>
-        <View style={styles.routeMarkerHalo}>
-          <View style={styles.routeMarkerDot} />
-        </View>
-        {variant === 'drop' ? (
-          <Ionicons name="chevron-down" size={15} color="#ffffff" style={styles.dropChevron} />
-        ) : null}
-      </View>
+  
       <View style={styles.routeCopy}>
         <View style={styles.routeMeta}>
           <Text style={styles.routeTitle}>{title}</Text>
@@ -2083,8 +2077,14 @@ export default function AcceptedTripScreen() {
           </View>
 
           <View style={styles.routeBox}>
-            <View style={styles.routeConnector} />
-            <RouteRow
+          {/* <View style={styles.routeConnector} /> */}
+            
+               <Image source={ pickAndDropIcon } style={styles.routeIcon}  />
+        
+        
+           <View>
+                
+                <RouteRow
               variant="pickup"
               title={
                 Number.isFinite(pickupDistanceKm) && pickupDistanceKm > 0
@@ -2101,6 +2101,9 @@ export default function AcceptedTripScreen() {
               time={dropTime}
               address={dropAddress}
             />
+
+           </View>
+            
           </View>
         </View>
 
@@ -2787,16 +2790,20 @@ const styles = StyleSheet.create({
   routeBox: {
     position: 'relative',
     backgroundColor: '#eff2f6',
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#bbbbbb',
     borderRadius: 12,
-    padding: 12,
-    gap: 12,
+    padding: 8,
     overflow: 'hidden',
+    flexDirection : 'row',
+    alignItems : 'center',
+    gap : 15,
   },
   routeRow: {
-    flexDirection: 'row',
-    gap: 24,
-    alignItems: 'center',
     minHeight: 64,
+    marginTop : 5,
+    marginBottom : 5
   },
   routeMarkerWrap: {
     width: 20,
@@ -2827,9 +2834,7 @@ const styles = StyleSheet.create({
     left: 21,
     top: 45,
     height: 90,
-    borderLeftWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: '#0055cc',
+   
   },
   routeCopy: {
     flex: 1,
@@ -2870,7 +2875,6 @@ const styles = StyleSheet.create({
   },
   routeSeparator: {
     height: 1,
-    marginLeft: 44,
     borderTopWidth: 1,
     borderStyle: 'dashed',
     borderColor: '#d6d6d6',
@@ -2991,5 +2995,9 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     color: '#d00416',
     textAlign: 'center',
+  },
+  routeIcon: {
+    width: 30,
+    height : '70%',
   },
 });

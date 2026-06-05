@@ -464,7 +464,7 @@ export default function ProfileScreen() {
                   <Text style={styles.driverName}>{driverName}</Text>
                   <Image source={verifiedBadgeImage} style={styles.verifiedBadge} resizeMode="contain" />
                 </View>
-                <Text style={styles.viewProfile}>View Profile</Text>
+         
               </View>
 
               <View style={styles.avatarWrap}>
@@ -761,7 +761,7 @@ const styles = StyleSheet.create({
   chevronIcon: {
     width: 24,
     height: 24,
-    transform: [{ rotate: '-90deg' }],
+  
   },
   logoutRow: {
     minHeight: 67,

@@ -27,6 +27,7 @@ import {
   setCachedProfilePhotoUrl,
 } from '@/lib/profileCache';
 
+const pickAndDropIcon = require('@/assets/images/pickAndDropIcon.png');
 const profileImage = require('@/assets/images/home-profile.jpg');
 const mapPinImage = require('@/assets/images/home-map-pin.png');
 const pickupImage = require('@/assets/images/home-pickup.png');
@@ -350,25 +351,25 @@ function Header({
 }
 
 function RoutePoint({
-  icon,
+
   title,
   time,
   address,
 }: {
-  icon: ImageSourcePropType;
+
   title: string;
   time: string;
   address: string;
 }) {
   return (
     <View style={styles.routePoint}>
-      <Image source={icon} style={styles.routeIcon} resizeMode="contain" />
+    
       <View style={styles.routeTextWrap}>
         <View style={styles.routeMetaRow}>
           <Text style={styles.routeTitle}>{title}</Text>
           <Text style={styles.routeTime}>{time}</Text>
         </View>
-        <Text style={styles.routeAddress} numberOfLines={1}>
+        <Text style={styles.routeAddress} numberOfLines={2}>
           {address}
         </Text>
       </View>
@@ -401,23 +402,26 @@ function JobCard({
       </View>
 
       <View style={styles.routeBox}>
-        <RoutePoint
-          icon={pickupImage}
+        
+        <Image source={ pickAndDropIcon } style={styles.routeIcon}  />
+       
+       <View style={styles.pickDropContainer}>
+          <RoutePoint
           title={job.pickupTitle}
           time={job.pickupTime}
           address={job.pickupAddress}
         />
         <View style={styles.routeSeparator} />
         <RoutePoint
-          icon={dropImage}
           title={job.dropTitle}
           time={job.dropTime}
           address={job.dropAddress}
         />
-        <View style={styles.routeConnector}>
-          <View style={styles.routeDash} />
-          <View style={styles.routeArrowHead} />
-        </View>
+
+       </View>
+        
+        
+       
       </View>
 
       {!job.isResumeTrip ? (
@@ -1126,35 +1130,36 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   routeBox: {
-    position: 'relative',
     width: '100%',
     borderWidth: 1,
     borderColor: '#bbbbbb',
     borderRadius: 12,
     backgroundColor: '#ffffff',
     padding: 8,
-    gap: 8,
     overflow: 'hidden',
+    flexDirection : 'row',
+    alignItems : 'center',
+    gap : 10,
   },
   routePoint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    minHeight: 42,
+    marginBottom : 5,
+    marginTop : 5,
+    padding: 3
   },
   routeIcon: {
-    width: 20,
-    height: 20,
-    zIndex: 2,
+    width: 30,
+    height : '70%',
+  },
+  pickDropContainer : {
+    padding : 5
   },
   routeTextWrap: {
-    flex: 1,
     justifyContent: 'center',
   },
   routeMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap:15
   },
   routeTitle: {
     fontSize: 12,
@@ -1171,7 +1176,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins',
   },
   routeAddress: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '400',
     color: '#616161',
     fontFamily: 'Poppins',
@@ -1179,10 +1184,11 @@ const styles = StyleSheet.create({
   },
   routeSeparator: {
     height: 1,
-    marginLeft: 44,
+   
     borderTopWidth: 1,
     borderStyle: 'dashed',
     borderColor: '#d6d6d6',
+    width : '100%'
   },
   routeConnector: {
     position: 'absolute',
