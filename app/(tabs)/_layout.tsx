@@ -10,6 +10,7 @@ import { useSuspendedAccountGuard } from '@/hooks/use-suspended-account-guard';
 const homeTabImage = require('@/assets/images/home-tab-home.png');
 const deliveriesTabImage = require('@/assets/images/home-tab-deliveries.png');
 const profileTabImage = require('@/assets/images/home-tab-profile.png');
+const tabProfileActive = require('@/assets/images/profile/tab-profile-active.png')
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
@@ -60,7 +61,7 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => (
-            <Image source={profileTabImage} style={[styles.tabIcon, { tintColor: color }]} resizeMode="contain" />
+            <Image source={tabProfileActive} style={[styles.tabIcon, { tintColor: color }]} resizeMode="contain" />
           ),
         }}
       />
