@@ -275,6 +275,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 16,
+      marginBottom : 20
   },
   bodyTypeCard: {
     flex: 1,

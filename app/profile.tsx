@@ -97,9 +97,14 @@ function StatCard({
     <Pressable style={styles.statCard} accessibilityRole="button">
       <View style={styles.statHeader}>
         <Text style={styles.statTitle}>{title}</Text>
-        <View style={styles.statArrowCircle}>
+         {
+          title === "Delivery's" && (
+               <View style={styles.statArrowCircle}>
           <Image source={statArrowImage} style={styles.statArrowIcon} resizeMode="contain" />
         </View>
+          )
+         }
+         
       </View>
       {children}
     </Pressable>
@@ -188,7 +193,7 @@ function LogoutModal({
   onLogout: () => void;
 }) {
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide"  statusBarTranslucent onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={onClose}>
         <Pressable style={styles.logoutSheet} onPress={(event) => event.stopPropagation()}>
           <View style={styles.logoutDialog}>
@@ -460,9 +465,11 @@ export default function ProfileScreen() {
           <View style={styles.profileBlock}>
             <View style={styles.profileRow}>
               <View style={styles.identity}>
+                 <Text style={styles.driverName}>{driverName}</Text>
                 <View style={styles.nameRow}>
-                  <Text style={styles.driverName}>{driverName}</Text>
+                 
                   <Image source={verifiedBadgeImage} style={styles.verifiedBadge} resizeMode="contain" />
+                  <Text style={styles.verified}>Verified</Text>
                 </View>
          
               </View>
@@ -499,6 +506,7 @@ export default function ProfileScreen() {
               </StatCard>
 
               <StatCard title="Delivery's">
+               
                 <View style={styles.deliveryValueRow}>
                   <Text style={styles.statValue}>{completedDeliveryCount}</Text>
                   <Text style={styles.completedText}>Completed</Text>
@@ -554,7 +562,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     width: '100%',
     alignSelf: 'center',
-    paddingBottom: 108,
+    paddingBottom: 30,
   },
   header: {
     backgroundColor: '#dbe6f7',
@@ -618,6 +626,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     lineHeight: 24,
     letterSpacing: -1,
+  },
+  verified :{
+    fontFamily: 'Poppins',
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1FC16B',
+
   },
   verifiedBadge: {
     width: 24,
@@ -704,7 +719,6 @@ const styles = StyleSheet.create({
   statArrowIcon: {
     width: 20,
     height: 20,
-    transform: [{ rotate: '45deg' }],
   },
   reviewValueRow: {
     flexDirection: 'row',
@@ -714,6 +728,7 @@ const styles = StyleSheet.create({
   deliveryValueRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
+    gap:1
   },
   statValue: {
     color: '#1c1c1c',
@@ -752,6 +767,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 21,
     overflow: 'hidden',
+  
   },
   menuLabel: {
     flex: 1,

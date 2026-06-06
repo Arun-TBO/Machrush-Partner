@@ -309,6 +309,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
     marginTop: 40,
+    marginBottom : 20
   },
   supportText: {
     color: '#1c1c1c',

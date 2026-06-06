@@ -1152,9 +1152,10 @@ const styles = StyleSheet.create({
     height : '70%',
   },
   pickDropContainer : {
-    padding : 5
+    padding : 4
   },
   routeTextWrap: {
+    padding : 3,
     justifyContent: 'center',
   },
   routeMetaRow: {
