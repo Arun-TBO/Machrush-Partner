@@ -18,7 +18,7 @@ import { auth } from '@/lib/firebase';
 import { submitDriverReport } from '@/lib/firestoreOnboardingService';
 
 const backImage = require('@/assets/images/profile/back.png');
-const reviewWarning = require('@/assets/images/profile/review-warning.png');
+
 const reportCategories = [
   {
     label: 'Payment Issue',
@@ -248,7 +248,7 @@ export default function ReportProblemScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         base64: true,
-        allowsEditing: false,
+        allowsEditing: true,
         aspect: [1, 1],
         quality: 0.55,
       });
@@ -387,7 +387,7 @@ export default function ReportProblemScreen() {
               value={description}
               onChangeText={setDescription}
               placeholder="Describe your problem briefly"
-              placeholderTextColor="#1C1C1C"
+              placeholderTextColor="#606060"
               style={styles.textArea}
               textAlignVertical="top"
             />
@@ -413,7 +413,7 @@ export default function ReportProblemScreen() {
         </Text>
 
         <View style={styles.warningBar}>
-          <Image source={reviewWarning} style={styles.warningIcon}/>
+          <WarningIcon />
           <Text style={styles.warningText}>False reports may resultin account suspension</Text>
         </View>
       </ScrollView>
@@ -535,13 +535,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     fontFamily: 'Poppins_400Regular',
     fontSize: 16,
-<<<<<<< HEAD
-    fontWeight: '600',
     lineHeight: 24,
-    color: '#1C1C1C',
-=======
-    lineHeight: 24,
->>>>>>> d807d96fc005534bd808199744e38c3ce46ce8d9
   },
   dropdownMenu: {
     width: '100%',
@@ -602,7 +596,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     lineHeight: 24,
-    color: '#1C1C1C',
+    color: '#606060',
   },
   characterLimit: {
     width: '100%',
@@ -662,7 +656,7 @@ const styles = StyleSheet.create({
   },
   warningBar: {
     width: '100%',
-  
+    minHeight: 29,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -671,35 +665,28 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(204, 119, 0, 0.25)',
     paddingVertical: 4,
     paddingHorizontal: 8,
-    padding : 2
   },
   warningIcon: {
-    width: 16,
-    height: 15,
+    width: 18,
+    height: 18,
+    borderWidth: 1.5,
+    borderColor: '#cc7700',
+    borderRadius: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ rotate: '45deg' }],
   },
   warningIconText: {
-<<<<<<< HEAD
-    fontFamily: 'Poppins',
-    fontSize: 10,
-    fontWeight: '500',
-=======
     fontFamily: 'Poppins_500Medium',
     fontSize: 12,
->>>>>>> d807d96fc005534bd808199744e38c3ce46ce8d9
     lineHeight: 14,
     color: '#cc7700',
     transform: [{ rotate: '-45deg' }],
   },
   warningText: {
-<<<<<<< HEAD
-    fontFamily: 'Poppins',
-    fontSize: 12,
-    fontWeight: '400',
-=======
     flexShrink: 1,
     fontFamily: 'Poppins_400Regular',
     fontSize: 14,
->>>>>>> d807d96fc005534bd808199744e38c3ce46ce8d9
     lineHeight: 21,
     color: '#cc7700',
   },
