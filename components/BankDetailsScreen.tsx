@@ -186,6 +186,10 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
         <View style={{ height: 40 }} />
       </ScrollView>
 
+      <View style={styles.navigation}>
+        <View style={styles.homeIndicator} />
+      </View>
+
       {/* Bank Selection Modal */}
       <Modal
         visible={showBankModal}
@@ -255,10 +259,10 @@ const styles = StyleSheet.create({
     height: 24,
   },
   navTitle: {
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 20,
     fontWeight: '500',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
     lineHeight: 32,
   },
 
@@ -268,42 +272,41 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     width: '100%',
-    maxWidth: 720,
     alignSelf: 'center',
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.lg,
-    paddingBottom: Spacing.xl,
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    paddingBottom: 24,
+    gap: 40,
   },
 
   // Header Section
   headerSection: {
-    marginBottom: Spacing.lg,
+    gap: 12,
   },
   title: {
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 40,
     fontWeight: '500',
-    color: Colors.neutral900,
-    fontFamily: 'Poppins',
-    marginBottom: Spacing.sm,
+    lineHeight: 48,
   },
   subtitle: {
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: Colors.neutral800,
-    fontFamily: 'Poppins',
     lineHeight: 24,
   },
 
   // Input Section
   inputSection: {
-    marginBottom: Spacing.lg,
+    gap: 16,
   },
   inputLabel: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: Colors.neutral800,
-    fontFamily: 'Poppins',
-    marginBottom: Spacing.md,
     lineHeight: 24,
   },
   textInput: {
@@ -311,12 +314,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.neutral600,
     borderRadius: Radius.sm,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: Colors.neutral900,
-    fontFamily: 'Poppins',
     lineHeight: 24,
     height: 56,
   },
@@ -327,17 +330,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.neutral600,
     borderRadius: Radius.sm,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     height: 56,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   dropdownText: {
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    fontFamily: 'Poppins',
     lineHeight: 24,
     flex: 1,
   },
@@ -348,32 +351,45 @@ const styles = StyleSheet.create({
 
   // Helper Text
   helperText: {
+    color: '#8e8e8e',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    color: Colors.neutral600,
-    fontFamily: 'Poppins',
     lineHeight: 18,
-    marginTop: Spacing.sm,
+    marginTop: 12,
   },
 
   // Continue Button
   continueButton: {
     backgroundColor: Colors.primary,
     borderRadius: Radius.md,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
+    height: 56,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: Spacing.lg,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
+    color: '#ffffff',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    color: Colors.neutral100,
-    fontFamily: 'Poppins',
+    lineHeight: 16,
+    letterSpacing: -0.5,
+  },
+  navigation: {
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeIndicator: {
+    width: 108,
+    height: 4,
+    borderRadius: 12,
+    backgroundColor: '#1d1b20',
   },
 
   // Modal
@@ -402,10 +418,10 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.neutral300,
   },
   modalTitle: {
+    fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
     color: Colors.neutral900,
-    fontFamily: 'Poppins',
   },
   closeIcon: {
     fontSize: 24,
@@ -418,10 +434,10 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.neutral200,
   },
   modalOptionText: {
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
     color: Colors.neutral900,
-    fontFamily: 'Poppins',
   },
 });
 

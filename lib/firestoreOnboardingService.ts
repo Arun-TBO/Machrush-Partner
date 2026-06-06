@@ -89,6 +89,130 @@ const getApiErrorMessage = (responseBody: unknown, fallback: string) => {
   return fallback;
 };
 
+const isRemoteUrl = (uri: string) => /^https?:\/\//i.test(uri);
+
+const getExtensionForContentType = (contentType: string) => {
+  if (contentType.includes('png')) {
+    return 'png';
+  }
+
+  if (contentType.includes('webp')) {
+    return 'webp';
+  }
+
+  if (contentType.includes('pdf')) {
+    return 'pdf';
+  }
+
+  if (contentType.includes('mp4')) {
+    return 'mp4';
+  }
+
+  if (contentType.includes('quicktime')) {
+    return 'mov';
+  }
+
+  return 'jpg';
+};
+
+const uploadDriverStorageAsset = async (
+  uid: string,
+  localUri: string,
+  folder: string,
+  fileName: string,
+  fallbackContentType = 'image/jpeg'
+) => {
+  if (!localUri || isRemoteUrl(localUri)) {
+    return localUri;
+  }
+
+  const response = await fetch(localUri);
+  const blob = await response.blob();
+  const contentType = blob.type || fallbackContentType;
+  const extension = getExtensionForContentType(contentType);
+  const storageRef = ref(
+    storage,
+    `drivers/${uid}/${folder}/${fileName}-${Date.now()}.${extension}`
+  );
+
+  await uploadBytes(storageRef, blob, {
+    contentType,
+    customMetadata: {
+      ownerUid: uid,
+    },
+  });
+
+  return getDownloadURL(storageRef);
+};
+
+const blobToDataUrl = (blob: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('Failed to read selected file'));
+      }
+    };
+    reader.onerror = () => reject(new Error('Failed to read selected file'));
+    reader.readAsDataURL(blob);
+  });
+
+const localUriToDataUrl = async (uri: string) => {
+  if (uri.startsWith('data:')) {
+    return uri;
+  }
+
+  const response = await fetch(uri);
+  const blob = await response.blob();
+  return blobToDataUrl(blob);
+};
+
+type OnboardingUploadAsset = {
+  type: string;
+  uri: string;
+  index?: number;
+};
+
+const uploadOnboardingAssetsViaBackend = async (
+  uid: string,
+  assets: OnboardingUploadAsset[],
+  idToken: string
+) => {
+  const assetsToUpload = await Promise.all(
+    assets.map(async (asset) => ({
+      type: asset.type,
+      index: asset.index,
+      dataUrl: await localUriToDataUrl(asset.uri),
+    }))
+  );
+
+  const response = await fetch(`${getApiBaseUrl()}/api/uploads/driver-onboarding-assets`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      uid,
+      assets: assetsToUpload,
+    }),
+  });
+
+  const responseBody = await response.json().catch(() => null);
+
+  if (!response.ok || !responseBody?.success) {
+    throw new Error(getApiErrorMessage(responseBody, 'Failed to upload onboarding files'));
+  }
+
+  return (responseBody.assets || []) as Array<{
+    type: string;
+    index?: number;
+    url: string;
+  }>;
+};
+
 const uploadProfilePhotoViaBackend = async (
   uid: string,
   imageData: string,
@@ -195,23 +319,23 @@ export const updateDriverProfilePhoto = async (
       throw new Error('Firebase ID token is required to update profile photo on web');
     }
 
-    const profilePhotoUrl = await resizeWebImageToDataUrl(localImageUri);
+    const profilePhotoDataUrl = await resizeWebImageToDataUrl(localImageUri);
+    const profilePhotoUrl = await uploadDriverStorageAsset(
+      uid,
+      profilePhotoDataUrl,
+      'profile',
+      'profile-photo'
+    );
     await updateDriverProfilePhotoViaRest(uid, profilePhotoUrl, idToken);
     return profilePhotoUrl;
   }
 
-  const response = await fetch(localImageUri);
-  const blob = await response.blob();
-  const storageRef = ref(storage, `drivers/${uid}/profile-photo.jpg`);
-
-  await uploadBytes(storageRef, blob, {
-    contentType: blob.type || 'image/jpeg',
-    customMetadata: {
-      ownerUid: uid,
-    },
-  });
-
-  const profilePhotoUrl = await getDownloadURL(storageRef);
+  const profilePhotoUrl = await uploadDriverStorageAsset(
+    uid,
+    localImageUri,
+    'profile',
+    'profile-photo'
+  );
 
   if (auth.currentUser?.uid === uid) {
     await setDoc(
@@ -237,26 +361,25 @@ const uploadReportImage = async (
   reportSeed: number,
   index: number
 ) => {
-  if (localImageUri.startsWith('data:image')) {
-    return localImageUri;
-  }
-
   if (Platform.OS === 'web') {
-    return resizeWebImageToDataUrl(localImageUri, 720, 0.76);
+    const imageDataUrl = localImageUri.startsWith('data:image')
+      ? localImageUri
+      : await resizeWebImageToDataUrl(localImageUri, 720, 0.76);
+
+    return uploadDriverStorageAsset(
+      uid,
+      imageDataUrl,
+      'reports',
+      `${reportSeed}-${index + 1}`
+    );
   }
 
-  const response = await fetch(localImageUri);
-  const blob = await response.blob();
-  const storageRef = ref(storage, `driver-reports/${uid}/${reportSeed}-${index + 1}.jpg`);
-
-  await uploadBytes(storageRef, blob, {
-    contentType: blob.type || 'image/jpeg',
-    customMetadata: {
-      ownerUid: uid,
-    },
-  });
-
-  return getDownloadURL(storageRef);
+  return uploadDriverStorageAsset(
+    uid,
+    localImageUri,
+    'reports',
+    `${reportSeed}-${index + 1}`
+  );
 };
 
 const storeDriverReportViaRest = async (
@@ -761,6 +884,93 @@ const getDriverByPhoneViaRest = async (phoneNumber: string, idToken: string) => 
   return fromFirestoreRestFields(result.document.fields || {}) as OnboardingData;
 };
 
+const uploadOnboardingAssets = async (
+  uid: string,
+  onboardingData: Omit<OnboardingData, 'createdAt' | 'updatedAt' | 'submittedAt'>,
+  idToken?: string
+): Promise<Omit<OnboardingData, 'createdAt' | 'updatedAt' | 'submittedAt'>> => {
+  const vehiclePhotoUris = onboardingData.vehiclePhotoUris || [];
+
+  if (idToken) {
+    const assets: OnboardingUploadAsset[] = [
+      { type: 'photoUri', uri: onboardingData.photoUri },
+      { type: 'drivingLicenseUri', uri: onboardingData.drivingLicenseUri },
+      { type: 'identityProofUri', uri: onboardingData.identityProofUri },
+      { type: 'rcBookUri', uri: onboardingData.rcBookUri },
+      { type: 'insuranceUri', uri: onboardingData.insuranceUri },
+      ...vehiclePhotoUris.map((uri, index) => ({
+        type: 'vehiclePhotoUris',
+        uri,
+        index,
+      })),
+    ].filter((asset) => asset.uri && !isRemoteUrl(asset.uri));
+
+    if (assets.length > 0) {
+      const uploadedAssets = await uploadOnboardingAssetsViaBackend(uid, assets, idToken);
+      const nextData = {
+        ...onboardingData,
+        vehiclePhotoUris: [...vehiclePhotoUris],
+      };
+
+      uploadedAssets.forEach((asset) => {
+        if (!asset.url) {
+          return;
+        }
+
+        if (asset.type === 'vehiclePhotoUris' && typeof asset.index === 'number') {
+          nextData.vehiclePhotoUris[asset.index] = asset.url;
+          return;
+        }
+
+        if (asset.type in nextData) {
+          (nextData as Record<string, any>)[asset.type] = asset.url;
+        }
+      });
+
+      return {
+        ...nextData,
+        profilePhotoUrl: nextData.profilePhotoUrl || nextData.photoUri,
+      };
+    }
+  }
+
+  const [
+    photoUri,
+    drivingLicenseUri,
+    identityProofUri,
+    rcBookUri,
+    insuranceUri,
+    uploadedVehiclePhotoUris,
+  ] = await Promise.all([
+    uploadDriverStorageAsset(uid, onboardingData.photoUri, 'onboarding', 'driver-photo'),
+    uploadDriverStorageAsset(uid, onboardingData.drivingLicenseUri, 'onboarding', 'driving-license'),
+    uploadDriverStorageAsset(uid, onboardingData.identityProofUri, 'onboarding', 'identity-proof'),
+    uploadDriverStorageAsset(uid, onboardingData.rcBookUri, 'onboarding', 'rc-book'),
+    uploadDriverStorageAsset(uid, onboardingData.insuranceUri, 'onboarding', 'insurance'),
+    Promise.all(
+      vehiclePhotoUris.map((uri, index) =>
+        uploadDriverStorageAsset(
+          uid,
+          uri,
+          'onboarding/vehicle-photos',
+          `vehicle-photo-${index + 1}`
+        )
+      )
+    ),
+  ]);
+
+  return {
+    ...onboardingData,
+    photoUri,
+    profilePhotoUrl: onboardingData.profilePhotoUrl || photoUri,
+    drivingLicenseUri,
+    identityProofUri,
+    rcBookUri,
+    insuranceUri,
+    vehiclePhotoUris: uploadedVehiclePhotoUris,
+  };
+};
+
 /**
  * Store complete onboarding data to Firestore
  * Uses Firebase UID as document ID for security and proper auth rules
@@ -782,8 +992,10 @@ export const storeOnboardingData = async (
 
     const now = Timestamp.now();
 
+    const uploadedOnboardingData = await uploadOnboardingAssets(uid, onboardingData, idToken);
+
     const dataToStore: OnboardingData = {
-      ...onboardingData,
+      ...uploadedOnboardingData,
       phoneNumber,
       createdAt: now,
       updatedAt: now,

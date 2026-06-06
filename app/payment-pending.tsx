@@ -222,7 +222,6 @@ export default function PaymentPendingScreen() {
   const { deliveryId } = useLocalSearchParams<{ deliveryId?: string }>();
   const [delivery, setDelivery] = React.useState<DeliveryDetails | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
-  const [paymentTab, setPaymentTab] = React.useState<'paid' | 'pending'>('pending');
 
   React.useEffect(() => {
     let isActive = true;
@@ -296,24 +295,6 @@ export default function PaymentPendingScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <TopNav />
-      <View style={styles.toggleContainer}>
-        <Pressable
-          style={[styles.toggleButton, paymentTab === 'paid' && styles.toggleButtonActive]}
-          onPress={() => setPaymentTab('paid')}
-        >
-          <Text style={[styles.toggleText, paymentTab === 'paid' && styles.toggleTextActive]}>
-            Paid
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.toggleButton, paymentTab === 'pending' && styles.toggleButtonActive]}
-          onPress={() => setPaymentTab('pending')}
-        >
-          <Text style={[styles.toggleText, paymentTab === 'pending' && styles.toggleTextActive]}>
-            Pending
-          </Text>
-        </Pressable>
-      </View>
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator color="#05c" />
@@ -416,45 +397,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#ffffff',
   },
-  toggleContainer: {
-    position: 'absolute',
-    top: 116,
-    left: 0,
-    right: 0,
-    height: 60,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e8e8e8',
-    zIndex: 1,
-  },
-  toggleButton: {
-    flex: 1,
-    height: 40,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e8e8e8',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f5f5f5',
-  },
-  toggleButtonActive: {
-    backgroundColor: '#0055cc',
-    borderColor: '#0055cc',
-  },
-  toggleText: {
-    fontFamily: 'Poppins',
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#606060',
-  },
-  toggleTextActive: {
-    color: '#ffffff',
-  },
   header: {
     position: 'absolute',
     top: 0,
@@ -480,9 +422,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   navTitle: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 20,
-    fontWeight: '500',
     lineHeight: 32,
     color: '#1c1c1c',
   },
@@ -494,8 +435,9 @@ const styles = StyleSheet.create({
     paddingTop: 116,
   },
   loadingText: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 14,
+    lineHeight: 21,
     color: '#606060',
   },
   scroll: {
@@ -503,10 +445,10 @@ const styles = StyleSheet.create({
   },
   content: {
     width: '100%',
-    maxWidth: 720,
+    maxWidth: 412,
     alignSelf: 'center',
-    paddingTop: 176,
-    paddingBottom: 40,
+    paddingTop: 116,
+    paddingBottom: 24,
     gap: 24,
     alignItems: 'center',
   },
@@ -534,16 +476,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   deliveryTitle: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 20,
-    fontWeight: '500',
     lineHeight: 32,
     color: '#1c1c1c',
   },
   deliveryMeta: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 14,
-    fontWeight: '400',
     lineHeight: 21,
     color: '#606060',
   },
@@ -559,10 +499,10 @@ const styles = StyleSheet.create({
   },
   earnedTitle: {
     flex: 1,
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 24,
-    fontWeight: '500',
-    letterSpacing: 0,
+    lineHeight: 24,
+    letterSpacing: -1,
     color: '#1c1c1c',
   },
   paymentCompleteRow: {
@@ -575,9 +515,8 @@ const styles = StyleSheet.create({
     height: 24,
   },
   paymentCompleteText: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
-    fontWeight: '400',
     lineHeight: 24,
     color: '#000000',
   },
@@ -597,10 +536,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   routeTitle: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '500',
-    letterSpacing: 0,
+    lineHeight: 16,
+    letterSpacing: -0.5,
     color: '#1c1c1c',
   },
   routeBox: {
@@ -643,23 +582,21 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   routePointTitle: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '500',
-    letterSpacing: 0,
+    lineHeight: 16,
+    letterSpacing: -0.5,
     color: '#1c1c1c',
   },
   routePrimary: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
-    fontWeight: '400',
     lineHeight: 24,
     color: '#616161',
   },
   routeSecondary: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
-    fontWeight: '400',
     lineHeight: 18,
     color: '#616161',
   },
@@ -681,9 +618,8 @@ const styles = StyleSheet.create({
   },
   routeTotal: {
     marginLeft: 44,
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
-    fontWeight: '400',
     lineHeight: 18,
     color: '#1c1c1c',
   },
@@ -715,10 +651,10 @@ const styles = StyleSheet.create({
   },
   paymentSummaryTitle: {
     flex: 1,
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '500',
-    letterSpacing: 0,
+    lineHeight: 16,
+    letterSpacing: -0.5,
     color: '#1c1c1c',
   },
   paymentAmountBox: {
@@ -744,9 +680,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   paymentLabel: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
-    fontWeight: '400',
     lineHeight: 24,
     color: '#8e8e8e',
   },
@@ -754,9 +689,9 @@ const styles = StyleSheet.create({
     color: '#1c1c1c',
   },
   paymentValue: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '500',
+    lineHeight: 16,
     color: '#606060',
     textAlign: 'right',
   },
@@ -777,10 +712,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   transactionTitle: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '500',
-    letterSpacing: 0,
+    lineHeight: 16,
+    letterSpacing: -0.5,
     color: '#8e8e8e',
   },
   reportButton: {
@@ -797,10 +732,10 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   reportButtonText: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '500',
-    letterSpacing: 0,
+    lineHeight: 16,
+    letterSpacing: -0.5,
     color: '#d00416',
     textAlign: 'center',
   },

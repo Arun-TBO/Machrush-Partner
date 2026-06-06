@@ -129,6 +129,7 @@ function WarningIcon() {
 function SelectField({
   label,
   value,
+  valueColor = '#606060',
   expanded,
   options,
   onPress,
@@ -136,6 +137,7 @@ function SelectField({
 }: {
   label: string;
   value: string;
+  valueColor?: string;
   expanded: boolean;
   options: string[];
   onPress: () => void;
@@ -145,7 +147,7 @@ function SelectField({
     <View style={styles.fieldBlock}>
       <Text style={styles.label}>{label}</Text>
       <Pressable accessibilityRole="button" style={styles.selectBox} onPress={onPress}>
-        <Text style={styles.inputValue}>{value}</Text>
+        <Text style={[styles.inputValue, { color: valueColor }]}>{value}</Text>
         <DownIcon />
       </Pressable>
       {expanded ? (
@@ -358,6 +360,7 @@ export default function ReportProblemScreen() {
           <SelectField
             label="Category"
             value={selectedCategory || 'Select Category'}
+            valueColor={selectedCategory ? '#1c1c1c' : '#606060'}
             expanded={openDropdown === 'category'}
             options={reportCategories.map((category) => category.label)}
             onPress={() => setOpenDropdown(openDropdown === 'category' ? null : 'category')}
@@ -366,6 +369,7 @@ export default function ReportProblemScreen() {
           <SelectField
             label="Specific issue"
             value={selectedIssue || 'Select issue'}
+            valueColor={selectedIssue ? '#1c1c1c' : '#606060'}
             expanded={openDropdown === 'issue'}
             options={issueOptions}
             onPress={handleIssuePress}
@@ -464,9 +468,8 @@ const styles = StyleSheet.create({
     height: 24,
   },
   navTitle: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 20,
-    fontWeight: '500',
     lineHeight: 32,
     color: '#1c1c1c',
   },
@@ -491,16 +494,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 24,
-    fontWeight: '500',
+    lineHeight: 24,
     letterSpacing: -1,
     color: '#1c1c1c',
   },
   subtitle: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
-    fontWeight: '400',
     lineHeight: 24,
     color: '#606060',
   },
@@ -510,9 +512,8 @@ const styles = StyleSheet.create({
   },
   label: {
     width: '100%',
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
-    fontWeight: '400',
     lineHeight: 24,
     color: '#606060',
   },
@@ -532,11 +533,15 @@ const styles = StyleSheet.create({
   inputValue: {
     flex: 1,
     minWidth: 0,
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
+<<<<<<< HEAD
     fontWeight: '600',
     lineHeight: 24,
     color: '#1C1C1C',
+=======
+    lineHeight: 24,
+>>>>>>> d807d96fc005534bd808199744e38c3ce46ce8d9
   },
   dropdownMenu: {
     width: '100%',
@@ -557,9 +562,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   dropdownOptionText: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
-    fontWeight: '400',
     lineHeight: 24,
     color: '#606060',
   },
@@ -595,18 +599,16 @@ const styles = StyleSheet.create({
     borderColor: '#8e8e8e',
     borderRadius: 4,
     padding: 8,
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
-    fontWeight: '400',
     lineHeight: 24,
     color: '#1C1C1C',
   },
   characterLimit: {
     width: '100%',
     marginTop: -12,
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
-    fontWeight: '400',
     lineHeight: 18,
     color: '#8e8e8e',
     textAlign: 'right',
@@ -639,25 +641,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   plusText: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 24,
-    fontWeight: '400',
     lineHeight: 24,
     color: '#8e8e8e',
   },
   addImageText: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
-    fontWeight: '400',
     lineHeight: 18,
     color: '#606060',
     textAlign: 'center',
   },
   reviewText: {
     width: '100%',
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
-    fontWeight: '400',
     lineHeight: 24,
     color: '#606060',
   },
@@ -679,17 +678,28 @@ const styles = StyleSheet.create({
     height: 15,
   },
   warningIconText: {
+<<<<<<< HEAD
     fontFamily: 'Poppins',
     fontSize: 10,
     fontWeight: '500',
+=======
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 12,
+>>>>>>> d807d96fc005534bd808199744e38c3ce46ce8d9
     lineHeight: 14,
     color: '#cc7700',
     transform: [{ rotate: '-45deg' }],
   },
   warningText: {
+<<<<<<< HEAD
     fontFamily: 'Poppins',
     fontSize: 12,
     fontWeight: '400',
+=======
+    flexShrink: 1,
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 14,
+>>>>>>> d807d96fc005534bd808199744e38c3ce46ce8d9
     lineHeight: 21,
     color: '#cc7700',
   },
@@ -721,9 +731,9 @@ const styles = StyleSheet.create({
     opacity: 0.72,
   },
   submitText: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '500',
+    lineHeight: 16,
     letterSpacing: -0.5,
     color: '#ffffff',
     textAlign: 'center',

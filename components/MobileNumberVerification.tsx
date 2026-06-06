@@ -413,6 +413,10 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
             </Text>
           </Pressable>
         </View>
+
+        <View style={styles.navigation}>
+          <View style={styles.homeIndicator} />
+        </View>
       </Animated.View>
     )
   );
@@ -422,7 +426,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#eff2f6', // neutral bg-color from design
-    justifyContent: 'space-between',
     paddingBottom: 0,
   },
 
@@ -441,31 +444,30 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
     width: '100%',
-    maxWidth: 720,
     alignSelf: 'center',
-    paddingHorizontal: Spacing.sm,
-    paddingTop: Spacing.lg,
-    gap: Spacing.lg,
+    paddingHorizontal: 16,
+    paddingTop: 40,
+    gap: 40,
   },
 
   // Header (Title & Description)
   headerContainer: {
-    gap: Spacing.md,
+    gap: 16,
   },
   title: {
-    fontSize: 32,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 40,
     fontWeight: '500',
-    color: Colors.neutral900,
-    fontFamily: 'Poppins',
-    lineHeight: 40,
+    lineHeight: 48,
     letterSpacing: 0,
   },
   description: {
+    color: '#606060',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
-    color: Colors.neutral700,
-    fontFamily: 'Poppins',
-    lineHeight: 24,
+    lineHeight: 18,
     letterSpacing: 0,
   },
 
@@ -488,16 +490,17 @@ const styles = StyleSheet.create({
     paddingBottom: 9,
   },
   countryCodeLabel: {
+    color: '#9d9d8a',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    color: '#9d9d8a',
-    fontFamily: 'Poppins',
+    lineHeight: 12,
   },
   countryCode: {
+    color: '#1c1c1a',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 14,
     fontWeight: '500',
-    color: Colors.neutral900,
-    fontFamily: 'Poppins',
     lineHeight: 21,
   },
 
@@ -513,20 +516,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   mobileNumberLabel: {
+    color: '#9d9d8a',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    color: '#9d9d8a',
-    fontFamily: 'Poppins',
-    lineHeight: 16,
+    lineHeight: 12,
   },
   mobileNumberInput: {
     height: 24,
     padding: 0,
     margin: 0,
+    color: '#1c1c1a',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 14,
     fontWeight: '500',
-    color: Colors.neutral900,
-    fontFamily: 'Poppins',
     lineHeight: 21,
   },
 
@@ -537,16 +540,27 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: Spacing.lg,
   },
   verifyButtonDisabled: {
     opacity: 0.7,
   },
   verifyButtonText: {
+    color: '#ffffff',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    color: Colors.neutral100,
-    fontFamily: 'Poppins',
+    lineHeight: 16,
     letterSpacing: -0.5,
+  },
+  navigation: {
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeIndicator: {
+    width: 108,
+    height: 4,
+    borderRadius: 12,
+    backgroundColor: '#1d1b20',
   },
 });
