@@ -316,10 +316,10 @@ const styles = StyleSheet.create({
     height: 24,
   },
   headerTitle: {
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 20,
     fontWeight: '500',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
     lineHeight: 32,
   },
   // Content Wrapper
@@ -334,11 +334,10 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     width: '100%',
-    maxWidth: 720,
     alignSelf: 'center',
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 40,
+    paddingTop: 24,
+    paddingBottom: 24,
     gap: 40,
   },
 
@@ -347,17 +346,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   title: {
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 40,
     fontWeight: '500',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
     lineHeight: 48,
   },
   subtitle: {
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
     lineHeight: 24,
   },
 
@@ -371,10 +370,10 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   fieldLabel: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 24,
   },
   inputWrapper: {
@@ -387,10 +386,10 @@ const styles = StyleSheet.create({
   },
   nameInput: {
     height: 56,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
     lineHeight: 24,
   },
 
@@ -399,18 +398,17 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   documentsLabel: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 24,
   },
 
   // Document Item
   documentItem: {
-    minHeight: 113,
-    gap: 16,
-    paddingVertical: 24,
+    gap: 12,
+    paddingVertical: 12,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#d2d2d2',
@@ -423,17 +421,17 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   documentTitle: {
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
     lineHeight: 18,
   },
   documentDescription: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 18,
   },
   errorContainer: {
@@ -443,16 +441,16 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   retryIcon: {
+    color: '#0055cc',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    color: '#d00416',
-    fontFamily: 'Poppins',
   },
   errorText: {
+    color: '#0055cc',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    color: '#d00416',
-    fontFamily: 'Poppins',
     lineHeight: 18,
   },
 
@@ -475,10 +473,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   uploadButtonText: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 18,
   },
   uploadedImageContainer: {
@@ -519,18 +517,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 24,
   },
   continueButtonDisabled: {
     opacity: 0.5,
   },
   continueButtonText: {
+    color: 'white',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    color: 'white',
-    fontFamily: 'Poppins',
-    lineHeight: 20,
+    lineHeight: 16,
     letterSpacing: -0.5,
   },
 });

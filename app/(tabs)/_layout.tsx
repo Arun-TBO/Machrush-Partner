@@ -30,7 +30,7 @@ export default function TabLayout() {
         tabBarStyle: [
           styles.tabBar,
           {
-            height: 78 + insets.bottom,
+            height: 85 + insets.bottom,
             paddingBottom: 12 + insets.bottom,
           },
         ],
@@ -79,12 +79,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#eff2f6',
   },
   tabBar: {
-    height: 78,
+    height: 85,
     borderTopWidth: 1,
     borderTopColor: '#a4cbff',
     backgroundColor: '#eff2f6',
-    paddingTop: 8,
-    paddingBottom: 12,
+    paddingTop: 12,
+    paddingBottom: 16,
     paddingHorizontal: 16,
   },
   tabIconSlot: {
@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
     height: 28,
   },
   tabLabel: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 14,
     fontWeight: '500',
     lineHeight: 21,

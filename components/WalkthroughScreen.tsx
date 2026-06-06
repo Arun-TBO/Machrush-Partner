@@ -244,6 +244,9 @@ Animated.parallel([
       </View>
 
       <View style={styles.sheet}>
+        <View style={styles.sheetHandleWrap}>
+          <View style={styles.sheetHandle} />
+        </View>
        
             
             <View style={styles.dotsContainer}> 
@@ -280,6 +283,10 @@ Animated.parallel([
             </Pressable>
           </View>
         </View>
+
+        <View style={styles.navigation}>
+          <View style={styles.homeIndicator} />
+        </View>
       </View>
 
      
@@ -298,11 +305,11 @@ const styles = StyleSheet.create({
   },
   appLogo : {
     position: 'absolute',
-    top:  24,
+    top:  68,
     left: 16,
-    width: 65,
-    height: 55,
-    opacity: 0.8,
+    width: 63.48,
+    height: 54.56,
+    opacity: 0.92,
     zIndex: 5,
   },
   visualArea: {
@@ -344,35 +351,56 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
-    minHeight: SHEET_HEIGHT,
+    height: SHEET_HEIGHT,
     paddingHorizontal: 16,
-    paddingBottom: 50,
+    paddingBottom: 0,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     backgroundColor: '#ffffff',
-    gap: 20,
+    gap: 16,
     zIndex: 10,
     elevation: 10,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+  },
+  sheetHandleWrap: {
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 10,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 100,
+    backgroundColor: 'rgba(41,41,43,0.05)',
   },
   brandMark: {
     width: 76,
     height: 36,
   },
   copyBlock: {
-    gap: 12,
+    minHeight: 168,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 40,
   },
   title: {
-    color: '#1c1c1c',
+    color: '#4a4a4a',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 25,
-    lineHeight: 46,
+    fontSize: 24,
+    lineHeight: 24,
+    letterSpacing: -1,
     textAlign : 'center',
   },
   description: {
-    color: '#5e5e58',
+    color: '#777777',
     fontFamily: 'Poppins_400Regular',
     fontSize: 18,
-    lineHeight: 24,
+    lineHeight: 25,
     textAlign : 'center',
   },
   footer: {
@@ -382,7 +410,6 @@ const styles = StyleSheet.create({
   dotsContainer : {
     flexDirection : 'column',
     alignItems : 'center',
-    marginTop : 25,
   },
   dots: {
     flexDirection: 'row',
@@ -393,10 +420,10 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 12,
-    backgroundColor: '#cfd7e4',
+    backgroundColor: '#d9d9d9',
   },
   activeDot: {
-    width: 40,
+    width: 80,
     backgroundColor: '#0055cc',
   },
   actions: {
@@ -405,7 +432,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   textButton: {
-    width: 92,
+    width: 120,
     minHeight: 56,
     flexDirection : 'column',
     alignItems: 'center',
@@ -417,8 +444,9 @@ const styles = StyleSheet.create({
   skipText: {
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 15,
-    lineHeight : 20,
+    fontSize: 16,
+    lineHeight : 16,
+    letterSpacing: -0.5,
     width : '100%',
     textAlign : 'center'
   },
@@ -435,7 +463,8 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    lineHeight: 20,
+    lineHeight: 16,
+    letterSpacing: -0.5,
     width : '100%',
     textAlign : 'center'
   },
@@ -443,13 +472,14 @@ const styles = StyleSheet.create({
     opacity: 0.82,
   },
   homeIndicator: {
-    position: 'absolute',
-    bottom: 8,
-    left: '50%',
-    width: 139,
-    height: 5,
-    marginLeft: -69.5,
-    borderRadius: 100,
-    backgroundColor: '#212121',
+    width: 108,
+    height: 4,
+    borderRadius: 12,
+    backgroundColor: '#29292b',
+  },
+  navigation: {
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

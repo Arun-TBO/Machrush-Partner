@@ -177,8 +177,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
         <View style={styles.otpContainer}>
           {/* Title and Description */}
           <View style={styles.headerContainer}>
-            <Text style={styles.title}>Verify Your
-              {'\n'}Number</Text>
+            <Text style={styles.title}>Verify Your Number</Text>
             <View style={styles.descriptionContainer}>
               <Text style={styles.description}>6-digit code sent to </Text>
               <Pressable onPress={onChangeNumber}>
@@ -250,6 +249,10 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
           </View>
         </View>
       </View>
+
+      <View style={styles.navigation}>
+        <View style={styles.homeIndicator} />
+      </View>
     </Animated.View>
   );
 };
@@ -290,9 +293,8 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
     width: '100%',
-    maxWidth: 720,
     alignSelf: 'center',
-    paddingHorizontal: Spacing.sm,
+    paddingHorizontal: 16,
     paddingTop: 40,
     gap: 40,
   },
@@ -306,10 +308,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   title: {
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 40,
     fontWeight: '500',
-    color: Colors.neutral900,
-    fontFamily: 'Poppins',
     lineHeight: 48,
     letterSpacing: 0,
   },
@@ -319,18 +321,19 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   description: {
+    color: '#606060',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
-    color: Colors.neutral700,
-    fontFamily: 'Poppins',
     lineHeight: 18,
     letterSpacing: 0,
   },
   phoneNumberLink: {
+    color: '#0055cc',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 18,
-    fontWeight: '600',
-    color: '#316aff', // Blue link color
-    fontFamily: 'Poppins',
+    fontWeight: '500',
+    lineHeight: 18,
     textDecorationLine: 'underline',
   },
 
@@ -348,12 +351,12 @@ const styles = StyleSheet.create({
     height: 60,
     backgroundColor: 'white',
     borderRadius: Radius.md,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 24,
-    fontWeight: '600',
-    color: Colors.neutral900,
+    fontWeight: '500',
     textAlign: 'center',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderWidth: 0,
   },
   otpInputFilled: {
     borderColor: Colors.primary,
@@ -362,6 +365,7 @@ const styles = StyleSheet.create({
   // Verify & Continue Button
   actionContainer: {
     width: '100%',
+    height: 148,
     gap: 24,
   },
   verifyButton: {
@@ -375,10 +379,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#A4A4A4',
   },
   verifyButtonText: {
+    color: '#ffffff',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '600',
-    color: Colors.neutral100,
-    fontFamily: 'Poppins',
+    fontWeight: '500',
+    lineHeight: 16,
     letterSpacing: -0.5,
   },
 
@@ -398,10 +403,11 @@ const styles = StyleSheet.create({
 
   // Resend OTP Link
   resendOtpText: {
+    color: '#0055cc',
+    fontFamily: 'Poppins_600SemiBold',
     fontSize: 16,
     fontWeight: '600',
-    color: '#316aff', // Blue color from design
-    fontFamily: 'Poppins',
+    lineHeight: 16,
     textAlign: 'center',
   },
   resendOtpTextDisabled: {
@@ -410,9 +416,21 @@ const styles = StyleSheet.create({
 
   // Timer Text
   timerText: {
+    color: '#0055cc',
+    fontFamily: 'Poppins_600SemiBold',
     fontSize: 16,
     fontWeight: '600',
-    color: '#05c',
-    fontFamily: 'Poppins',
+    lineHeight: 16,
+  },
+  navigation: {
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeIndicator: {
+    width: 108,
+    height: 4,
+    borderRadius: 12,
+    backgroundColor: '#1d1b20',
   },
 });

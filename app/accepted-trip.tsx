@@ -32,6 +32,7 @@ const customerAvatarImage = require('@/assets/images/delivery/customer-avatar.jp
 const tripCompletedBanknoteImage = require('@/assets/images/delivery/trip-completed-banknote.png');
 const tripCompletedTickImage = require('@/assets/images/delivery/trip-completed-tick.png');
 const trackingLocationImage = require('@/assets/images/profile/Location.png');
+const helpImage = require('@/assets/images/profile/help.png');
 const supportCallImage = require('@/assets/images/profile/phone.png');
 const tableLocationImage = require('@/assets/images/profile/tablelocation.png');
 const otpResetImage = require('@/assets/images/profile/mdi_password-reset.png');
@@ -219,6 +220,8 @@ type DeliveryDetails = {
     distanceFare?: number | string;
     fuelCost?: number | string;
     pickupDistanceKm?: number | string;
+    perKmRate?: number | string;
+    ratePerKm?: number | string;
   };
   tracking?: {
     otp?: string | null;
@@ -253,11 +256,6 @@ const getCurrencyNumber = (value: unknown) => {
   return Number.isFinite(amount) ? amount : 0;
 };
 
-const hasCurrencyValue = (value: unknown) => {
-  const amount = Number(value);
-  return Number.isFinite(amount) && amount > 0;
-};
-
 const getAddressParts = (address: string) => {
   const [primaryAddress, ...secondaryParts] = address.split(',');
   return {
@@ -278,6 +276,22 @@ const formatPickupDistance = (value: unknown, fallback = '3 km') => {
   }
 
   return `${Math.round(distance)} km`;
+};
+
+const formatFareDistance = (value: number) => {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0 km';
+  }
+
+  return `${Math.round(value).toLocaleString('en-IN')} km`;
+};
+
+const formatPerKmRate = (value: number) => {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '\u20b9 0';
+  }
+
+  return `\u20b9 ${Math.round(value).toLocaleString('en-IN')}`;
 };
 
 const isValidCoord = (coord: unknown): coord is LatLng => {
@@ -588,8 +602,10 @@ const getDistanceKm = (delivery: DeliveryDetails | null) => {
 
 function TopNav({
   onBack,
+  onHelp,
 }: {
   onBack?: () => void;
+  onHelp?: () => void;
 }) {
   const router = useRouter();
 
@@ -603,9 +619,17 @@ function TopNav({
           style={styles.backButton}
           onPress={onBack || (() => router.back())}
         >
-          <Ionicons name="arrow-back" size={24} color="#9f9f9f" />
+          <Ionicons name="arrow-back" size={24} color="#1c1c1c" />
         </Pressable>
         <Text style={styles.navTitle}>Delivery Details</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Get help"
+          style={styles.helpButton}
+          onPress={onHelp}
+        >
+          <Image source={helpImage} style={styles.helpIcon} resizeMode="contain" />
+        </Pressable>
       </View>
     </View>
   );
@@ -1516,6 +1540,55 @@ function FareLine({ label, value, strong }: { label: string; value: string; stro
   );
 }
 
+function CancelDeliveryModal({
+  visible,
+  onClose,
+  onSendRequest,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onSendRequest: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.cancelModalBackdrop} onPress={onClose}>
+        <Pressable style={styles.cancelModalCard} onPress={(event) => event.stopPropagation()}>
+          <View style={styles.cancelModalContent}>
+            <View style={styles.cancelWarningIcon}>
+              <Text style={styles.cancelWarningText}>!</Text>
+            </View>
+
+            <View style={styles.cancelModalCopy}>
+              <Text style={styles.cancelModalTitle}>Request to cancel{'\n'}this Trip?</Text>
+              <Text style={styles.cancelModalSubtitle}>you cannot undo this action!</Text>
+            </View>
+          </View>
+
+          <View style={styles.cancelModalActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Do not cancel delivery"
+              style={styles.cancelModalNoButton}
+              onPress={onClose}
+            >
+              <Text style={styles.cancelModalNoText}>No</Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Send cancellation request"
+              style={styles.cancelModalSendButton}
+              onPress={onSendRequest}
+            >
+              <Text style={styles.cancelModalSendText}>Send request</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 function CompletedDropScreen({
   totalEarning,
   onFindNewJobs,
@@ -1687,6 +1760,7 @@ export default function AcceptedTripScreen() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isAccepting, setIsAccepting] = React.useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = React.useState(false);
+  const [isCancelModalVisible, setIsCancelModalVisible] = React.useState(false);
 
   React.useEffect(() => {
     let isActive = true;
@@ -1732,38 +1806,19 @@ export default function AcceptedTripScreen() {
   }, [deliveryId]);
 
   const distanceKm = getDistanceKm(delivery);
+  const fareDistanceKm = Number.isFinite(distanceKm) && distanceKm ? distanceKm : 0;
   const totalAmount = getCurrencyNumber(delivery?.pricing?.tripFare ?? delivery?.pricing?.total);
   const baseFare = getCurrencyNumber(delivery?.pricing?.baseFare);
   const distanceFare = getCurrencyNumber(delivery?.pricing?.distanceFare);
   const fuelCost = getCurrencyNumber(delivery?.pricing?.fuelCost);
   const fareLineSubtotal = baseFare + distanceFare + fuelCost;
   const totalEarning = totalAmount || fareLineSubtotal;
-  const fareRows = [
-    hasCurrencyValue(delivery?.pricing?.baseFare)
-      ? {
-          label: distanceKm ? `Base fare ${distanceKm}km` : 'Base fare',
-          value: baseFare,
-        }
-      : null,
-    hasCurrencyValue(delivery?.pricing?.distanceFare)
-      ? {
-          label: 'Distance fare',
-          value: distanceFare,
-        }
-      : null,
-    hasCurrencyValue(delivery?.pricing?.fuelCost)
-      ? {
-          label: 'Fuel cost',
-          value: fuelCost,
-        }
-      : null,
-  ].filter((row): row is { label: string; value: number } => Boolean(row));
-  const visibleFareRows =
-    fareRows.length > 0
-      ? fareRows
-      : totalEarning > 0
-        ? [{ label: 'Estimated amount', value: totalEarning }]
-        : [];
+  const explicitPerKmRate = getCurrencyNumber(
+    delivery?.pricing?.perKmRate ?? delivery?.pricing?.ratePerKm
+  );
+  const perKmRate =
+    explicitPerKmRate ||
+    (fareDistanceKm > 0 && totalEarning > 0 ? totalEarning / fareDistanceKm : 0);
   const pickupDistanceKm = Number(delivery?.pricing?.pickupDistanceKm);
   const pickupAddress = delivery?.locations?.pickup?.address || 'Pickup address unavailable';
   const pickupLocation = isValidCoord(delivery?.locations?.pickup?.coords)
@@ -1799,6 +1854,15 @@ export default function AcceptedTripScreen() {
         prefillCategory: 'Delivery Issue',
       },
     });
+  };
+
+  const handleCancelDelivery = () => {
+    setIsCancelModalVisible(true);
+  };
+
+  const handleSendCancelRequest = () => {
+    setIsCancelModalVisible(false);
+    handleReportIssue();
   };
 
   const handleAcceptDelivery = async () => {
@@ -2045,6 +2109,7 @@ export default function AcceptedTripScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <TopNav
+        onHelp={handleReportIssue}
         onBack={
           isAccepted && isDetailsView
             ? () =>
@@ -2110,9 +2175,8 @@ export default function AcceptedTripScreen() {
         <View style={styles.fareSection}>
           <Text style={styles.sectionTitle}>Fare Breakdown</Text>
           <View style={styles.fareList}>
-            {visibleFareRows.map((row) => (
-              <FareLine key={row.label} label={row.label} value={formatCurrency(row.value)} />
-            ))}
+            <FareLine label="Trip distance" value={formatFareDistance(fareDistanceKm)} />
+            <FareLine label="Per km rate" value={formatPerKmRate(perKmRate)} />
             <View style={styles.fareDivider} />
             <FareLine label="Total earning" value={formatCurrency(totalEarning)} strong />
             <View style={styles.fareDivider} />
@@ -2125,6 +2189,10 @@ export default function AcceptedTripScreen() {
           <Pressable style={styles.reportButton} onPress={handleReportIssue}>
             <Text style={styles.reportButtonText}>Report issue</Text>
             <Ionicons name="arrow-forward" size={20} color="#d00416" />
+          </Pressable>
+        ) : isAccepted && isDetailsView ? (
+          <Pressable style={styles.cancelDeliveryButton} onPress={handleCancelDelivery}>
+            <Text style={styles.cancelDeliveryButtonText}>Cancel Delivery</Text>
           </Pressable>
         ) : !isAccepted ? (
           <SlideAcceptButton
@@ -2150,6 +2218,12 @@ export default function AcceptedTripScreen() {
           </Pressable>
         )}
       </View>
+
+      <CancelDeliveryModal
+        visible={isCancelModalVisible}
+        onClose={() => setIsCancelModalVisible(false)}
+        onSendRequest={handleSendCancelRequest}
+      />
     </SafeAreaView>
   );
 }
@@ -2161,6 +2235,7 @@ const styles = StyleSheet.create({
   },
   completedMain: {
     flex: 1,
+    width: '100%',
   },
   completedStatusSpacer: {
     height: 52,
@@ -2182,16 +2257,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   completedNavTitle: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 20,
-    fontWeight: '500',
     lineHeight: 32,
     color: '#1c1c1c',
   },
   completedBody: {
     flex: 1,
     width: '100%',
-    maxWidth: 720,
+    maxWidth: 412,
     alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2199,6 +2273,7 @@ const styles = StyleSheet.create({
   },
   completedIllustration: {
     width: '100%',
+    maxWidth: 412,
     height: 334,
   },
   completedCopyBlock: {
@@ -2209,7 +2284,7 @@ const styles = StyleSheet.create({
   },
   completedSuccessRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
   },
@@ -2218,9 +2293,9 @@ const styles = StyleSheet.create({
     height: 24,
   },
   completedSuccessText: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '500',
+    lineHeight: 16,
     color: '#007f3c',
     letterSpacing: -0.5,
   },
@@ -2230,18 +2305,16 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   completedEarningValue: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 40,
-    fontWeight: '500',
     lineHeight: 48,
     color: '#1c1c1c',
     textAlign: 'center',
   },
   completedSubtitle: {
     width: '100%',
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
-    fontWeight: '400',
     lineHeight: 24,
     color: '#1c1c1c',
     textAlign: 'center',
@@ -2261,9 +2334,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   completedHomeText: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '500',
+    lineHeight: 16,
     color: '#ffffff',
     letterSpacing: -0.5,
   },
@@ -2404,16 +2477,14 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   arrivalTitle: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 24,
-    fontWeight: '500',
     color: '#1c1c1c',
     letterSpacing: -1,
   },
   arrivalSubtitle: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
-    fontWeight: '400',
     lineHeight: 18,
     color: '#606060',
   },
@@ -2431,9 +2502,8 @@ const styles = StyleSheet.create({
   distanceBadgeText: {
     width: '100%',
     marginTop: -4,
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_600SemiBold',
     fontSize: 10,
-    fontWeight: '600',
     color: '#1c1c1c',
     textAlign: 'center',
   },
@@ -2456,9 +2526,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   bookingName: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 18,
-    fontWeight: '500',
     color: '#212121',
   },
   bookingMetaRow: {
@@ -2474,9 +2543,8 @@ const styles = StyleSheet.create({
   },
   bookingMeta: {
     flex: 1,
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 12,
-    fontWeight: '500',
     color: '#616161',
   },
   callButton: {
@@ -2518,9 +2586,8 @@ const styles = StyleSheet.create({
     height: 20,
   },
   headingTitle: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '500',
     color: '#1c1c1c',
     letterSpacing: -0.5,
   },
@@ -2531,9 +2598,8 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   headingDetailsText: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
-    fontWeight: '400',
     lineHeight: 24,
     color: '#606060',
   },
@@ -2544,23 +2610,20 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   headingAddressTitle: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '500',
     color: '#1c1c1c',
     letterSpacing: -0.5,
   },
   headingAddressPrimary: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
-    fontWeight: '400',
     lineHeight: 24,
     color: '#616161',
   },
   headingAddressSecondary: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
-    fontWeight: '400',
     lineHeight: 18,
     color: '#616161',
   },
@@ -2578,9 +2641,8 @@ const styles = StyleSheet.create({
     opacity: 0.65,
   },
   arrivedButtonText: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '500',
     color: '#ffffff',
     letterSpacing: -0.5,
     textAlign: 'center',
@@ -2619,9 +2681,8 @@ const styles = StyleSheet.create({
   },
   otpTitle: {
     width: '100%',
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 24,
-    fontWeight: '500',
     color: '#1c1c1c',
     letterSpacing: 0,
     textAlign: 'center',
@@ -2649,24 +2710,21 @@ const styles = StyleSheet.create({
     borderColor: '#d00416',
   },
   otpDigit: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 24,
-    fontWeight: '500',
     color: '#1c1c1c',
     letterSpacing: 0,
   },
   otpHelpText: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
-    fontWeight: '400',
     lineHeight: 18,
     color: '#606060',
     textAlign: 'center',
   },
   otpError: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
-    fontWeight: '400',
     lineHeight: 18,
     color: '#d00416',
     textAlign: 'center',
@@ -2677,6 +2735,108 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.32)',
     paddingHorizontal: 24,
+  },
+  cancelModalBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.32)',
+    paddingHorizontal: 12,
+  },
+  cancelModalCard: {
+    width: '100%',
+    maxWidth: 380,
+    alignItems: 'center',
+    gap: 24,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    padding: 12,
+    overflow: 'hidden',
+  },
+  cancelModalContent: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 16,
+  },
+  cancelWarningIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#d00416',
+  },
+  cancelWarningText: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 36,
+    lineHeight: 44,
+    color: '#ffffff',
+    textAlign: 'center',
+  },
+  cancelModalCopy: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 4,
+  },
+  cancelModalTitle: {
+    width: '100%',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 24,
+    lineHeight: 32,
+    letterSpacing: -1,
+    color: '#1c1c1c',
+    textAlign: 'center',
+  },
+  cancelModalSubtitle: {
+    width: '100%',
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#606060',
+    textAlign: 'center',
+  },
+  cancelModalActions: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  cancelModalNoButton: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#0055cc',
+    borderRadius: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  cancelModalNoText: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 16,
+    lineHeight: 16,
+    letterSpacing: -0.5,
+    color: '#606060',
+    textAlign: 'center',
+  },
+  cancelModalSendButton: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#d00416',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  cancelModalSendText: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 16,
+    lineHeight: 16,
+    letterSpacing: -0.5,
+    color: '#ffffff',
+    textAlign: 'center',
   },
   inTransitCard: {
     width: '100%',
@@ -2694,9 +2854,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   completeDropButtonText: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_600SemiBold',
     fontSize: 16,
-    fontWeight: '600',
     color: '#ffffff',
     textAlign: 'center',
   },
@@ -2725,11 +2884,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   navTitle: {
-    fontFamily: 'Poppins',
+    flex: 1,
+    fontFamily: 'Poppins_500Medium',
     fontSize: 20,
-    fontWeight: '500',
     lineHeight: 32,
     color: '#1c1c1c',
+  },
+  helpButton: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+  },
+  helpIcon: {
+    width: 24,
+    height: 24,
   },
   scroll: {
     flex: 1,
@@ -2749,16 +2919,14 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   earningLabel: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
-    fontWeight: '400',
     color: '#606060',
     lineHeight: 18,
   },
   earningValue: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 40,
-    fontWeight: '500',
     color: '#1c1c1c',
     lineHeight: 48,
   },
@@ -2781,9 +2949,8 @@ const styles = StyleSheet.create({
     height: 20,
   },
   sectionTitle: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '500',
     color: '#1c1c1c',
     letterSpacing: -0.5,
   },
@@ -2791,19 +2958,16 @@ const styles = StyleSheet.create({
     position: 'relative',
     backgroundColor: '#eff2f6',
     width: '100%',
-    borderWidth: 1,
-    borderColor: '#bbbbbb',
     borderRadius: 12,
-    padding: 8,
+    padding: 12,
     overflow: 'hidden',
-    flexDirection : 'row',
-    alignItems : 'center',
-    gap : 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 24,
   },
   routeRow: {
     minHeight: 64,
-    marginTop : 5,
-    marginBottom : 5
+    justifyContent: 'center',
   },
   routeMarkerWrap: {
     width: 20,
@@ -2844,32 +3008,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    minWidth: 0,
   },
   routeTitle: {
-    fontFamily: 'Poppins',
+    flexShrink: 1,
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '500',
     color: '#1c1c1c',
     letterSpacing: -0.5,
   },
   routeTime: {
-    flex: 1,
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 12,
-    fontWeight: '500',
     color: '#05c',
   },
   routeAddress: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
-    fontWeight: '400',
     color: '#616161',
     lineHeight: 24,
   },
   routeSubAddress: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
-    fontWeight: '400',
     color: '#616161',
     lineHeight: 18,
   },
@@ -2895,16 +3056,14 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   fareLabel: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 14,
-    fontWeight: '400',
     color: '#8e8e8e',
     lineHeight: 21,
   },
   fareValue: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 14,
-    fontWeight: '500',
     color: '#606060',
     lineHeight: 21,
   },
@@ -2967,9 +3126,8 @@ const styles = StyleSheet.create({
   },
   acceptText: {
     flex: 1,
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '500',
     color: '#ffffff',
     textAlign: 'center',
     letterSpacing: -0.5,
@@ -2989,15 +3147,33 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   reportButtonText: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '500',
+    letterSpacing: -0.5,
+    color: '#d00416',
+    textAlign: 'center',
+  },
+  cancelDeliveryButton: {
+    width: '100%',
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#d00416',
+    borderRadius: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  cancelDeliveryButtonText: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 16,
+    lineHeight: 16,
     letterSpacing: -0.5,
     color: '#d00416',
     textAlign: 'center',
   },
   routeIcon: {
-    width: 30,
-    height : '70%',
+    width: 20,
+    height: 90,
   },
 });

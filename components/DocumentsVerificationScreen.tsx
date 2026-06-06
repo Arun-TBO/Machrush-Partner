@@ -201,6 +201,10 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
       >
         <Pressable style={styles.modalOverlay} onPress={() => setShowSupportModal(false)}>
           <Pressable style={styles.supportSheet} onPress={(event) => event.stopPropagation()}>
+            <View style={styles.supportSheetHeader}>
+              <View style={styles.supportDragHandle} />
+            </View>
+
             <View style={styles.supportIntro}>
               <Text style={styles.supportTitle}>Contact support</Text>
               <Text style={styles.supportSubtitle}>
@@ -266,10 +270,10 @@ const styles = StyleSheet.create({
   },
   navTitle: {
     flex: 1,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 20,
     fontWeight: '500',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
     lineHeight: 32,
   },
   screenBody: {
@@ -277,11 +281,10 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     width: '100%',
-    maxWidth: 720,
     alignSelf: 'center',
     flexGrow: 1,
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 24,
     paddingBottom: 24,
   },
   loadingContainer: {
@@ -291,18 +294,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   loadingText: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
+    lineHeight: 24,
   },
   reviewCard: {
     width: '100%',
     backgroundColor: '#ffffff',
     borderRadius: 16,
     paddingHorizontal: 16,
-    paddingVertical: 40,
-    gap: 16,
+    paddingVertical: 24,
+    gap: 24,
     alignItems: 'center',
     overflow: 'hidden',
   },
@@ -311,18 +315,18 @@ const styles = StyleSheet.create({
     height: 80,
   },
   mainTitle: {
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 40,
     fontWeight: '500',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
     lineHeight: 48,
     textAlign: 'center',
   },
   mainDescription: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 18,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     textAlign: 'center',
     letterSpacing: -0.5,
     lineHeight: 27,
@@ -346,25 +350,26 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   actionTitle: {
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    color: '#000000',
-    fontFamily: 'Poppins',
+    lineHeight: 16,
     letterSpacing: -0.5,
   },
   actionMessage: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 24,
   },
   infoText: {
     marginTop: 40,
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 14,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 21,
   },
   bottomArea: {
@@ -392,10 +397,11 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   continueButtonText: {
+    color: '#606060',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    color: '#606060',
-    fontFamily: 'Poppins',
+    lineHeight: 16,
     letterSpacing: -0.5,
   },
   continueButtonTextActive: {
@@ -408,16 +414,25 @@ const styles = StyleSheet.create({
   },
   supportSheet: {
     width: '100%',
-    maxWidth: 720,
     alignSelf: 'center',
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingHorizontal: 16,
-    paddingTop: 16,
     paddingBottom: 40,
     gap: 24,
     overflow: 'hidden',
+  },
+  supportSheetHeader: {
+    width: '100%',
+    alignItems: 'center',
+    padding: 16,
+  },
+  supportDragHandle: {
+    width: 32,
+    height: 4,
+    borderRadius: 100,
+    backgroundColor: '#79747e',
   },
   supportIntro: {
     width: '100%',
@@ -426,19 +441,20 @@ const styles = StyleSheet.create({
   },
   supportTitle: {
     width: '100%',
+    color: '#29292b',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 24,
     fontWeight: '500',
-    color: '#29292b',
-    fontFamily: 'Poppins',
     textAlign: 'center',
+    lineHeight: 24,
     letterSpacing: -1,
   },
   supportSubtitle: {
     width: '100%',
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 14,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 21,
     textAlign: 'center',
   },
@@ -474,17 +490,18 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   supportLabel: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 24,
   },
   supportValue: {
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
+    lineHeight: 16,
     letterSpacing: -0.5,
   },
 });
