@@ -508,7 +508,10 @@ const styles = StyleSheet.create({
 =======
     gap: 16,
     
+<<<<<<< HEAD
 >>>>>>> 671bddb (complete the alignment)
+=======
+>>>>>>> 65b6a4c6fe790f9c0668b4549f9dacdb5ae9df8d
   },
   deliveryHeaderRow: {
     width: '100%',
