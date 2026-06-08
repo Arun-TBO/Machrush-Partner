@@ -251,7 +251,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
       </View>
 
       <View style={styles.navigation}>
-        <View style={styles.homeIndicator} />
+
       </View>
     </Animated.View>
   );
@@ -325,7 +325,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
-    lineHeight: 18,
     letterSpacing: 0,
   },
   phoneNumberLink: {

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
@@ -11,14 +11,16 @@ import {
   Text,
   TextInput,
   View,
+  Modal
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { auth } from '@/lib/firebase';
 import { submitDriverReport } from '@/lib/firestoreOnboardingService';
+// import { Color } from 'react-native/types_generated/Libraries/Animated/AnimatedExports';
 
 const backImage = require('@/assets/images/profile/back.png');
-
+const reviewWarning = require('@/assets/images/profile/review-warning.png');
 const reportCategories = [
   {
     label: 'Payment Issue',
@@ -145,13 +147,13 @@ function SelectField({
 }) {
   return (
     <View style={styles.fieldBlock}>
-      <Text style={styles.label}>{label}</Text>
-      <Pressable accessibilityRole="button" style={styles.selectBox} onPress={onPress}>
+      <Text style={[styles.label ,  { color: expanded ? '#1C1C1C' : '#606060' } ]}>{label}</Text>
+      <Pressable accessibilityRole="button" style={[styles.selectBox ,  { borderColor : expanded ? '#1C1C1C' : '#8e8e8e' , borderWidth: expanded ? 1 : 1}]} onPress={onPress}>
         <Text style={[styles.inputValue, { color: valueColor }]}>{value}</Text>
         <DownIcon />
       </Pressable>
       {expanded ? (
-        <View style={styles.dropdownMenu}>
+        <View style={[styles.dropdownMenu ,  { borderColor : expanded ? '#1C1C1C' : '#8e8e8e' ,  borderWidth: expanded ? 1 : 1 }] }>
           {options.map((option) => (
             <Pressable
               key={option}
@@ -215,6 +217,13 @@ export default function ReportProblemScreen() {
   const [openDropdown, setOpenDropdown] = React.useState<'category' | 'issue' | null>(null);
   const [selectedImages, setSelectedImages] = React.useState<(string | null)[]>([null, null, null]);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+ 
+  const [isFiledError , setFiled] = useState<boolean>(false)
+  const [filedError , setError] = useState<string | undefined>('')
+  const [isReportSubmit , setReportSubmit] = useState(false)
+  
+  const [isFocused, setIsFocused] = useState(false);
+
 
   const selectedCategoryConfig = reportCategories.find(
     (category) => category.label === selectedCategory
@@ -241,14 +250,14 @@ export default function ReportProblemScreen() {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (!permission.granted) {
-        Alert.alert('Permission needed', 'Please allow gallery access to add report images.');
+         setError("Permission needed', 'Please allow gallery access to add report images.")
         return;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         base64: true,
-        allowsEditing: true,
+        allowsEditing: false,
         aspect: [1, 1],
         quality: 0.55,
       });
@@ -271,25 +280,32 @@ export default function ReportProblemScreen() {
       );
     } catch (error) {
       console.error('Error selecting report image:', error);
-      Alert.alert('Image failed', 'Could not add this image. Please try again.');
+        setError("Image failed', 'Could not add this image. Please try again.")
     }
   };
 
   const handleSubmitReport = async () => {
+   
+
     if (!selectedCategory) {
-      Alert.alert('Select category', 'Please choose a report category.');
+         setFiled(true)
+       setError("Select category,Please choose a report category.")
+   
       return;
     }
 
     if (!selectedIssue) {
-      Alert.alert('Select issue', 'Please choose a specific issue.');
+       setFiled(true)
+       setError("Select issue,Please choose a specific issue.")
+
       return;
     }
 
     const trimmedDescription = description.trim();
 
     if (!trimmedDescription) {
-      Alert.alert('Describe problem', 'Please describe your problem briefly.');
+       setFiled(true)
+         setError("Describe problem,Please describe your problem briefly.")
       return;
     }
 
@@ -303,7 +319,7 @@ export default function ReportProblemScreen() {
       const uid = auth.currentUser?.uid || storedUid;
 
       if (!uid) {
-        Alert.alert('Login required', 'Please login again before submitting a report.');
+        setError("Login required,Please login again before submitting a report.")
         router.replace('/phone-number');
         return;
       }
@@ -320,23 +336,78 @@ export default function ReportProblemScreen() {
       );
 
       if (!reportResult.success) {
-        Alert.alert('Submit failed', reportResult.error || 'Could not submit report.');
+        setError( reportResult.error || "Could not submit report." )
         return;
       }
-
-      Alert.alert('Report submitted', 'Our team will review your report within 24 hours.', [
-        {
-          text: 'OK',
-          onPress: () => router.back(),
-        },
-      ]);
+       
+      setError("Report submitted,Our team will review your report within 24 hours.")
+       setFiled(true) 
+      //  onPress: ,
+      setReportSubmit(true)
     } catch (error) {
       console.error('Error submitting report:', error);
-      Alert.alert('Submit failed', 'Could not submit report. Please try again.');
+      setError("Submit failed,Could not submit report. Please try again")
     } finally {
       setIsSubmitting(false);
     }
   };
+ 
+  function FiledErrorModal({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent  statusBarTranslucent onRequestClose={onClose}>
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable style={styles.supportSheet} onPress={(event) => event.stopPropagation()}>
+          {/* <View style={styles.sheetHeader}>
+            <View style={styles.dragHandle} />
+          </View> */}
+
+          <View style={styles.supportIntro}>
+            <Text style={styles.supportTitle}>{filedError?.split(",")[0]}</Text>
+            <Text style={styles.supportSubtitle}>
+              {filedError?.split(",")[1]}
+            </Text>
+          </View>
+            
+          {
+            isReportSubmit ? (
+
+              <Pressable
+              style={ styles.doneBtn}
+              accessibilityRole="button"
+              onPress={() => router.back()}
+            > 
+             
+              <Text style={styles.goBackButtonText}>Done</Text>
+            </Pressable>
+                
+            ) : (
+                <Pressable
+              style={styles.goBackButton}
+              accessibilityRole="button"
+              onPress={onClose}
+            > 
+             
+              <Text style={styles.goBackButtonText}>Ok</Text>
+            </Pressable>
+            )
+          }
+          
+
+
+            
+
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -380,15 +451,23 @@ export default function ReportProblemScreen() {
           />
 
           <View style={styles.fieldBlock}>
-            <Text style={styles.label}>Describe your problem</Text>
+            <Text style={[styles.label , { color :  isFocused ? '#1C1C1C' : '#606060' }]}>Describe your problem</Text>
             <TextInput
-              multiline
+              multiline 
               maxLength={300}
               value={description}
               onChangeText={setDescription}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
               placeholder="Describe your problem briefly"
               placeholderTextColor="#606060"
-              style={styles.textArea}
+              style={[
+                styles.textArea,
+                {
+                  borderColor: isFocused ? '#1C1C1C' : '#8e8e8e',
+                  borderWidth: isFocused ? 1 : 1 
+                },
+              ]}
               textAlignVertical="top"
             />
             <Text style={styles.characterLimit}>300 characters max</Text>
@@ -413,7 +492,7 @@ export default function ReportProblemScreen() {
         </Text>
 
         <View style={styles.warningBar}>
-          <WarningIcon />
+          <Image source={reviewWarning} style={styles.warningIcon}/>
           <Text style={styles.warningText}>False reports may resultin account suspension</Text>
         </View>
       </ScrollView>
@@ -434,7 +513,10 @@ export default function ReportProblemScreen() {
             </>
           )}
         </Pressable>
-      </View>
+             {/* <View style={styles.navigation}></View> */}
+      </View> 
+ 
+      <FiledErrorModal visible={isFiledError} onClose={() => setFiled(false)} />
     </SafeAreaView>
   );
 }
@@ -512,10 +594,11 @@ const styles = StyleSheet.create({
   },
   label: {
     width: '100%',
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Poppins',
     fontSize: 16,
     lineHeight: 24,
-    color: '#606060',
+    // color: '#606060',
+    fontWeight : 500
   },
   selectBox: {
     width: '100%',
@@ -524,7 +607,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderWidth: 1,
-    borderColor: '#8e8e8e',
+    // borderColor: '#8e8e8e',
     borderRadius: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -533,15 +616,16 @@ const styles = StyleSheet.create({
   inputValue: {
     flex: 1,
     minWidth: 0,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: '',
     fontSize: 16,
     lineHeight: 24,
+    fontWeight  : 600
   },
   dropdownMenu: {
     width: '100%',
     marginTop: -8,
-    borderWidth: 1,
-    borderColor: '#8e8e8e',
+    // borderWidth: 1,
+    // borderColor: '#8e8e8e',
     borderRadius: 4,
     backgroundColor: '#eff2f6',
     overflow: 'hidden',
@@ -589,14 +673,15 @@ const styles = StyleSheet.create({
   textArea: {
     width: '100%',
     height: 120,
-    borderWidth: 1,
-    borderColor: '#8e8e8e',
+    // borderWidth: 1,
+    // borderColor: '#8e8e8e',
     borderRadius: 4,
     padding: 8,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Poppins',
     fontSize: 16,
     lineHeight: 24,
-    color: '#606060',
+    color: '#1C1C1C',
+     fontWeight  : 700
   },
   characterLimit: {
     width: '100%',
@@ -659,7 +744,6 @@ const styles = StyleSheet.create({
     minHeight: 29,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 4,
     borderRadius: 4,
     backgroundColor: 'rgba(204, 119, 0, 0.25)',
@@ -667,14 +751,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   warningIcon: {
-    width: 18,
-    height: 18,
-    borderWidth: 1.5,
-    borderColor: '#cc7700',
-    borderRadius: 3,
-    alignItems: 'center',
-    justifyContent: 'center',
-    transform: [{ rotate: '45deg' }],
+    width: 17,
+    height: 15,
   },
   warningIconText: {
     fontFamily: 'Poppins_500Medium',
@@ -684,10 +762,8 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '-45deg' }],
   },
   warningText: {
-    flexShrink: 1,
     fontFamily: 'Poppins_400Regular',
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 13,
     color: '#cc7700',
   },
   bottomBar: {
@@ -695,7 +771,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: 80,
+    padding : 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#ffffff',
@@ -713,6 +789,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 16,
     overflow: 'hidden',
+   
   },
   submitButtonDisabled: {
     opacity: 0.72,
@@ -758,5 +835,92 @@ const styles = StyleSheet.create({
     borderRadius: 1,
     backgroundColor: '#ffffff',
     transform: [{ rotate: '-45deg' }],
+  },
+  modalBackdrop: {
+    flexDirection: 'column',
+    alignItems : 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.28)',
+    height : '100%'
+
+  },
+  supportSheet: {
+    borderRadius : 20,
+    backgroundColor: '#ffffff',
+  
+    width : 300,
+    padding : 20
+  },
+  sheetHeader: {
+    width: '100%',
+    alignItems: 'center',
+    padding: 16,
+  },
+  dragHandle: {
+    width: 32,
+    height: 4,
+    borderRadius: 100,
+    backgroundColor: '#79747e',
+  },
+  supportIntro: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 8,
+  },
+  supportTitle: {
+    width: '100%',
+    color: '#29292b',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 24,
+    fontWeight: '500',
+    letterSpacing: -1,
+    textAlign: 'center',
+  },
+  supportSubtitle: {
+    width: '100%',
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 18,
+    fontWeight: '400',
+    textAlign: 'center',
+  },
+  goBackButton: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#0055cc',
+    borderRadius: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    overflow: 'hidden',
+    backgroundColor : '#0055cc',
+    marginTop : 20
+  },
+  doneBtn : {
+     backgroundColor : '#1FC16B',
+      width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#1FC16B',
+    borderRadius: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    overflow: 'hidden',
+    marginTop : 20
+  },
+  goBackButtonText: {
+    color: '#ffffff',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 16,
+    lineHeight: 16,
+    letterSpacing: -0.5,
+    textAlign: 'center',
+  },
+  navigation: {
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

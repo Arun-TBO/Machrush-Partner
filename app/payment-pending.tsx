@@ -1,4 +1,4 @@
-import React from 'react';
+import React , {useState} from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 const paymentThumbImage = require('@/assets/images/delivery/payment-detail-thumb.png');
-
+const tablelocation = require('@/assets/images/profile/tablelocation.png')
 type DeliveryTimestamp =
   | string
   | number
@@ -173,20 +173,16 @@ function RoutePoint({
 
   return (
     <View style={styles.routePoint}>
-      <View style={styles.routeIconWrap}>
-        <View style={styles.routeIconOuter}>
-          <View style={styles.routeIconInner} />
-        </View>
-      </View>
+    
       <View style={styles.routeText}>
-        <Text style={styles.routePointTitle} numberOfLines={1}>
+        <Text style={styles.routePointTitle}>
           {title}
         </Text>
-        <Text style={styles.routePrimary} numberOfLines={1}>
+        <Text style={styles.routePrimary}>
           {parts.primary}
         </Text>
         {parts.secondary ? (
-          <Text style={styles.routeSecondary} numberOfLines={1}>
+          <Text style={styles.routeSecondary}>
             {parts.secondary}
           </Text>
         ) : null}
@@ -280,6 +276,10 @@ export default function PaymentPendingScreen() {
   const title = `${pickupParts.primary}${pickupParts.secondary ? `, ${pickupParts.secondary}` : ''}`;
   const routeDuration = formatDuration(delivery);
   const profileImageUri = getProfileImageUri(delivery);
+ 
+  const tableLocationImage = require('@/assets/images/profile/tablelocation.png');
+  const pickAndDropIcon = require('@/assets/images/pickAndDropIcon1.png');
+  const [isTransactionDetails , setTransactionDetails] = useState(true)
 
   const handleReportIssue = () => {
     router.push({
@@ -335,18 +335,34 @@ export default function PaymentPendingScreen() {
 
             <View style={styles.routeCard}>
               <View style={styles.routeHeader}>
-                <Ionicons name="navigate" size={20} color="#1c1c1c" />
+                <Image source={tableLocationImage} style={styles.headingTitleIcon} resizeMode="contain" />
                 <Text style={styles.routeTitle}>Route</Text>
               </View>
+            
+         
+         
+         
               <View style={styles.routeBox}>
-                <View style={styles.routeConnector} />
-                <RoutePoint title="Pickup" address={pickupAddress} />
-                <View style={styles.routeDivider} />
+                
+               <Image source={ pickAndDropIcon } style={styles.routeIcon}  />
+
+               <View>
+                     
+                     <RoutePoint title="Pickup" address={pickupAddress} />
+               
+                  <View style={styles.routeSeparator} />
+               
                 <RoutePoint title={distanceLabel} address={dropAddress} />
                 <Text style={styles.routeTotal}>
                   Total {distance > 0 ? `${Math.round(distance)} kms` : 'distance unavailable'} {'\u2022'} {routeDuration}
                 </Text>
+
+               </View>
+                 
               </View>
+            
+            
+            
             </View>
           </View>
 
@@ -369,12 +385,22 @@ export default function PaymentPendingScreen() {
             </View>
 
             <View style={styles.transactionBlock}>
-              <View style={styles.transactionHeader}>
+              <Pressable style={styles.transactionHeader}
+                onPress={() => setTransactionDetails(!isTransactionDetails)}
+              >
                 <Text style={styles.transactionTitle}>Transaction Details</Text>
-                <Ionicons name="chevron-up" size={24} color="#8e8e8e" />
-              </View>
-              <PaymentLine label="Send by" value="MachRush Admin" />
-              <PaymentLine label="Expected settlement" value="Processing" />
+                  <Ionicons name={ isTransactionDetails ? "chevron-up"  :  "chevron-down"} size={24} color="#8e8e8e" />
+              </Pressable>
+             { isTransactionDetails && (
+                     
+                     <>
+                      <PaymentLine label="Send by" value="MachRush Admin" />
+                      <PaymentLine label="Expected settlement" value="Processing" />
+                     </>
+
+              )}
+             
+              
             </View>
           </View>
 
@@ -396,6 +422,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#ffffff',
+     padding : 10
   },
   header: {
     position: 'absolute',
@@ -500,9 +527,7 @@ const styles = StyleSheet.create({
   earnedTitle: {
     flex: 1,
     fontFamily: 'Poppins_500Medium',
-    fontSize: 24,
-    lineHeight: 24,
-    letterSpacing: -1,
+    fontSize: 22,
     color: '#1c1c1c',
   },
   paymentCompleteRow: {
@@ -543,18 +568,22 @@ const styles = StyleSheet.create({
     color: '#1c1c1c',
   },
   routeBox: {
-    position: 'relative',
+     position: 'relative',
+    backgroundColor: '#eff2f6',
     width: '100%',
     borderRadius: 12,
-    backgroundColor: '#eff2f6',
     padding: 12,
-    gap: 12,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 24,
   },
   routePoint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 24,
-    minHeight: 54,
+     minHeight: 64,
+    justifyContent: 'center',
+    width : "90%",
+    marginTop : 5,
+    marginBottom : 5
   },
   routeIconWrap: {
     width: 20,
@@ -580,6 +609,7 @@ const styles = StyleSheet.create({
   routeText: {
     flex: 1,
     minWidth: 0,
+    padding : 4
   },
   routePointTitle: {
     fontFamily: 'Poppins_500Medium',
@@ -617,7 +647,7 @@ const styles = StyleSheet.create({
     borderColor: '#0055cc',
   },
   routeTotal: {
-    marginLeft: 44,
+    marginLeft: 5,
     fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     lineHeight: 18,
@@ -739,4 +769,17 @@ const styles = StyleSheet.create({
     color: '#d00416',
     textAlign: 'center',
   },
+   headingTitleIcon: {
+    width: 20,
+    height: 20,
+  },
+  routeIcon: {
+    width: 30,
+    height: '70%',
+  },routeSeparator: {
+    height: 1,
+    borderTopWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#d6d6d6',
+  }
 });
