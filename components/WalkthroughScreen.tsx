@@ -199,15 +199,28 @@ Animated.parallel([
 
    
   return (
-
+        
+  
+    
+    
+ 
         showVerification ? (
-      <MobileNumberVerification
+          <>
+           <StatusBar  translucent
+  backgroundColor="transparent"
+ /> 
+
+ <MobileNumberVerification
         onVerify={handleVerificationComplete}
         onBack={() => setShowVerification(false)}
       />
+          </>
+      
     ) : (
         <View style={styles.screen}   {...panResponder.panHandlers}>
-      <StatusBar hidden />
+         <StatusBar  translucent
+  backgroundColor="transparent"
+ />
        
       
 
@@ -285,7 +298,7 @@ Animated.parallel([
         </View>
 
         <View style={styles.navigation}>
-          <View style={styles.homeIndicator} />
+       
         </View>
       </View>
 
@@ -293,7 +306,7 @@ Animated.parallel([
     </View>
     )
 
-    
+        
   );
 }
 

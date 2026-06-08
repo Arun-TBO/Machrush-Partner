@@ -41,7 +41,7 @@ const termsImage = require('@/assets/images/profile/terms.png');
 const logoutImage = require('@/assets/images/profile/logout.png');
 const supportCallImage = require('@/assets/images/profile/support-call.png');
 const supportEmailImage = require('@/assets/images/profile/support-email.png');
-
+const Paymentpolicy = require('@/assets/images/profile/Paymentpolicy.png');
 const menuRows = [
   { id: 'documents', label: 'Documents', icon: documentsImage, iconSize: 24 },
   { id: 'bank', label: 'Bank details', icon: bankImage, iconSize: 20 },
@@ -49,6 +49,7 @@ const menuRows = [
   { id: 'report', label: 'Report a problem', icon: reportImage, iconSize: 24 },
   { id: 'help', label: 'Get Help', icon: helpImage, iconSize: 24 },
   { id: 'terms', label: 'Terms & conditions', icon: termsImage, iconSize: 24 },
+  { id: 'Payment policy', label: 'Payment policy', icon: Paymentpolicy, iconSize: 24 },
 ];
 
 type DeliveryRecord = {
@@ -159,7 +160,7 @@ function SupportModal({
   onClose: () => void;
 }) {
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent  onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={onClose}>
         <Pressable style={styles.supportSheet} onPress={(event) => event.stopPropagation()}>
           <View style={styles.sheetHeader}>
@@ -193,7 +194,7 @@ function LogoutModal({
   onLogout: () => void;
 }) {
   return (
-    <Modal visible={visible} transparent animationType="slide"  statusBarTranslucent onRequestClose={onClose}>
+    <Modal visible={visible} transparent  statusBarTranslucent onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={onClose}>
         <Pressable style={styles.logoutSheet} onPress={(event) => event.stopPropagation()}>
           <View style={styles.logoutDialog}>
@@ -754,8 +755,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: '#d2d2d2',
+   
   },
   menuRow: {
     minHeight: 67,
@@ -814,8 +814,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    lineHeight: 16,
-    letterSpacing: -0.5,
+
     textAlign: 'center',
   },
   modalBackdrop: {
@@ -941,7 +940,6 @@ const styles = StyleSheet.create({
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 24,
-    lineHeight: 24,
     letterSpacing: -1,
     textAlign: 'center',
   },
@@ -974,7 +972,7 @@ const styles = StyleSheet.create({
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    lineHeight: 16,
+      lineHeight: 19,
     letterSpacing: -0.5,
     textAlign: 'center',
   },
@@ -993,7 +991,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    lineHeight: 16,
+    lineHeight: 19,
     letterSpacing: -0.5,
     textAlign: 'center',
   },
