@@ -1182,7 +1182,7 @@ const styles = StyleSheet.create({
   routeAddress: {
     color: '#616161',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '400',
   },
   routeSeparator: {

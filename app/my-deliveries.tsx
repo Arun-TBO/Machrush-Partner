@@ -662,7 +662,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 412,
     alignSelf: 'center',
-    paddingBottom: 94,
+    paddingBottom: 30,
   },
   chartSection: {
     width: '100%',

@@ -422,7 +422,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#ffffff',
-     padding : 10
+     padding : 18
   },
   header: {
     position: 'absolute',
@@ -482,8 +482,6 @@ const styles = StyleSheet.create({
   summaryBlock: {
     width: '100%',
     gap: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 24,
   },
   deliveryHeaderRow: {
     width: '100%',
