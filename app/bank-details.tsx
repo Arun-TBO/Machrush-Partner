@@ -316,14 +316,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
-    lineHeight: 18,
   },
   supportLink: {
     color: '#0055cc',
     fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
-    lineHeight: 18,
   },
   modalBackdrop: {
     flex: 1,

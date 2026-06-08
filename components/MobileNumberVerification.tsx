@@ -415,7 +415,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
         </View>
 
         <View style={styles.navigation}>
-          <View style={styles.homeIndicator} />
+         
         </View>
       </Animated.View>
     )

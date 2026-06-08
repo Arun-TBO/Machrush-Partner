@@ -11,6 +11,8 @@ const homeTabImage = require('@/assets/images/home-tab-home.png');
 const deliveriesTabImage = require('@/assets/images/home-tab-deliveries.png');
 const profileTabImage = require('@/assets/images/home-tab-profile.png');
 const tabProfileActive = require('@/assets/images/profile/tab-profile-active.png')
+const tab2 = require('@/assets/images/tab2.png')
+const tab2Inactive = require('@/assets/images/tab2.png')
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
@@ -92,8 +94,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   tabIcon: {
-    width: 28,
-    height: 28,
+    width: 20,
+    height: 20,
   },
   tabLabel: {
     fontFamily: 'Poppins_500Medium',

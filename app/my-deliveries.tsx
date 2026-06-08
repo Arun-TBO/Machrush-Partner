@@ -264,6 +264,7 @@ function WeeklyChart({
   return (
     <View style={styles.chartSection}>
       <Text style={styles.peakAmount}>{peakAmount}</Text>
+       {/* <View style={styles.routeSeparator} /> */}
       <View style={styles.chartGrid}>
         {bars.map((height, index) => (
           <View
@@ -686,10 +687,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'center',
     gap: 12,
+    borderBottomWidth : 1,
     borderTopWidth: 1,
-    borderBottomWidth: 1,
     borderStyle: 'dashed',
-    borderColor: 'rgba(51, 51, 51, 0.5)',
+    borderColor: '#d6d6d6',
   },
   chartBar: {
     flex: 1,
@@ -697,7 +698,7 @@ const styles = StyleSheet.create({
     maxWidth: 44,
     borderRadius: 4,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(51, 51, 51, 0.5)',
+    borderBottomColor: '#33333380',
     backgroundColor: '#76b0ff',
   },
   chartBarActive: {
@@ -732,9 +733,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontFamily: 'Poppins_500Medium',
-    fontSize: 24,
-    lineHeight: 24,
-    letterSpacing: -1,
+    fontSize: 20,
     color: '#1c1c1c',
   },
   statsRow: {
@@ -770,12 +769,11 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
+    justifyContent: 'space-between',
+    padding : 20
   },
   segmentedControl: {
-    flex: 1,
+
     height: 32,
     flexDirection: 'row',
     borderWidth: 1,
@@ -783,16 +781,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#eff2f6',
+  
   },
   segment: {
-    flex: 1,
+   
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    
+    width: 85
   },
   segmentActive: {
     backgroundColor: '#ffffff',
+  
   },
   segmentText: {
     fontFamily: 'Poppins_400Regular',
@@ -802,6 +802,7 @@ const styles = StyleSheet.create({
   },
   segmentTextActive: {
     color: '#1c1c1c',
+
   },
   loadingRow: {
     width: '100%',
@@ -899,5 +900,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#606060',
     textAlign: 'center',
+  },
+  routeSeparator: {
+    height: 1,
+   
+    borderTopWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#d6d6d6',
+    width : '100%'
   },
 });

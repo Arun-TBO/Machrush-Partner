@@ -369,7 +369,7 @@ function RoutePoint({
           <Text style={styles.routeTitle}>{title}</Text>
           <Text style={styles.routeTime}>{time}</Text>
         </View>
-        <Text style={styles.routeAddress} numberOfLines={2}>
+        <Text style={styles.routeAddress}>
           {address}
         </Text>
       </View>
@@ -405,7 +405,7 @@ function JobCard({
         
         <Image source={ pickAndDropIcon } style={styles.routeIcon}  />
        
-       <View style={styles.pickDropContainer}>
+       <View >
           <RoutePoint
           title={job.pickupTitle}
           time={job.pickupTime}
@@ -419,9 +419,7 @@ function JobCard({
         />
 
        </View>
-        
-        
-       
+  
       </View>
 
       {!job.isResumeTrip ? (
@@ -434,7 +432,7 @@ function JobCard({
             disabled={!canAcceptNewJobs}
             onPress={() => onAccept(job)}
           >
-            <Text style={styles.acceptText}>Accept</Text>
+            <Text style={styles.acceptText}>View Details</Text>
           </Pressable>
         </View>
       ) : null}
@@ -1063,7 +1061,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 24,
     fontWeight: '500',
-    lineHeight: 24,
     letterSpacing: -1,
   },
   homeSection: {
@@ -1136,27 +1133,31 @@ const styles = StyleSheet.create({
     borderColor: '#bbbbbb',
     borderRadius: 12,
     backgroundColor: '#ffffff',
-    padding: 8,
-    overflow: 'hidden',
-    flexDirection : 'row',
-    alignItems : 'center',
-    gap : 10,
+    padding : 2,
+     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+     gap : 18
   },
   routePoint: {
     marginBottom : 5,
     marginTop : 5,
-    padding: 3
+ 
+    width : "92%"
   },
   routeIcon: {
     width: 30,
-    height : '70%',
+    height : '65%',
+    paddingRight : 10
   },
   pickDropContainer : {
-    padding : 4
+    
   },
   routeTextWrap: {
-    padding : 3,
-    justifyContent: 'center',
+    padding : 2,
+    overflow: 'hidden',
+    borderColor : '#0000',
+    borderWidth : 1
   },
   routeMetaRow: {
     flexDirection: 'row',
@@ -1181,17 +1182,15 @@ const styles = StyleSheet.create({
   routeAddress: {
     color: '#616161',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '400',
-    lineHeight: 24,
   },
   routeSeparator: {
     height: 1,
-   
     borderTopWidth: 1,
     borderStyle: 'dashed',
     borderColor: '#d6d6d6',
-    width : '100%'
+     width : "90%"
   },
   routeConnector: {
     position: 'absolute',

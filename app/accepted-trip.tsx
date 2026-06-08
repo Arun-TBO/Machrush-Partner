@@ -1,5 +1,6 @@
 import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { StatusBar } from 'expo-status-bar';
 import {
   Alert,
   Animated,
@@ -27,7 +28,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { auth } from '@/lib/firebase';
 import { getDriverProfile } from '@/lib/firestoreOnboardingService';
 
-const pickAndDropIcon = require('@/assets/images/pickAndDropIcon.png');
+const pickAndDropIcon = require('@/assets/images/pickAndDropIcon1.png');
 const customerAvatarImage = require('@/assets/images/delivery/customer-avatar.jpg');
 const tripCompletedBanknoteImage = require('@/assets/images/delivery/trip-completed-banknote.png');
 const tripCompletedTickImage = require('@/assets/images/delivery/trip-completed-tick.png');
@@ -628,7 +629,7 @@ function TopNav({
           style={styles.helpButton}
           onPress={onHelp}
         >
-          <Image source={helpImage} style={styles.helpIcon} resizeMode="contain" />
+          {/* <Image source={helpImage} style={styles.helpIcon} resizeMode="contain" /> */}
         </Pressable>
       </View>
     </View>
@@ -656,11 +657,11 @@ function RouteRow({
           <Text style={styles.routeTitle}>{title}</Text>
           {time ? <Text style={styles.routeTime}>{time}</Text> : null}
         </View>
-        <Text style={styles.routeAddress} numberOfLines={1}>
+        <Text style={styles.routeAddress} numberOfLines={2}>
           {primaryAddress}
         </Text>
         {secondaryAddress ? (
-          <Text style={styles.routeSubAddress} numberOfLines={1}>
+          <Text style={styles.routeSubAddress} numberOfLines={2}>
             {secondaryAddress}
           </Text>
         ) : null}
@@ -682,56 +683,112 @@ function OtpVerificationCard({
   onSubmit: () => void;
   isLoading?: boolean;
 }) {
-  const inputRef = React.useRef<TextInput>(null);
-  const digits = Array.from({ length: 4 }, (_, index) => value[index] || '');
 
   React.useEffect(() => {
-    const focusInput = () => {
-      inputRef.current?.focus();
-    };
-    const interactionHandle = InteractionManager.runAfterInteractions(focusInput);
-    const focusTimers = [120, 350, 700].map((delay) => setTimeout(focusInput, delay));
+  if (error) {
+    const firstEmptyIndex = digits.findIndex((d) => !d);
 
-    return () => {
-      interactionHandle.cancel();
-      focusTimers.forEach(clearTimeout);
-    };
-  }, []);
+    if (firstEmptyIndex >= 0) {
+      inputRefs.current[firstEmptyIndex]?.focus();
+    } else {
+      inputRefs.current[3]?.focus();
+    }
+  }
+}, [error]);
+
+  const inputRefs = React.useRef<(TextInput | null)[]>([]);
+
+  const digits = Array.from({ length: 4 }, (_, index) => value[index] || '');
+
+const handleOtpInput = (index: number, text: string) => {
+  const digit = text.replace(/\D/g, '').slice(-1);
+
+  const updatedDigits = [...digits];
+  updatedDigits[index] = digit;
+
+  onChange(updatedDigits.join(''));
+
+  if (digit && index < 3) {
+    inputRefs.current[index + 1]?.focus();
+  }
+};
+
+const handleOtpBackspace = (index: number) => {
+  const updatedDigits = [...digits];
+
+  if (updatedDigits[index]) {
+    // clear current box
+    updatedDigits[index] = '';
+    onChange(updatedDigits.join(''));
+    return;
+  }
+
+  if (index > 0) {
+    updatedDigits[index - 1] = '';
+    onChange(updatedDigits.join(''));
+
+    inputRefs.current[index - 1]?.focus();
+  }
+};
 
   React.useEffect(() => {
     if (value.length === 4 && !isLoading) {
       onSubmit();
     }
-  }, [isLoading, onSubmit, value]);
+  }, [value, isLoading, onSubmit]);
 
   return (
-    <Pressable style={styles.otpCard} onPress={() => inputRef.current?.focus()}>
+    <Pressable style={styles.otpCard}>
       <View style={styles.otpIconWrap}>
-        <Image source={otpResetImage} style={styles.otpIconImage} resizeMode="contain" />
-      </View>
-      <Text style={styles.otpTitle}>Enter OTP</Text>
-      <View style={styles.otpBoxRow}>
-        {digits.map((digit, index) => (
-          <View key={`${index}`} style={[styles.otpBox, error ? styles.otpBoxError : null]}>
-            <Text style={styles.otpDigit}>{digit}</Text>
-          </View>
-        ))}
-        <TextInput
-          ref={inputRef}
-          value={value}
-          onChangeText={(nextValue) => onChange(nextValue.replace(/\D/g, '').slice(0, 4))}
-          keyboardType="number-pad"
-          inputMode="numeric"
-          maxLength={4}
-          style={styles.hiddenOtpInput}
-          autoFocus
-          caretHidden
-          editable={!isLoading}
-          showSoftInputOnFocus
+        <Image
+          source={otpResetImage}
+          style={styles.otpIconImage}
+          resizeMode="contain"
         />
       </View>
-      {isLoading ? <Text style={styles.otpHelpText}>Verifying OTP...</Text> : null}
-      {error ? <Text style={styles.otpError}>{error}</Text> : null}
+
+      <Text style={styles.otpTitle}>Enter OTP</Text>
+
+      <View style={styles.otpBoxRow}>
+        {digits.map((digit, index) => (
+          <TextInput
+            key={index}
+            ref={(ref) => {
+              inputRefs.current[index] = ref;
+            }}
+            style={[
+              styles.otpBox,
+              digit ? styles.otpInputFilled : null,
+            ]}
+            value={digit}
+            onChangeText={(text) =>
+              handleOtpInput(index, text)
+            }
+            onKeyPress={({ nativeEvent }) => {
+  if (nativeEvent.key === 'Backspace') {
+    handleOtpBackspace(index);
+  }
+}}
+            keyboardType="number-pad"
+            maxLength={1}
+            editable={!isLoading}
+            textAlign="center"
+            autoFocus={index === 0}
+          />
+        ))}
+      </View>
+
+      {isLoading && (
+        <Text style={styles.otpHelpText}>
+          Verifying OTP...
+        </Text>
+      )}
+
+      {error && (
+        <Text style={styles.otpError}>
+          {error}
+        </Text>
+      )}
     </Pressable>
   );
 }
@@ -1361,14 +1418,16 @@ function AcceptedPickupView({
             : null}
         </MapView>
       </View>
-
+    
+    <StatusBar backgroundColor="#fff" />
       <Animated.View
         style={[
           styles.pickupSheet,
           {
-            height: TRACKING_SHEET_HEIGHT,
+            height: TRACKING_SHEET_HEIGHT ,
             transform: [{ translateY: sheetTranslateY }],
           },
+          
         ]}
       >
         <View style={styles.pickupSheetContent}>
@@ -1505,27 +1564,38 @@ function AcceptedPickupView({
             </Pressable>
           )}
         </View>
+      
       </Animated.View>
 
       <Modal
-        visible={isArrived && isOtpModalVisible}
-        transparent
+        visible={isArrived && isOtpModalVisible} 
+        transparent  
         animationType="fade"
         statusBarTranslucent
-        onRequestClose={() => undefined}
+        onRequestClose={() => false}
       >
-        <View style={styles.otpModalBackdrop}>
+        <Pressable
+    style={styles.otpModalBackdrop}
+    onPress={() => setIsOtpModalVisible(false)}
+  >
+    <Pressable
+      onPress={(e) => e.stopPropagation()}
+    >
+        {/* <View style={styles.otpModalBackdrop}> */}
+          
           <OtpVerificationCard
-            value={pickupOtp}
-            error={otpError}
-            isLoading={isVerifyingOtp}
-            onChange={(nextValue) => {
-              setPickupOtp(nextValue);
-              setOtpError(null);
-            }}
-            onSubmit={handleVerifyOtp}
-          />
-        </View>
+          value={pickupOtp}
+          error={otpError}
+          isLoading={isVerifyingOtp}
+          onChange={(nextValue) => {
+            setPickupOtp(nextValue);
+            setOtpError(null);
+          }}
+          onSubmit={handleVerifyOtp}
+        />
+        {/* </View> */}
+        </Pressable>
+        </Pressable>
       </Modal>
     </SafeAreaView>
   );
@@ -2217,6 +2287,7 @@ export default function AcceptedTripScreen() {
             <View style={styles.acceptIconGhost} />
           </Pressable>
         )}
+          <View style={styles.navigation}></View>
       </View>
 
       <CancelDeliveryModal
@@ -2432,19 +2503,22 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 24,
-    zIndex: 10,
+     paddingHorizontal: 16,
+     paddingVertical : 16,
+    // paddingTop: 16,
+    // // paddingBottom: 40,
+    // padding : 30,
+     zIndex: 10,
+     
   },
   pickupSheetContent: {
     flex: 1,
     gap: 24,
   },
   pickupActionArea: {
-    marginTop: 'auto',
-    paddingTop: 8,
-    paddingBottom: 10,
+   
+    paddingTop: 2,
+  
   },
   arrivalCard: {
     width: '100%',
@@ -2563,10 +2637,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e8e8e8',
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    padding:10,
     gap: 12,
     backgroundColor: '#ffffff',
+   
   },
   headingHeader: {
     flexDirection: 'row',
@@ -2608,6 +2682,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#eff2f6',
     padding: 12,
+   
   },
   headingAddressTitle: {
     fontFamily: 'Poppins_500Medium',
@@ -2628,24 +2703,28 @@ const styles = StyleSheet.create({
     color: '#616161',
   },
   arrivedButton: {
+    height: 52,
     width: '100%',
-    minHeight: 48,
-    borderRadius: 8,
+    maxWidth: 720,
     backgroundColor: '#1fc16b',
+    borderRadius: 12,
+    padding: 4,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    gap: 10,
+    marginTop : 'auto'
   },
   arrivedButtonDisabled: {
     opacity: 0.65,
   },
   arrivedButtonText: {
+    flex: 1,
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     color: '#ffffff',
-    letterSpacing: -0.5,
     textAlign: 'center',
+    letterSpacing: -0.5,
   },
   otpCard: {
     width: '100%',
@@ -2657,18 +2736,12 @@ const styles = StyleSheet.create({
     gap: 16,
     overflow: 'hidden',
   },
-  hiddenOtpInput: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 2,
-    minHeight: 44,
-    color: 'transparent',
-    backgroundColor: 'transparent',
-    opacity: 0.01,
-  },
+ hiddenOtpInput: {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  opacity: 0,
+},
   otpIconWrap: {
     width: 60,
     height: 60,
@@ -2688,24 +2761,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   otpBoxRow: {
-    width: '100%',
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    position: 'relative',
+  justifyContent: 'center',
+  gap: 12,
+  marginTop: 20,
   },
-  otpBox: {
-    width: 44,
-    height: 44,
-    borderWidth: 1,
-    borderColor: '#bbbbbb',
-    borderRadius: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
+
+otpBox: {
+  width: 48,
+  height: 48,
+  borderWidth: 1,
+  borderColor: '#BBBBBB',
+  borderRadius: 8,
+  fontSize: 20,
+  fontWeight: '600',
+  color: '#000',
+},
+  
   otpBoxError: {
     borderColor: '#d00416',
   },
@@ -2968,6 +3040,7 @@ const styles = StyleSheet.create({
   routeRow: {
     minHeight: 64,
     justifyContent: 'center',
+    width : "92%"
   },
   routeMarkerWrap: {
     width: 20,
@@ -3003,6 +3076,7 @@ const styles = StyleSheet.create({
   routeCopy: {
     flex: 1,
     minWidth: 0,
+    padding : 4
   },
   routeMeta: {
     flexDirection: 'row',
@@ -3173,7 +3247,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   routeIcon: {
-    width: 20,
-    height: 90,
+    width: 30,
+    height: '75%',
   },
+ cursor: {
+  width: 2,
+  height: 24,
+  backgroundColor: '#1565D9',
+  borderRadius: 2,
+},
+navigation: {
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+ 
+
+otpInputFilled: {
+  borderColor: '#1565D9',
+  borderWidth: 2,
+},
 });
