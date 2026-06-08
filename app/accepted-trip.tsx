@@ -154,6 +154,11 @@ type GoogleDirectionsResponse = {
 type CustomerProfileResponse = {
   success?: boolean;
   data?: {
+    businessName?: string;
+    companyName?: string;
+    company?: string;
+    fullName?: string;
+    name?: string;
     profilePhotoUrl?: string;
     photoUri?: string;
   };
@@ -179,6 +184,9 @@ type DeliveryDetails = {
     name?: string;
     phone?: string;
     photoUri?: string;
+    businessName?: string;
+    companyName?: string;
+    company?: string;
   };
   receiver?: {
     name?: string;
@@ -250,6 +258,23 @@ const formatCurrency = (value: unknown) => {
   return `\u20b9${amount.toLocaleString('en-IN', {
     maximumFractionDigits: 0,
   })}`;
+};
+
+const getCompanyName = (value: {
+  businessName?: string;
+  companyName?: string;
+  company?: string;
+  fullName?: string;
+  name?: string;
+} | null | undefined) => {
+  return String(
+    value?.businessName ||
+      value?.companyName ||
+      value?.company ||
+      value?.fullName ||
+      value?.name ||
+      ''
+  ).trim();
 };
 
 const getCurrencyNumber = (value: unknown) => {
@@ -857,6 +882,9 @@ function AcceptedPickupView({
   const bookingPerson = delivery?.sender?.name ? delivery.sender : delivery?.receiver;
   const bookingName = bookingPerson?.name || 'Customer';
   const bookingPhone = bookingPerson?.phone || '';
+  const [bookingCompanyName, setBookingCompanyName] = React.useState(
+    getCompanyName(delivery?.sender)
+  );
   const [bookingPhotoUri, setBookingPhotoUri] = React.useState<string | null>(
     bookingPerson?.photoUri || null
   );
@@ -965,6 +993,7 @@ function AcceptedPickupView({
 
       if (!delivery?.senderId) {
         setBookingPhotoUri(null);
+        setBookingCompanyName(getCompanyName(delivery?.sender));
         return;
       }
 
@@ -974,14 +1003,17 @@ function AcceptedPickupView({
         );
         const body = (await response.json().catch(() => null)) as CustomerProfileResponse | null;
         const photoUri = body?.data?.profilePhotoUrl || body?.data?.photoUri || null;
+        const companyName = getCompanyName(body?.data) || getCompanyName(delivery?.sender);
 
         if (isActive) {
           setBookingPhotoUri(photoUri);
+          setBookingCompanyName(companyName);
         }
       } catch (error) {
         console.error('Error loading booking profile photo:', error);
         if (isActive) {
           setBookingPhotoUri(null);
+          setBookingCompanyName(getCompanyName(delivery?.sender));
         }
       }
     };
@@ -991,7 +1023,7 @@ function AcceptedPickupView({
     return () => {
       isActive = false;
     };
-  }, [bookingPerson?.photoUri, delivery?.senderId]);
+  }, [bookingPerson?.photoUri, delivery?.sender, delivery?.senderId]);
 
   React.useEffect(() => {
     let isActive = true;
@@ -1464,7 +1496,7 @@ function AcceptedPickupView({
               <View style={styles.bookingMetaRow}>
                 <View style={styles.bookingDot} />
                 <Text style={styles.bookingMeta} numberOfLines={1}>
-                  Vehicle booked by this customer
+                  {bookingCompanyName || 'Company name unavailable'}
                 </Text>
               </View>
             </View>

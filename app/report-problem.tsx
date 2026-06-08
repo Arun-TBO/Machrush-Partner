@@ -19,7 +19,8 @@ import { auth } from '@/lib/firebase';
 import { submitDriverReport } from '@/lib/firestoreOnboardingService';
 import { fs, hit, rs, vs } from '@/lib/responsive';
 // import { Color } from 'react-native/types_generated/Libraries/Animated/AnimatedExports';
-
+const chevronDown = require('@/assets/images/chevron-down.png');
+const down = require('@/assets/images/down.png');
 const backImage = require('@/assets/images/profile/back.png');
 const reviewWarning = require('@/assets/images/profile/review-warning.png');
 const reportCategories = [
@@ -137,6 +138,7 @@ function SelectField({
   options,
   onPress,
   onSelect,
+  fontBold
 }: {
   label: string;
   value: string;
@@ -145,13 +147,14 @@ function SelectField({
   options: string[];
   onPress: () => void;
   onSelect: (option: string) => void;
+  fontBold?: string
 }) {
   return (
     <View style={styles.fieldBlock}>
       <Text style={[styles.label ,  { color: expanded ? '#1C1C1C' : '#606060' } ]}>{label}</Text>
       <Pressable accessibilityRole="button" style={[styles.selectBox ,  { borderColor : expanded ? '#1C1C1C' : '#8e8e8e' , borderWidth: expanded ? 1 : 1}]} onPress={onPress}>
-        <Text style={[styles.inputValue, { color: valueColor }]}>{value}</Text>
-        <DownIcon />
+        <Text style={[styles.inputValue, { color: valueColor , fontWeight  :  fontBold ? 600 : 400 } ]}>{value}</Text>
+       <Image source={ expanded ? down : chevronDown}  style={styles.downArrow}/>
       </Pressable>
       {expanded ? (
         <View style={[styles.dropdownMenu ,  { borderColor : expanded ? '#1C1C1C' : '#8e8e8e' ,  borderWidth: expanded ? 1 : 1 }] }>
@@ -437,6 +440,7 @@ export default function ReportProblemScreen() {
             options={reportCategories.map((category) => category.label)}
             onPress={() => setOpenDropdown(openDropdown === 'category' ? null : 'category')}
             onSelect={handleCategorySelect}
+            fontBold ={selectedCategory}
           />
           <SelectField
             label="Specific issue"
@@ -449,6 +453,7 @@ export default function ReportProblemScreen() {
               setSelectedIssue(issue);
               setOpenDropdown(null);
             }}
+             fontBold ={selectedIssue}
           />
 
           <View style={styles.fieldBlock}>
@@ -466,7 +471,8 @@ export default function ReportProblemScreen() {
                 styles.textArea,
                 {
                   borderColor: isFocused ? '#1C1C1C' : '#8e8e8e',
-                  borderWidth: isFocused ? 1 : 1 
+                  borderWidth: isFocused ? 1 : 1 ,
+                  fontWeight :  isFocused ?  700 : 400
                 },
               ]}
               textAlignVertical="top"
@@ -682,7 +688,8 @@ const styles = StyleSheet.create({
     fontSize: fs(16, 14, 17),
     lineHeight: fs(24),
     color: '#1C1C1C',
-     fontWeight  : 700
+    //  fontWeight  : 600
+
   },
   characterLimit: {
     width: '100%',
@@ -755,6 +762,10 @@ const styles = StyleSheet.create({
   warningIcon: {
     width: rs(17),
     height: rs(15),
+  },
+  downArrow: {
+    height : 20,
+    width : 20
   },
   warningIconText: {
     fontFamily: 'Poppins_500Medium',
