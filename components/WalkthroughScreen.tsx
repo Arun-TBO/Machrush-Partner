@@ -405,15 +405,13 @@ const styles = StyleSheet.create({
     color: '#4a4a4a',
     fontFamily: 'Poppins_500Medium',
     fontSize: 24,
-    lineHeight: 24,
-    letterSpacing: -1,
+ 
     textAlign : 'center',
   },
   description: {
     color: '#777777',
     fontFamily: 'Poppins_400Regular',
     fontSize: 18,
-    lineHeight: 25,
     textAlign : 'center',
   },
   footer: {
