@@ -52,16 +52,24 @@ export default function TabLayout() {
           title: 'Home',
          tabBarIcon: ({ focused, color }) => (
 
- 
-
-  <Image
-    source={ focused ?  homeTabImage : inActiveHome}
+    focused ?   <Image
+    source={homeTabImage}
     resizeMode="contain"
     style={[
-      styles.tabIcon,
+      styles.homeTabA,
       
     ]}
   />
+       : 
+        <Image
+    source={  inActiveHome}
+    resizeMode="contain"
+    style={[
+      styles.homeTabIn,
+      
+    ]}
+  />
+ 
 ),
         }}
       />
@@ -73,7 +81,7 @@ export default function TabLayout() {
             focused ?  <Image source={ tab2} style={[styles.tabIcon2]} resizeMode="contain" /> :
 
             
-            <Image source={deliveriesTabImage} style={[styles.tabIcon]} resizeMode="contain" />
+            <Image source={deliveriesTabImage} style={[styles.tab2A]} resizeMode="contain" />
           ),
         }}
       />
@@ -82,7 +90,13 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({focused , color }) => (
-            <Image source={ focused ? tabProfileActive :inActiveProfile } style={[styles.tabIcon]} resizeMode="contain" />
+
+            focused ?    <Image source={ tabProfileActive} style={[styles.profileA]} resizeMode="contain" />
+                  
+            : 
+
+             <Image source={inActiveProfile } style={[styles.profileIn]} resizeMode="contain" />
+          
           ),
         }}
       />
@@ -112,9 +126,25 @@ const styles = StyleSheet.create({
   tabIconSlot: {
     marginTop: 4,
   },
-  tabIcon: {
+  homeTabA : {
     width: 22,
     height: 22,
+  },
+  homeTabIn : {
+    width: 35,
+    height: 32,
+  },
+  profileIn : {
+    width: 35,
+    height: 35,
+  },
+  profileA: {
+    width: 38,
+    height: 25,
+  },
+  tab2A : {
+    width: 32,
+    height: 32,
   },
   tabIcon2: {
     width: 35,

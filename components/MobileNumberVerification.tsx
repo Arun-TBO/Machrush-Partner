@@ -427,6 +427,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#eff2f6', // neutral bg-color from design
     paddingBottom: 0,
+    
   },
 
   // Status Bar
@@ -467,7 +468,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
-    lineHeight: 18,
     letterSpacing: 0,
   },
 

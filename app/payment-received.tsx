@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#ffffff',
-    padding : rs(10),
+    padding : rs(18),
   },
   header: {
     position: 'absolute',
@@ -501,9 +501,17 @@ const styles = StyleSheet.create({
   },
   summaryBlock: {
     width: '100%',
+<<<<<<< HEAD
     gap: vs(16),
     paddingHorizontal: rs(16),
     paddingVertical: vs(24),
+=======
+    gap: 16,
+    
+<<<<<<< HEAD
+>>>>>>> 671bddb (complete the alignment)
+=======
+>>>>>>> 65b6a4c6fe790f9c0668b4549f9dacdb5ae9df8d
   },
   deliveryHeaderRow: {
     width: '100%',
