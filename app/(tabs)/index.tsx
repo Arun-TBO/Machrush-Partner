@@ -15,14 +15,17 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { auth } from '@/lib/firebase';
+import { fs, hit, isCompactPhone, rs, vs } from '@/lib/responsive';
 import {
   getDriverProfile,
   getLatestDriverAvailability,
   updateDriverAvailability,
 } from '@/lib/firestoreOnboardingService';
 import {
+  getCachedAvailabilityChangedAtMs,
   getCachedAvailabilityStatus,
   getCachedProfilePhotoUrl,
+  setCachedAvailabilityChangedAtMs,
   setCachedAvailabilityStatus,
   setCachedProfilePhotoUrl,
 } from '@/lib/profileCache';
@@ -39,6 +42,8 @@ type CurrentLocationLabel = {
   area: string;
   district: string;
 };
+
+const DRIVER_ONLINE_MAX_DURATION_MS = 12 * 60 * 60 * 1000;
 
 const jobRequests = [
   {
@@ -524,6 +529,7 @@ function StatusConfirmModal({
 export default function HomeScreen() {
   const router = useRouter();
   const [driverStatus, setDriverStatus] = useState<DriverStatus>('offline');
+  const [driverStatusChangedAtMs, setDriverStatusChangedAtMs] = useState(0);
   const [pendingStatus, setPendingStatus] = useState<DriverStatus | null>(null);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
   const [currentLocation, setCurrentLocation] = useState<CurrentLocationLabel>({
@@ -730,15 +736,27 @@ export default function HomeScreen() {
           getCachedProfilePhotoUrl(uid),
           getCachedAvailabilityStatus(uid),
         ]);
+        const cachedChangedAtMs = await getCachedAvailabilityChangedAtMs(uid);
+        const cachedStatusExpired =
+          cachedStatus === 'online' &&
+          cachedChangedAtMs > 0 &&
+          Date.now() - cachedChangedAtMs >= DRIVER_ONLINE_MAX_DURATION_MS;
+        const resolvedCachedStatus = cachedStatusExpired ? 'offline' : cachedStatus;
 
         if (isActive && cachedPhotoUrl) {
           setProfilePhotoUrl(cachedPhotoUrl);
         }
-        if (isActive && cachedStatus) {
-          setDriverStatus(cachedStatus);
+        if (cachedStatusExpired) {
+          await setCachedAvailabilityStatus(uid, 'offline');
+          await setCachedAvailabilityChangedAtMs(uid, null);
+          updateDriverAvailability(uid, 'offline', storedIdToken);
+        }
+        if (isActive && resolvedCachedStatus) {
+          setDriverStatus(resolvedCachedStatus);
+          setDriverStatusChangedAtMs(resolvedCachedStatus === 'online' ? cachedChangedAtMs : 0);
         }
 
-        const [driverProfile, latestStatus] = await Promise.all([
+        const [driverProfile, latestAvailability] = await Promise.all([
           getDriverProfile(uid, storedIdToken).catch((error) => {
             console.error('Error loading driver profile on home:', error);
             return null;
@@ -755,13 +773,33 @@ export default function HomeScreen() {
         if (savedPhotoUrl) {
           await setCachedProfilePhotoUrl(uid, savedPhotoUrl);
         }
-        if (latestStatus) {
-          await setCachedAvailabilityStatus(uid, latestStatus);
+
+        let resolvedStatus = latestAvailability?.status || resolvedCachedStatus || 'offline';
+        const changedAtMs =
+          readTimestampMs(latestAvailability?.changedAt || undefined) ||
+          (resolvedCachedStatus === 'online' ? cachedChangedAtMs : 0);
+        const isOnlineExpired =
+          resolvedStatus === 'online' &&
+          changedAtMs > 0 &&
+          Date.now() - changedAtMs >= DRIVER_ONLINE_MAX_DURATION_MS;
+
+        if (isOnlineExpired) {
+          resolvedStatus = 'offline';
+          await setCachedAvailabilityStatus(uid, 'offline');
+          await setCachedAvailabilityChangedAtMs(uid, null);
+          updateDriverAvailability(uid, 'offline', storedIdToken);
+        } else if (latestAvailability?.status) {
+          await setCachedAvailabilityStatus(uid, latestAvailability.status);
+          await setCachedAvailabilityChangedAtMs(
+            uid,
+            latestAvailability.status === 'online' ? changedAtMs : null
+          );
         }
 
         if (isActive) {
           setProfilePhotoUrl(savedPhotoUrl || cachedPhotoUrl || null);
-          setDriverStatus(latestStatus || cachedStatus || 'offline');
+          setDriverStatus(resolvedStatus);
+          setDriverStatusChangedAtMs(resolvedStatus === 'online' ? changedAtMs : 0);
         }
       };
 
@@ -797,7 +835,9 @@ export default function HomeScreen() {
       }
 
       const nextStatus = pendingStatus;
+      const changedAtMs = Date.now();
       setDriverStatus(pendingStatus);
+      setDriverStatusChangedAtMs(nextStatus === 'online' ? changedAtMs : 0);
       setPendingStatus(null);
 
       const [storedUid, storedIdToken] = await Promise.all([
@@ -808,6 +848,7 @@ export default function HomeScreen() {
 
       if (uid) {
         await setCachedAvailabilityStatus(uid, nextStatus);
+        await setCachedAvailabilityChangedAtMs(uid, nextStatus === 'online' ? changedAtMs : null);
         updateDriverAvailability(uid, nextStatus, storedIdToken);
       }
     }
@@ -832,6 +873,49 @@ export default function HomeScreen() {
       params: { deliveryId: job.deliveryId },
     });
   };
+
+  React.useEffect(() => {
+    if (driverStatus !== 'online' || driverStatusChangedAtMs <= 0) {
+      return;
+    }
+
+    const remainingMs = DRIVER_ONLINE_MAX_DURATION_MS - (Date.now() - driverStatusChangedAtMs);
+
+    if (remainingMs <= 0) {
+      setDriverStatus('offline');
+      setDriverStatusChangedAtMs(0);
+      Promise.all([
+        AsyncStorage.getItem('firebaseUid'),
+        AsyncStorage.getItem('firebaseIdToken'),
+      ]).then(([storedUid, storedIdToken]) => {
+        const uid = auth.currentUser?.uid || storedUid;
+        if (uid) {
+          setCachedAvailabilityStatus(uid, 'offline');
+          setCachedAvailabilityChangedAtMs(uid, null);
+          updateDriverAvailability(uid, 'offline', storedIdToken);
+        }
+      });
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setDriverStatus('offline');
+      setDriverStatusChangedAtMs(0);
+      Promise.all([
+        AsyncStorage.getItem('firebaseUid'),
+        AsyncStorage.getItem('firebaseIdToken'),
+      ]).then(([storedUid, storedIdToken]) => {
+        const uid = auth.currentUser?.uid || storedUid;
+        if (uid) {
+          setCachedAvailabilityStatus(uid, 'offline');
+          setCachedAvailabilityChangedAtMs(uid, null);
+          updateDriverAvailability(uid, 'offline', storedIdToken);
+        }
+      });
+    }, remainingMs);
+
+    return () => clearTimeout(timeout);
+  }, [driverStatus, driverStatusChangedAtMs]);
 
   const inProgressJobs = jobRequestList.filter((job) => job.isResumeTrip);
   const openJobRequests = jobRequestList.filter((job) => !job.isResumeTrip);
@@ -916,14 +1000,14 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#dbe6f7',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    paddingBottom: 24,
+    borderBottomLeftRadius: rs(24),
+    borderBottomRightRadius: rs(24),
+    paddingBottom: vs(24),
   },
   statusBar: {
-    height: 52,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
+    height: vs(52),
+    paddingHorizontal: rs(24),
+    paddingVertical: vs(10),
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
@@ -931,58 +1015,61 @@ const styles = StyleSheet.create({
   statusTime: {
     color: '#1d1b20',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 14,
+    fontSize: fs(14),
     fontWeight: '500',
-    lineHeight: 20,
+    lineHeight: fs(20),
     letterSpacing: 0.14,
   },
   statusIcons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: rs(3),
   },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingHorizontal: 16,
-    gap: 16,
+    paddingHorizontal: rs(16),
+    gap: rs(12),
   },
   locationTextWrap: {
     flex: 1,
+    minWidth: 0,
   },
   locationTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: rs(4),
   },
   locationIcon: {
-    width: 24,
-    height: 24,
+    width: rs(24),
+    height: rs(24),
   },
   locationTitle: {
     color: '#1c1c1a',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
+    flex: 1,
+    minWidth: 0,
+    fontSize: fs(16),
     fontWeight: '500',
-    lineHeight: 19.2,
+    lineHeight: fs(19.2),
   },
   locationSubtitle: {
     marginTop: 1,
     color: '#5e5e58',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 12,
+    fontSize: fs(12),
     fontWeight: '400',
-    lineHeight: 18,
+    lineHeight: fs(18),
   },
   profileImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: hit(44),
+    height: hit(44),
+    borderRadius: hit(44) / 2,
     backgroundColor: '#ffffff',
   },
   earningRow: {
-    marginTop: 20,
-    paddingHorizontal: 16,
+    marginTop: vs(20),
+    paddingHorizontal: rs(16),
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
@@ -990,49 +1077,49 @@ const styles = StyleSheet.create({
   totalEarning: {
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 40,
+    fontSize: fs(40, 32, 42),
     fontWeight: '500',
-    lineHeight: 48,
+    lineHeight: fs(48, 38, 50),
   },
   totalLabel: {
     color: '#606060',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 14,
+    fontSize: fs(14),
     fontWeight: '400',
-    lineHeight: 21,
+    lineHeight: fs(21),
   },
   statusToggle: {
-    width: 98,
-    height: 40,
+    width: rs(98, 88, 104),
+    height: hit(40),
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: rs(4),
     borderRadius: 100,
-    paddingVertical: 2,
+    paddingVertical: vs(2),
   },
   onlineToggle: {
     backgroundColor: '#05c',
-    paddingLeft: 8,
-    paddingRight: 4,
+    paddingLeft: rs(8),
+    paddingRight: rs(4),
   },
   offlineToggle: {
     backgroundColor: '#8e8e8e',
-    paddingLeft: 4,
-    paddingRight: 8,
+    paddingLeft: rs(4),
+    paddingRight: rs(8),
   },
   statusToggleText: {
     flex: 1,
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 14,
+    fontSize: fs(14, 12, 15),
     fontWeight: '500',
-    lineHeight: 21,
+    lineHeight: fs(21),
     textAlign: 'center',
   },
   statusKnob: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: rs(32),
+    height: rs(32),
+    borderRadius: rs(16),
     backgroundColor: '#ffffff',
     shadowColor: '#000000',
     shadowOpacity: 0.15,
@@ -1046,10 +1133,10 @@ const styles = StyleSheet.create({
   content: {
     width: '100%',
     alignSelf: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 110,
-    gap: 24,
+    paddingHorizontal: rs(16),
+    paddingTop: vs(24),
+    paddingBottom: vs(110),
+    gap: vs(24),
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -1059,20 +1146,20 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 24,
+    fontSize: fs(24, 20, 26),
     fontWeight: '500',
     letterSpacing: -1,
   },
   homeSection: {
     width: '100%',
-    gap: 24,
+    gap: vs(24),
   },
   jobCard: {
     width: '100%',
     backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 16,
-    gap: 16,
+    borderRadius: rs(12),
+    padding: rs(16),
+    gap: vs(16),
     shadowColor: '#000000',
     shadowOpacity: 0.08,
     shadowRadius: 12,
@@ -1086,67 +1173,67 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: 10,
+    gap: rs(10),
   },
   estimateLabel: {
     color: '#5e5e58',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 12,
+    fontSize: fs(12),
     fontWeight: '400',
-    lineHeight: 18,
+    lineHeight: fs(18),
   },
   cardEarning: {
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 32,
+    fontSize: fs(32, 26, 34),
     fontWeight: '500',
-    lineHeight: 32,
+    lineHeight: fs(34, 28, 36),
   },
   jobMeta: {
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    minHeight: 50,
+    minHeight: vs(50),
   },
   pickupBadge: {
     backgroundColor: '#ffdb43',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    borderRadius: rs(8),
+    paddingHorizontal: rs(8),
+    paddingVertical: vs(4),
   },
   pickupBadgeText: {
     color: '#000000',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 14,
+    fontSize: fs(14, 12, 15),
     fontWeight: '400',
-    lineHeight: 21,
+    lineHeight: fs(21),
   },
   jobAge: {
     color: '#606060',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 12,
+    fontSize: fs(12),
     fontWeight: '400',
-    lineHeight: 18,
+    lineHeight: fs(18),
   },
   routeBox: {
     width: '100%',
     borderWidth: 1,
     borderColor: '#bbbbbb',
-    borderRadius: 12,
+    borderRadius: rs(12),
     backgroundColor: '#ffffff',
-    padding : 2,
+    padding : rs(2),
      flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-     gap : 18
+     gap : rs(12)
   },
   routePoint: {
-    marginBottom : 5,
-    marginTop : 5,
- 
-    width : "92%"
+    marginBottom : vs(5),
+    marginTop : vs(5),
+    flexShrink: 1,
+    width : isCompactPhone ? '88%' : '92%',
   },
   routeIcon: {
-    width: 30,
+    width: rs(30, 24, 32),
     height : '65%',
     paddingRight : 10
   },
@@ -1154,7 +1241,8 @@ const styles = StyleSheet.create({
     
   },
   routeTextWrap: {
-    padding : 2,
+    padding : rs(2),
+    minWidth: 0,
     overflow: 'hidden',
     borderColor : '#0000',
     borderWidth : 1
@@ -1162,27 +1250,28 @@ const styles = StyleSheet.create({
   routeMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap:15
+    gap: rs(10),
+    flexWrap: 'wrap',
   },
   routeTitle: {
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 12,
+    fontSize: fs(12),
     fontWeight: '500',
-    lineHeight: 18,
+    lineHeight: fs(18),
   },
   routeTime: {
     flex: 1,
     color: '#0055cc',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 12,
+    fontSize: fs(12),
     fontWeight: '500',
-    lineHeight: 12,
+    lineHeight: fs(14),
   },
   routeAddress: {
     color: '#616161',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 14,
+    fontSize: fs(14, 12, 15),
     fontWeight: '400',
   },
   routeSeparator: {
@@ -1190,7 +1279,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderStyle: 'dashed',
     borderColor: '#d6d6d6',
-     width : "90%"
+     width : isCompactPhone ? '84%' : '90%',
   },
   routeConnector: {
     position: 'absolute',
@@ -1221,32 +1310,32 @@ const styles = StyleSheet.create({
   },
   cardActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: rs(12),
   },
   rejectButton: {
     flex: 1,
     borderWidth: 1,
     borderColor: '#05c',
-    borderRadius: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    borderRadius: rs(8),
+    paddingHorizontal: rs(16),
+    paddingVertical: vs(12),
     alignItems: 'center',
     justifyContent: 'center',
   },
   rejectText: {
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
+    fontSize: fs(16, 13, 17),
     fontWeight: '500',
-    lineHeight: 16,
+    lineHeight: fs(18),
     letterSpacing: -0.5,
   },
   acceptButton: {
     flex: 1,
     backgroundColor: '#1fc16b',
-    borderRadius: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    borderRadius: rs(8),
+    paddingHorizontal: rs(16),
+    paddingVertical: vs(12),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1256,54 +1345,54 @@ const styles = StyleSheet.create({
   acceptText: {
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
+    fontSize: fs(16, 13, 17),
     fontWeight: '500',
-    lineHeight: 16,
+    lineHeight: fs(18),
     letterSpacing: -0.5,
   },
   emptyJobsCard: {
     width: '100%',
     backgroundColor: '#ffffff',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 24,
+    borderRadius: rs(12),
+    paddingHorizontal: rs(16),
+    paddingVertical: vs(24),
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyJobsText: {
     color: '#606060',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 14,
+    fontSize: fs(14),
     fontWeight: '400',
-    lineHeight: 21,
+    lineHeight: fs(21),
     textAlign: 'center',
   },
   confirmOverlay: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: rs(16),
     backgroundColor: 'rgba(0, 0, 0, 0.24)',
   },
   confirmCard: {
     width: '100%',
-    maxWidth: 380,
+    maxWidth: rs(380, 320, 420),
     backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 12,
-    gap: 24,
+    borderRadius: rs(8),
+    padding: rs(12),
+    gap: vs(24),
     alignItems: 'center',
     overflow: 'hidden',
   },
   confirmContent: {
     width: '100%',
-    gap: 16,
+    gap: vs(16),
     alignItems: 'center',
   },
   confirmIconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: rs(60),
+    height: rs(60),
+    borderRadius: rs(30),
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -1315,61 +1404,61 @@ const styles = StyleSheet.create({
     backgroundColor: '#d00416',
   },
   confirmIcon: {
-    width: 60,
-    height: 60,
+    width: rs(60),
+    height: rs(60),
   },
   confirmTextGroup: {
     width: '100%',
-    gap: 4,
+    gap: vs(4),
     alignItems: 'center',
   },
   confirmTitle: {
     width: '100%',
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 24,
+    fontSize: fs(24, 20, 26),
     fontWeight: '500',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: fs(26),
     letterSpacing: -1,
   },
   confirmDescription: {
     width: '100%',
     color: '#606060',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 16,
+    fontSize: fs(16, 14, 17),
     fontWeight: '400',
-    lineHeight: 24,
+    lineHeight: fs(24),
     textAlign: 'center',
   },
   confirmActions: {
     width: '100%',
     flexDirection: 'row',
-    gap: 10,
+    gap: rs(10),
   },
   confirmNoButton: {
     flex: 1,
     borderWidth: 1,
     borderColor: '#05c',
-    borderRadius: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    borderRadius: rs(8),
+    paddingHorizontal: rs(14),
+    paddingVertical: vs(12),
     alignItems: 'center',
     justifyContent: 'center',
   },
   confirmNoText: {
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
+    fontSize: fs(16, 13, 17),
     fontWeight: '500',
-    lineHeight: 16,
+    lineHeight: fs(18),
     letterSpacing: -0.5,
   },
   confirmYesButton: {
     flex: 1,
-    borderRadius: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    borderRadius: rs(8),
+    paddingHorizontal: rs(14),
+    paddingVertical: vs(12),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1382,9 +1471,9 @@ const styles = StyleSheet.create({
   confirmYesText: {
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
+    fontSize: fs(16, 13, 17),
     fontWeight: '500',
-    lineHeight: 16,
+    lineHeight: fs(18),
     letterSpacing: -0.5,
   },
 });

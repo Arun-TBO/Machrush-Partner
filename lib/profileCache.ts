@@ -39,6 +39,12 @@ export const getCachedAvailabilityStatus = async (uid: string) => {
   return value === 'online' || value === 'offline' ? value : null;
 };
 
+export const getCachedAvailabilityChangedAtMs = async (uid: string) => {
+  const value = await AsyncStorage.getItem(getProfileCacheKey(uid, 'availabilityChangedAtMs'));
+  const changedAtMs = Number(value);
+  return Number.isFinite(changedAtMs) && changedAtMs > 0 ? changedAtMs : 0;
+};
+
 export const setCachedAvailabilityStatus = async (
   uid: string,
   status: 'online' | 'offline' | null | undefined
@@ -47,6 +53,20 @@ export const setCachedAvailabilityStatus = async (
 
   if (status) {
     await AsyncStorage.setItem(key, status);
+    return;
+  }
+
+  await AsyncStorage.removeItem(key);
+};
+
+export const setCachedAvailabilityChangedAtMs = async (
+  uid: string,
+  changedAtMs: number | null | undefined
+) => {
+  const key = getProfileCacheKey(uid, 'availabilityChangedAtMs');
+
+  if (changedAtMs && Number.isFinite(changedAtMs) && changedAtMs > 0) {
+    await AsyncStorage.setItem(key, String(changedAtMs));
     return;
   }
 

@@ -61,6 +61,10 @@ export interface DriverReportData {
 
 type VerificationStatus = 'pending' | 'verified' | 'rejected' | 'suspended';
 export type DriverAvailabilityStatus = 'online' | 'offline';
+export type DriverAvailabilityState = {
+  status: DriverAvailabilityStatus;
+  changedAt?: Timestamp | string | Date | null;
+};
 
 const getApiBaseUrl = () => {
   return (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
@@ -735,7 +739,7 @@ const setDriverAvailabilityStateViaRest = async (
 const getDriverAvailabilityStateViaRest = async (
   uid: string,
   idToken: string
-): Promise<DriverAvailabilityStatus | null> => {
+): Promise<DriverAvailabilityState | null> => {
   const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID;
 
   if (!projectId) {
@@ -766,7 +770,9 @@ const getDriverAvailabilityStateViaRest = async (
   }
 
   const data = fromFirestoreRestFields(responseBody.fields || {});
-  return data.status === 'online' || data.status === 'offline' ? data.status : null;
+  return data.status === 'online' || data.status === 'offline'
+    ? { status: data.status, changedAt: data.changedAt || null }
+    : null;
 };
 
 const resizeWebImageToDataUrl = async (
@@ -1200,7 +1206,7 @@ export const updateDriverAvailability = async (
 export const getLatestDriverAvailability = async (
   uid: string,
   idToken?: string | null
-): Promise<DriverAvailabilityStatus | null> => {
+): Promise<DriverAvailabilityState | null> => {
   try {
     if (!uid) {
       return null;
@@ -1210,7 +1216,7 @@ export const getLatestDriverAvailability = async (
       const docSnap = await getDoc(doc(db, 'driverAvailabilityStates', uid));
       const latest = docSnap.exists() ? docSnap.data() : null;
       return latest?.status === 'online' || latest?.status === 'offline'
-        ? latest.status
+        ? { status: latest.status, changedAt: latest.changedAt || null }
         : null;
     }
 

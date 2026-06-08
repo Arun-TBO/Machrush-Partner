@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { auth } from '@/lib/firebase';
+import { fs, hit, isCompactPhone, rs, vs } from '@/lib/responsive';
 
 const deliveryThumbImage = require('@/assets/images/delivery/delivery-list-thumb.png');
 
@@ -163,11 +164,7 @@ const getDeliveryCompletedMs = (delivery: DeliveryRecord) => {
 
 const getActiveDurationMs = (delivery: DeliveryRecord) => {
   const deliveredAt = readTimestampMs(delivery.timestamps?.deliveredAt);
-  const startedAt = readTimestampMs(
-    delivery.timestamps?.inTransitAt ||
-      delivery.timestamps?.assignedAt ||
-      delivery.timestamps?.createdAt
-  );
+  const startedAt = readTimestampMs(delivery.timestamps?.inTransitAt);
 
   if (!deliveredAt || !startedAt || deliveredAt <= startedAt) {
     return 0;
@@ -252,13 +249,15 @@ function TopSummary({
 
 function WeeklyChart({
   bars,
+  amounts,
   days,
   activeIndex,
   peakAmount,
 }: {
   bars: number[];
+  amounts: string[];
   days: Date[];
-  activeIndex: number;
+  activeIndex: number | null;
   peakAmount: string;
 }) {
   return (
@@ -267,14 +266,23 @@ function WeeklyChart({
        {/* <View style={styles.routeSeparator} /> */}
       <View style={styles.chartGrid}>
         {bars.map((height, index) => (
-          <View
-            key={`${days[index].toISOString()}-${index}`}
-            style={[
-              styles.chartBar,
-              { height },
-              index === activeIndex ? styles.chartBarActive : null,
-            ]}
-          />
+          <View key={`${days[index].toISOString()}-${index}`} style={styles.chartColumn}>
+            <Text
+              style={[
+                styles.chartAmount,
+                index === activeIndex ? styles.chartAmountActive : null,
+              ]}
+            >
+              {amounts[index]}
+            </Text>
+            <View
+              style={[
+                styles.chartBar,
+                { height },
+                index === activeIndex ? styles.chartBarActive : null,
+              ]}
+            />
+          </View>
         ))}
       </View>
       <View style={styles.dayRow}>
@@ -408,7 +416,8 @@ export default function MyDeliveriesScreen() {
       return shiftedDate;
     });
   }, [currentWeekDays, weekOffset]);
-  const todayIndex = Math.max(0, weekDays.findIndex((date) => isSameLocalDay(Date.now(), date)));
+  const todayIndex = weekDays.findIndex((date) => isSameLocalDay(Date.now(), date));
+  const activeDayIndex = todayIndex >= 0 ? todayIndex : null;
   const canGoNextWeek = weekOffset < 0;
 
   useFocusEffect(
@@ -491,8 +500,9 @@ export default function MyDeliveriesScreen() {
   const maxWeeklyAmount = Math.max(...weeklyAmounts, 0);
   const chartBars =
     maxWeeklyAmount > 0
-      ? weeklyAmounts.map((amount) => Math.max(36, Math.round((amount / maxWeeklyAmount) * 140)))
+      ? weeklyAmounts.map((amount) => Math.max(36, Math.round((amount / maxWeeklyAmount) * 112)))
       : weeklyAmounts.map(() => 0);
+  const chartAmounts = weeklyAmounts.map((amount) => formatCurrency(amount));
   const peakAmount = formatCurrency(maxWeeklyAmount);
   const weekLabel = `${formatShortDate(weekDays[0])} - ${formatShortDate(weekDays[6])}`;
   const activeDuration = formatDuration(
@@ -529,8 +539,9 @@ export default function MyDeliveriesScreen() {
       >
         <WeeklyChart
           bars={chartBars}
+          amounts={chartAmounts}
           days={weekDays}
-          activeIndex={todayIndex}
+          activeIndex={activeDayIndex}
           peakAmount={peakAmount}
         />
         <StatsBlock
@@ -587,38 +598,38 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#dbe6f7',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    borderBottomLeftRadius: rs(24),
+    borderBottomRightRadius: rs(24),
     overflow: 'hidden',
   },
   statusSpacer: {
-    height: 52,
+    height: vs(52),
   },
   topNav: {
-    height: 64,
+    height: vs(64),
     justifyContent: 'center',
-    paddingLeft: 16,
-    paddingRight: 4,
-    paddingVertical: 8,
+    paddingLeft: rs(16),
+    paddingRight: rs(4),
+    paddingVertical: vs(8),
   },
   navTitle: {
     fontFamily: 'Poppins_500Medium',
-    fontSize: 20,
-    lineHeight: 32,
+    fontSize: fs(20, 17, 22),
+    lineHeight: fs(32, 26, 34),
     color: '#1c1c1c',
   },
   weekSummary: {
     width: '100%',
-    maxWidth: 412,
+    maxWidth: rs(412, 320, 430),
     alignSelf: 'center',
-    paddingTop: 24,
-    paddingBottom: 24,
-    gap: 4,
+    paddingTop: vs(24),
+    paddingBottom: vs(24),
+    gap: vs(4),
   },
   weekLabel: {
     width: '100%',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
+    fontSize: fs(16, 14, 17),
     letterSpacing: -0.5,
     color: '#1c1c1c',
     textAlign: 'center',
@@ -628,11 +639,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 40,
+    paddingHorizontal: rs(40, 24, 44),
   },
   weekNavButton: {
-    width: 44,
-    height: 44,
+    width: hit(44),
+    height: hit(44),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -642,16 +653,16 @@ const styles = StyleSheet.create({
   weekAmount: {
     flex: 1,
     fontFamily: 'Poppins_500Medium',
-    fontSize: 40,
-    lineHeight: 48,
+    fontSize: fs(40, 30, 42),
+    lineHeight: fs(48, 36, 50),
     color: '#1c1c1c',
     textAlign: 'center',
   },
   weekCaption: {
     width: '100%',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: fs(16, 14, 17),
+    lineHeight: fs(24),
     color: '#606060',
     textAlign: 'center',
   },
@@ -660,43 +671,61 @@ const styles = StyleSheet.create({
   },
   content: {
     width: '100%',
-    maxWidth: 412,
+    maxWidth: rs(412, 320, 430),
     alignSelf: 'center',
-    paddingBottom: 94,
+    paddingBottom: vs(94),
   },
   chartSection: {
     width: '100%',
     backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 16,
+    paddingHorizontal: rs(16, 12, 18),
+    paddingTop: vs(24),
+    paddingBottom: vs(16),
   },
   peakAmount: {
     width: '100%',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
+    fontSize: fs(16, 14, 17),
     letterSpacing: -0.5,
     color: '#1c1c1c',
     textAlign: 'center',
     marginBottom: 4,
   },
   chartGrid: {
-    height: 141,
+    height: vs(141, 126, 150),
     width: '100%',
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'center',
-    gap: 12,
+    gap: rs(12, 6, 12),
     borderBottomWidth : 1,
     borderTopWidth: 1,
     borderStyle: 'dashed',
     borderColor: '#d6d6d6',
   },
-  chartBar: {
+  chartColumn: {
     flex: 1,
+    height: '100%',
     minWidth: 1,
-    maxWidth: 44,
-    borderRadius: 4,
+    maxWidth: rs(44, 34, 46),
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: vs(4),
+  },
+  chartAmount: {
+    width: '100%',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: fs(10, 9, 11),
+    lineHeight: fs(14, 12, 15),
+    color: '#606060',
+    textAlign: 'center',
+  },
+  chartAmountActive: {
+    color: '#0055cc',
+  },
+  chartBar: {
+    width: '100%',
+    borderRadius: rs(4),
     borderBottomWidth: 1,
     borderBottomColor: '#33333380',
     backgroundColor: '#76b0ff',
@@ -708,13 +737,13 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 16,
+    gap: rs(16, 6, 16),
   },
   dayLabel: {
     flex: 1,
     fontFamily: 'Poppins_400Regular',
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: fs(14, 11, 15),
+    lineHeight: fs(21, 17, 22),
     color: '#606060',
     textAlign: 'center',
   },
@@ -726,59 +755,63 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#d2d2d2',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 24,
-    gap: 16,
+    paddingHorizontal: rs(16),
+    paddingTop: vs(16),
+    paddingBottom: vs(24),
+    gap: vs(16),
   },
   sectionTitle: {
     fontFamily: 'Poppins_500Medium',
-    fontSize: 20,
+    fontSize: fs(20, 17, 22),
     color: '#1c1c1c',
   },
   statsRow: {
     width: '100%',
     flexDirection: 'row',
-    gap: 16,
+    gap: rs(16, 10, 16),
+    flexWrap: isCompactPhone ? 'wrap' : 'nowrap',
   },
   statItem: {
     flex: 1,
-    gap: 4,
+    minWidth: isCompactPhone ? '46%' : 0,
+    gap: vs(4),
   },
   statLabel: {
     width: '100%',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: fs(14, 12, 15),
+    lineHeight: fs(21),
     color: '#606060',
   },
   statValue: {
     width: '100%',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 24,
-    lineHeight: 24,
+    fontSize: fs(24, 20, 26),
+    lineHeight: fs(26),
     letterSpacing: -1,
     color: '#1c1c1c',
   },
   deliveriesSection: {
     width: '100%',
-    paddingTop: 24,
-    gap: 24,
+    paddingTop: vs(24),
+    gap: vs(24),
   },
   deliveriesHeader: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding : 20
+    padding : rs(16),
+    gap: rs(12),
+    flexWrap: 'wrap',
   },
   segmentedControl: {
 
-    height: 32,
+    height: hit(32),
     flexDirection: 'row',
     borderWidth: 1,
     borderColor: '#bbbbbb',
-    borderRadius: 8,
+    borderRadius: rs(8),
     overflow: 'hidden',
     backgroundColor: '#eff2f6',
   
@@ -788,7 +821,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     
-    width: 85
+    width: rs(85, 72, 90)
   },
   segmentActive: {
     backgroundColor: '#ffffff',
@@ -796,8 +829,8 @@ const styles = StyleSheet.create({
   },
   segmentText: {
     fontFamily: 'Poppins_400Regular',
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: fs(12, 11, 13),
+    lineHeight: fs(18),
     color: '#606060',
   },
   segmentTextActive: {
@@ -810,8 +843,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: '#d2d2d2',
     backgroundColor: '#eff2f6',
-    paddingHorizontal: 16,
-    paddingVertical: 24,
+    paddingHorizontal: rs(16),
+    paddingVertical: vs(24),
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -819,8 +852,8 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontFamily: 'Poppins_400Regular',
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: fs(14),
+    lineHeight: fs(21),
     color: '#606060',
   },
   deliveryList: {
@@ -828,46 +861,46 @@ const styles = StyleSheet.create({
   },
   deliveryRow: {
     width: '100%',
-    minHeight: 88,
+    minHeight: vs(88),
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: rs(12),
     borderBottomWidth: 1,
     borderBottomColor: '#d2d2d2',
-    paddingHorizontal: 16,
-    paddingVertical: 24,
+    paddingHorizontal: rs(16),
+    paddingVertical: vs(20),
   },
   deliveryThumb: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    width: rs(40),
+    height: rs(40),
+    borderRadius: rs(8),
     backgroundColor: '#000000',
   },
   deliveryCopy: {
     flex: 1,
     minWidth: 0,
-    gap: 4,
+    gap: vs(4),
   },
   deliveryTitle: {
     fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
-    lineHeight: 16,
+    fontSize: fs(16, 14, 17),
+    lineHeight: fs(18),
     letterSpacing: -0.5,
     color: '#1c1c1c',
   },
   deliveryMeta: {
     fontFamily: 'Poppins_400Regular',
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: fs(14, 12, 15),
+    lineHeight: fs(21),
     color: '#606060',
   },
   statusBadge: {
-    minHeight: 24,
-    borderRadius: 4,
+    minHeight: hit(24),
+    borderRadius: rs(4),
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: rs(8),
+    paddingVertical: vs(4),
   },
   paidBadge: {
     backgroundColor: '#1fc16b',
@@ -877,8 +910,8 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: {
     fontFamily: 'Poppins_400Regular',
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: fs(12, 11, 13),
+    lineHeight: fs(18),
     textAlign: 'center',
   },
   paidBadgeText: {
