@@ -719,7 +719,6 @@ const styles = StyleSheet.create({
   paymentValue: {
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    lineHeight: 16,
     color: '#606060',
     textAlign: 'right',
   },
