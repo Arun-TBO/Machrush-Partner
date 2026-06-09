@@ -25,6 +25,8 @@ import {
   setCachedProfilePhotoUrl,
 } from '@/lib/profileCache';
 
+import { fs, hit, rs, vs } from '@/lib/responsive';
+
 const profileAvatarImage = require('@/assets/images/profile/profile-avatar.jpg');
 const backImage = require('@/assets/images/profile/back.png');
 const verifiedBadgeImage = require('@/assets/images/profile/verified-badge.png');
@@ -955,44 +957,39 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
+    justifyContent : 'space-around',
+    gap: 2,
   },
   goBackButton: {
-    width: 120,
+    width: 100,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#0055cc',
     borderRadius: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    overflow: 'hidden',
+    height : 48
   },
   goBackButtonText: {
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-      lineHeight: 19,
+    lineHeight: 19,
     letterSpacing: -0.5,
-    textAlign: 'center',
   },
   confirmLogoutButton: {
-    flex: 1,
+    height : 48,
+    width : rs(248),
     minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
     backgroundColor: '#d00416',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    overflow: 'hidden',
+
   },
   confirmLogoutButtonText: {
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    lineHeight: 19,
-    letterSpacing: -0.5,
     textAlign: 'center',
   },
 });

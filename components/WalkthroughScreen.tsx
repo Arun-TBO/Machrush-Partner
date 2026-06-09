@@ -3,12 +3,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Image, type ImageSource } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 
-import { Animated, Dimensions, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, PanResponder, Pressable, StyleSheet, Text, View ,SafeAreaView } from 'react-native';
 
 
 import IMAGES from '../constants/walkthroughImg/images';
 
-
+import { fs, hit, rs, vs } from '@/lib/responsive';
 
 
 const { height: screenHeight  , width} = Dimensions.get('window');
@@ -217,6 +217,7 @@ Animated.parallel([
           </>
       
     ) : (
+      
         <View style={styles.screen}   {...panResponder.panHandlers}>
          <StatusBar  translucent
   backgroundColor="transparent"
@@ -280,7 +281,8 @@ Animated.parallel([
           <Text style={styles.title}>{activeStep.title}</Text>
           <Text style={styles.description}>{activeStep.description}</Text>
         </View>
-
+          
+       
         <View style={styles.footer}>
         
 
@@ -395,7 +397,7 @@ const styles = StyleSheet.create({
     height: 36,
   },
   copyBlock: {
-    minHeight: 168,
+    minHeight: 121,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
@@ -404,14 +406,14 @@ const styles = StyleSheet.create({
   title: {
     color: '#4a4a4a',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 24,
- 
+    fontSize: fs(24),
     textAlign : 'center',
+    letterSpacing : -1
   },
   description: {
     color: '#777777',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 18,
+    fontSize: fs(18),
     textAlign : 'center',
   },
   footer: {
@@ -441,6 +443,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    position : 'absolute',
+    bottom : 0,
+
   },
   textButton: {
     width: 120,
@@ -451,11 +456,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderColor: '#0055cc',
     borderWidth : 1,
+  
   },
   skipText: {
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
+    fontSize: fs(16),
     lineHeight : 16,
     letterSpacing: -0.5,
     width : '100%',
@@ -473,7 +479,7 @@ const styles = StyleSheet.create({
   primaryText: {
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
+    fontSize: fs(16),
     lineHeight: 16,
     letterSpacing: -0.5,
     width : '100%',
