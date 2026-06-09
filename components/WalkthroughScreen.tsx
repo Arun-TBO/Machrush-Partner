@@ -438,6 +438,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#0055cc',
   },
   actions: {
+    position : 'absolute',
+    bottom : 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,

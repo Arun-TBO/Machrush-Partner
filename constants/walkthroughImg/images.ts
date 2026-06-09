@@ -6,12 +6,8 @@ const IMAGES = {
   figmaReferenceFinal: require('../../assets/images/walkthrough/figma-reference-final.png'),
   figmaReference: require('../../assets/images/walkthrough/figma-reference.png'),
   machiningHero: require('../../assets/images/walkthrough/machining-hero.png'),
-  machrushLogoBlue: require('../../assets/images/walkthrough/machrush-logo-blue.png'),
-  machrushMarkDelivery: require('../../assets/images/walkthrough/machrush-mark-delivery.png'),
-  machrushMarkEarn: require('../../assets/images/walkthrough/machrush-mark-earn.png'),
   machrushMark: require('../../assets/images/walkthrough/machrush-mark.png'),
   searchIcon: require('../../assets/images/walkthrough/search-icon.png'),
-  searchIcon1: require('../../assets/images/walkthrough/search-icon1.png'),
 };
 
 export default IMAGES;
