@@ -1051,7 +1051,6 @@ const styles = StyleSheet.create({
     minWidth: 0,
     fontSize: fs(16),
     fontWeight: '500',
-    lineHeight: fs(19.2),
   },
   locationSubtitle: {
     marginTop: 1,
@@ -1093,13 +1092,15 @@ const styles = StyleSheet.create({
     height: hit(40),
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent : 'space-between',
     gap: rs(4),
     borderRadius: 100,
     paddingVertical: vs(2),
+   
   },
   onlineToggle: {
     backgroundColor: '#05c',
-    paddingLeft: rs(8),
+    paddingLeft: rs(5),
     paddingRight: rs(4),
   },
   offlineToggle: {
@@ -1108,7 +1109,7 @@ const styles = StyleSheet.create({
     paddingRight: rs(8),
   },
   statusToggleText: {
-    flex: 1,
+   
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(14, 12, 15),
@@ -1221,10 +1222,10 @@ const styles = StyleSheet.create({
     borderRadius: rs(12),
     backgroundColor: '#ffffff',
     padding : rs(2),
-     flexDirection: 'row',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-     gap : rs(12)
+    gap : rs(18)
   },
   routePoint: {
     marginBottom : vs(5),
@@ -1235,7 +1236,7 @@ const styles = StyleSheet.create({
   routeIcon: {
     width: rs(30, 24, 32),
     height : '65%',
-    paddingRight : 10
+    paddingRight : 30
   },
   pickDropContainer : {
     
@@ -1271,7 +1272,7 @@ const styles = StyleSheet.create({
   routeAddress: {
     color: '#616161',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '400',
   },
   routeSeparator: {

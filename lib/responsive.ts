@@ -4,7 +4,7 @@ const { width, height } = Dimensions.get('window');
 
 const guidelineWidth = 390;
 const guidelineHeight = 844;
-const shortestSide = Math.min(width, height);
+const shortestSide = Math.min(width, height); 
 const longestSide = Math.max(width, height);
 
 export const isCompactPhone = shortestSide < 360;
