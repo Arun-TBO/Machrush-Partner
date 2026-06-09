@@ -2,7 +2,6 @@ import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import {
-  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -27,6 +26,7 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type MapViewRef } from '@/c
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { auth } from '@/lib/firebase';
 import { getDriverProfile } from '@/lib/firestoreOnboardingService';
+import { useAppAlert } from '@/components/AppAlertModal';
 
 const pickAndDropIcon = require('@/assets/images/pickAndDropIcon1.png');
 const customerAvatarImage = require('@/assets/images/delivery/customer-avatar.jpg');
@@ -879,6 +879,7 @@ function AcceptedPickupView({
   const [otpError, setOtpError] = React.useState<string | null>(null);
   const [isVerifyingOtp, setIsVerifyingOtp] = React.useState(false);
   const [isOtpModalVisible, setIsOtpModalVisible] = React.useState(false);
+  const { alertModal, showAlert } = useAppAlert();
   const bookingPerson = delivery?.sender?.name ? delivery.sender : delivery?.receiver;
   const bookingName = bookingPerson?.name || 'Customer';
   const bookingPhone = bookingPerson?.phone || '';
@@ -1350,7 +1351,7 @@ function AcceptedPickupView({
 
   const handleCallBookingPerson = async () => {
     if (!bookingPhone) {
-      Alert.alert('Phone unavailable', 'No phone number is available for this booking.');
+      showAlert('Phone unavailable', 'No phone number is available for this booking.');
       return;
     }
 
@@ -1359,7 +1360,7 @@ function AcceptedPickupView({
 
   const handleOpenDirections = async () => {
     if (!routeDestination) {
-      Alert.alert('Location unavailable', 'No destination coordinates are available for this trip.');
+      showAlert('Location unavailable', 'No destination coordinates are available for this trip.');
       return;
     }
 
@@ -1863,6 +1864,7 @@ export default function AcceptedTripScreen() {
   const [isAccepting, setIsAccepting] = React.useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = React.useState(false);
   const [isCancelModalVisible, setIsCancelModalVisible] = React.useState(false);
+  const { alertModal, showAlert } = useAppAlert();
 
   React.useEffect(() => {
     let isActive = true;
@@ -1979,7 +1981,7 @@ export default function AcceptedTripScreen() {
     const uid = auth.currentUser?.uid || storedUid;
 
     if (!uid) {
-      Alert.alert('Login required', 'Please login again before accepting this trip.');
+      showAlert('Login required', 'Please login again before accepting this trip.');
       return;
     }
 
@@ -2041,7 +2043,7 @@ export default function AcceptedTripScreen() {
       }
     } catch (error) {
       console.error('Error accepting delivery:', error);
-      Alert.alert('Accept failed', error instanceof Error ? error.message : 'Please try again.');
+      showAlert('Accept failed', error instanceof Error ? error.message : 'Please try again.');
     } finally {
       setIsAccepting(false);
     }
@@ -2081,7 +2083,7 @@ export default function AcceptedTripScreen() {
       );
     } catch (error) {
       console.error('Error updating pickup arrival:', error);
-      Alert.alert('Update failed', error instanceof Error ? error.message : 'Please try again.');
+      showAlert('Update failed', error instanceof Error ? error.message : 'Please try again.');
     } finally {
       setIsUpdatingStatus(false);
     }
@@ -2127,7 +2129,7 @@ export default function AcceptedTripScreen() {
       return true;
     } catch (error) {
       console.error('Error verifying pickup OTP:', error);
-      Alert.alert('OTP failed', error instanceof Error ? error.message : 'Please try again.');
+      showAlert('OTP failed', error instanceof Error ? error.message : 'Please try again.');
       return false;
     }
   };
@@ -2166,7 +2168,7 @@ export default function AcceptedTripScreen() {
       );
     } catch (error) {
       console.error('Error completing delivery:', error);
-      Alert.alert('Complete failed', error instanceof Error ? error.message : 'Please try again.');
+      showAlert('Complete failed', error instanceof Error ? error.message : 'Please try again.');
     } finally {
       setIsUpdatingStatus(false);
     }
@@ -2183,28 +2185,31 @@ export default function AcceptedTripScreen() {
 
   if (showTrackingView) {
     return (
-      <AcceptedPickupView
-        delivery={delivery}
-        deliveryId={deliveryId}
-        pickupDistanceKm={pickupDistanceKm}
-        pickupAddress={pickupAddress}
-        pickupLocation={pickupLocation}
-        dropAddress={dropAddress}
-        dropLocation={dropLocation}
-        isUpdatingStatus={isUpdatingStatus}
-        onArrivedPickupPoint={handleArrivedPickupPoint}
-        onVerifyPickupOtp={handleVerifyPickupOtp}
-        onCompleteDrop={handleCompleteDrop}
-        onOpenDeliveryDetails={() =>
-          router.push({
-            pathname: '/accepted-trip',
-            params: {
-              deliveryId,
-              view: 'details',
-            },
-          })
-        }
-      />
+      <>
+        <AcceptedPickupView
+          delivery={delivery}
+          deliveryId={deliveryId}
+          pickupDistanceKm={pickupDistanceKm}
+          pickupAddress={pickupAddress}
+          pickupLocation={pickupLocation}
+          dropAddress={dropAddress}
+          dropLocation={dropLocation}
+          isUpdatingStatus={isUpdatingStatus}
+          onArrivedPickupPoint={handleArrivedPickupPoint}
+          onVerifyPickupOtp={handleVerifyPickupOtp}
+          onCompleteDrop={handleCompleteDrop}
+          onOpenDeliveryDetails={() =>
+            router.push({
+              pathname: '/accepted-trip',
+              params: {
+                deliveryId,
+                view: 'details',
+              },
+            })
+          }
+        />
+        {alertModal}
+      </>
     );
   }
 
@@ -2327,6 +2332,7 @@ export default function AcceptedTripScreen() {
         onClose={() => setIsCancelModalVisible(false)}
         onSendRequest={handleSendCancelRequest}
       />
+      {alertModal}
     </SafeAreaView>
   );
 }

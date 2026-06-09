@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import {
-  Alert,
   Image,
   ImageSourcePropType,
   Modal,
@@ -15,6 +14,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { auth } from '@/lib/firebase';
+import { useAppAlert } from '@/components/AppAlertModal';
 import { fs, hit, isCompactPhone, rs, vs } from '@/lib/responsive';
 import {
   getDriverProfile,
@@ -542,6 +542,7 @@ export default function HomeScreen() {
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
   const [todayTotalEarnings, setTodayTotalEarnings] = useState(formatCurrency(0));
   const [hasTripInProgress, setHasTripInProgress] = useState(false);
+  const { alertModal, showAlert } = useAppAlert();
 
   React.useEffect(() => {
     let isActive = true;
@@ -813,7 +814,7 @@ export default function HomeScreen() {
 
   const handleTogglePress = () => {
     if (driverStatus === 'online' && hasTripInProgress) {
-      Alert.alert(
+      showAlert(
         'Trip in progress',
         'You cannot go offline while a delivery is in progress. Complete the trip first.'
       );
@@ -827,7 +828,7 @@ export default function HomeScreen() {
     if (pendingStatus) {
       if (pendingStatus === 'offline' && hasTripInProgress) {
         setPendingStatus(null);
-        Alert.alert(
+        showAlert(
           'Trip in progress',
           'You cannot go offline while a delivery is in progress. Complete the trip first.'
         );
@@ -864,7 +865,7 @@ export default function HomeScreen() {
     }
 
     if (!job.isResumeTrip && driverStatus !== 'online') {
-      Alert.alert('You are offline', 'Go online before accepting a new trip.');
+      showAlert('You are offline', 'Go online before accepting a new trip.');
       return;
     }
 
@@ -989,6 +990,7 @@ export default function HomeScreen() {
         onCancel={() => setPendingStatus(null)}
         onConfirm={handleConfirmStatus}
       />
+      {alertModal}
     </SafeAreaView>
   );
 }

@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
   Image,
   Modal,
   Pressable,
@@ -12,6 +11,7 @@ import {
 } from 'react-native';
 import { MaterialIcons, Octicons } from '@expo/vector-icons';
 import { getVerificationStatus } from '@/lib/firestoreOnboardingService';
+import { useAppAlert } from './AppAlertModal';
 
 const verifiedImage = require('@/assets/images/verified.png');
 const backImage = require('@/assets/images/profile/back.png');
@@ -46,6 +46,7 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
   const [verificationData, setVerificationData] = useState<VerificationData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showSupportModal, setShowSupportModal] = useState(false);
+  const { alertModal, showAlert } = useAppAlert();
 
   const fetchVerificationStatus = useCallback(async () => {
     try {
@@ -175,7 +176,7 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
                 } else if (isRejected && onRetryUpload) {
                   onRetryUpload();
                 } else {
-                  Alert.alert('Info', 'Your documents are under review. Please check back soon.');
+                  showAlert('Info', 'Your documents are under review. Please check back soon.');
                 }
               }}
               disabled={!canUseButton}
@@ -236,6 +237,7 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
           </Pressable>
         </Pressable>
       </Modal>
+      {alertModal}
     </SafeAreaView>
   );
 };

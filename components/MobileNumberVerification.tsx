@@ -7,10 +7,10 @@ import {
   TextInput,
   Pressable,
   Animated,
-  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
+import { useAppAlert } from './AppAlertModal';
 import { OTPVerification } from './OTPVerification';
 import { DriverDetailsScreen } from './DriverDetailsScreen';
 import { VehicleDetailsScreen } from './VehicleDetailsScreen';
@@ -52,6 +52,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
   const [firebaseIdToken, setFirebaseIdToken] = useState<string | null>(null);
 
   const insets = useSafeAreaInsets();
+  const { alertModal, showAlert } = useAppAlert();
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // Fade in animation on mount
@@ -71,7 +72,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
 
   const handleVerifyAndContinue = async () => {
     if (!isValidMobileNumber(mobileNumber)) {
-      Alert.alert('Invalid Mobile Number', 'Please enter a valid 10-digit mobile number');
+      showAlert('Invalid Mobile Number', 'Please enter a valid 10-digit mobile number');
       return;
     }
 
@@ -96,7 +97,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
         errorMessage = error.message;
       }
       
-      Alert.alert(
+      showAlert(
         'Verification Failed',
         errorMessage,
         [
@@ -198,7 +199,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
       setShowDriverDetails(true);
     } catch (error) {
       console.error('Error processing OTP verification:', error);
-      Alert.alert('Error', 'Failed to process verification. Please try again.');
+      showAlert('Error', 'Failed to process verification. Please try again.');
     }
   };
 
@@ -228,7 +229,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
     setIsLoading(true);
     try {
       if (!firebaseUid) {
-        Alert.alert('Error', 'Firebase UID not found. Please try again from the beginning.');
+        showAlert('Error', 'Firebase UID not found. Please try again from the beginning.');
         setIsLoading(false);
         return;
       }
@@ -276,7 +277,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
       );
 
       if (!result.success) {
-        Alert.alert('Error', result.error || 'Failed to store onboarding data');
+        showAlert('Error', result.error || 'Failed to store onboarding data');
         setIsLoading(false);
         return;
       }
@@ -288,7 +289,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
       setShowBankDetails(false);
     } catch (error) {
       console.error('❌ Error storing onboarding data:', error);
-      Alert.alert(
+      showAlert(
         'Error',
         'Failed to complete onboarding. Please try again.'
       );
@@ -313,8 +314,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
     setShowDriverDetails(true);
   };
 
-  return (
-    showSuspended ? (
+  const content = showSuspended ? (
       <SuspendedScreen />
     ) : showVerification ? (
       <DocumentsVerificationScreen
@@ -418,7 +418,13 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
          
         </View>
       </Animated.View>
-    )
+    );
+
+  return (
+    <>
+      {content}
+      {alertModal}
+    </>
   );
 };
 
