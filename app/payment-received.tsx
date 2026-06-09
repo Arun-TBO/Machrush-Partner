@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#ffffff',
-    padding : rs(18),
+    padding : 18
   },
   header: {
     position: 'absolute',
@@ -502,8 +502,11 @@ const styles = StyleSheet.create({
   summaryBlock: {
     width: '100%',
     gap: vs(16),
+<<<<<<< HEAD
     paddingHorizontal: rs(16),
     paddingVertical: vs(24),
+=======
+>>>>>>> a90b121 (resolving the alignmnet)
   },
   deliveryHeaderRow: {
     width: '100%',
@@ -633,7 +636,7 @@ const styles = StyleSheet.create({
   routeText: {
     flex: 1,
     minWidth: 0,
-    padding : rs(4),
+   
   },
   routePointTitle: {
     fontFamily: 'Poppins_500Medium',

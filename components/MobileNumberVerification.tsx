@@ -25,6 +25,8 @@ import {
 
 import { sendOTP } from '@/lib/firebaseAuthService'; // Real Firebase Auth
 
+import { fs, hit, rs, vs } from '@/lib/responsive';
+
 interface MobileNumberVerificationProps {
   onVerify?: (mobileNumber: string) => void;
   onBack?: () => void;
@@ -464,7 +466,7 @@ const styles = StyleSheet.create({
   title: {
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 40,
+    fontSize: fs(40),
     fontWeight: '500',
     lineHeight: 48,
     letterSpacing: 0,
@@ -472,7 +474,7 @@ const styles = StyleSheet.create({
   description: {
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 18,
+    fontSize: fs(18),
     fontWeight: '500',
     letterSpacing: 0,
   },
@@ -480,40 +482,42 @@ const styles = StyleSheet.create({
   // Input Container
   inputContainer: {
     flexDirection: 'row',
+    justifyContent : 'space-around',
     gap: 8,
     alignItems: 'center',
   },
 
   // Country Code Box
   countryCodeBox: {
-    width: 52,
-    height: 60,
+    width: rs(52),
+    height: rs(60),
     backgroundColor: 'white',
     borderRadius: Radius.md,
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingTop: 8,
     paddingBottom: 9,
   },
   countryCodeLabel: {
     color: '#9d9d8a',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 12,
+    fontSize: fs(12),
     fontWeight: '400',
     lineHeight: 12,
   },
   countryCode: {
     color: '#1c1c1a',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 14,
+    fontSize: fs(14),
     fontWeight: '500',
     lineHeight: 21,
+    letterSpacing : 0
   },
 
   // Mobile Number Input
   mobileNumberBox: {
     flex: 1,
-    height: 60,
+    height: rs(60),
     backgroundColor: 'white',
     borderRadius: Radius.md,
     paddingHorizontal: 16,
@@ -553,7 +557,7 @@ const styles = StyleSheet.create({
   verifyButtonText: {
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '500',
     lineHeight: 16,
     letterSpacing: -0.5,

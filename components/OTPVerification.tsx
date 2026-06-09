@@ -15,6 +15,8 @@ import { verifyOTP, resendOTP } from '@/lib/firebaseAuthService'; // Real Fireba
 
 const RESEND_OTP_SECONDS = 40;
 
+import { fs, hit, rs, vs } from '@/lib/responsive';
+
 interface OTPVerificationProps {
   mobileNumber: string;
   onVerify?: (result: { uid: string; phoneNumber: string; idToken: string; otp: string }) => void;
@@ -198,6 +200,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
                 style={[
                   styles.otpInput,
                   digit && styles.otpInputFilled,
+                  
                 ]}
                 value={digit}
                 onChangeText={(value) => handleOtpInput(index, value)}
@@ -211,7 +214,10 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
                 editable={!isLoading}
                 
                 placeholderTextColor={Colors.neutral700}
-                textAlign="center"
+                 textAlign = 'center'
+                 textAlignVertical = 'top' // Android
+               
+
               />
             ))}
           </View>
@@ -312,38 +318,41 @@ const styles = StyleSheet.create({
   title: {
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 40,
+    fontSize: fs(40),
     fontWeight: '500',
     lineHeight: 48,
     letterSpacing: 0,
   },
   descriptionContainer: {
+    width : '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
+    
   },
   description: {
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 18,
+    fontSize: fs(18),
     fontWeight: '500',
     letterSpacing: 0,
   },
   phoneNumberLink: {
     color: '#0055cc',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 18,
+    fontSize: fs(18),
     fontWeight: '500',
     lineHeight: 18,
     textDecorationLine: 'underline',
+    letterSpacing: 0,
   },
 
   // OTP Input Container
   otpInputContainer: {
     flexDirection: 'row',
-    gap: 8, // mini-2 from design
-    justifyContent: 'flex-start',
+    gap: 2, // mini-2 from design
+    justifyContent: 'space-between',
     alignItems: 'center',
+    
   },
 
   // OTP Input Fields
@@ -362,6 +371,9 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
     paddingHorizontal: 0,
     borderWidth: 0,
+    // flexDirection : 'column',
+    // justifyContent : 'center',
+    // alignItems : 'center'
   },
   otpInputFilled: {
     borderColor: Colors.primary,
