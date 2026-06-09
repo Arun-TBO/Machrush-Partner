@@ -6,10 +6,10 @@ import {
   TextInput,
   Pressable,
   Animated,
-  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
+import { useAppAlert } from './AppAlertModal';
 
 import { verifyOTP, resendOTP } from '@/lib/firebaseAuthService'; // Real Firebase
 
@@ -36,6 +36,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
   const [canResend, setCanResend] = useState(false);
   const [resendTimer, setResendTimer] = useState(RESEND_OTP_SECONDS);
   const insets = useSafeAreaInsets();
+  const { alertModal, showAlert } = useAppAlert();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const inputRefs = useRef<(TextInput | null)[]>([null, null, null, null, null, null]);
 
@@ -93,7 +94,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
 
   const handleVerifyAndContinue = async () => {
     if (!isOtpComplete) {
-      Alert.alert('Invalid OTP', 'Please enter the complete 6-digit verification code');
+      showAlert('Invalid OTP', 'Please enter the complete 6-digit verification code');
       return;
     }
 
@@ -119,7 +120,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
       }
     } catch (error: any) {
       console.error('❌ Error verifying OTP:', error);
-      Alert.alert(
+      showAlert(
         'Verification Failed',
         error.message || 'Invalid OTP. Please check and try again.'
       );
@@ -152,7 +153,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
       }
     } catch (error: any) {
       console.error('❌ Error resending OTP:', error);
-      Alert.alert(
+      showAlert(
         'Resend Failed',
         error.message || 'Failed to resend OTP. Please try again.'
       );
@@ -259,6 +260,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
       <View style={styles.navigation}>
 
       </View>
+      {alertModal}
     </Animated.View>
   );
 };
@@ -363,6 +365,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 24,
     fontWeight: '500',
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    paddingTop: 4,
+    paddingBottom: 0,
+    paddingHorizontal: 0,
     borderWidth: 0,
     // flexDirection : 'column',
     // justifyContent : 'center',

@@ -2,7 +2,6 @@ import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   ImageSourcePropType,
   Modal,
@@ -18,6 +17,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { signOutUser } from '@/lib/firebaseAuthService';
 import { auth } from '@/lib/firebase';
 import { getDriverProfile, updateDriverProfilePhoto } from '@/lib/firestoreOnboardingService';
+import { useAppAlert } from '@/components/AppAlertModal';
 import {
   getCachedDriverName,
   getCachedProfilePhotoUrl,
@@ -244,6 +244,7 @@ export default function ProfileScreen() {
   const [completedDeliveryCount, setCompletedDeliveryCount] = React.useState(0);
   const [isPhotoUploading, setIsPhotoUploading] = React.useState(false);
   const router = useRouter();
+  const { alertModal, showAlert } = useAppAlert();
 
   const handleMenuPress = (rowId: string) => {
     if (rowId === 'documents') {
@@ -397,7 +398,7 @@ export default function ProfileScreen() {
       const { uid, idToken } = await getCurrentProfileSession();
 
       if (!uid) {
-        Alert.alert('Login required', 'Please login again before updating your profile picture.');
+        showAlert('Login required', 'Please login again before updating your profile picture.');
         router.replace('/phone-number');
         return;
       }
@@ -405,7 +406,7 @@ export default function ProfileScreen() {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (!permission.granted) {
-        Alert.alert('Permission needed', 'Please allow gallery access to choose a profile photo.');
+        showAlert('Permission needed', 'Please allow gallery access to choose a profile photo.');
         return;
       }
 
@@ -438,7 +439,7 @@ export default function ProfileScreen() {
       setProfilePhotoUrl(uploadedPhotoUrl);
     } catch (error) {
       console.error('Error updating profile photo:', error);
-      Alert.alert('Upload failed', 'Could not update your profile photo. Please try again.');
+      showAlert('Upload failed', 'Could not update your profile photo. Please try again.');
     } finally {
       setIsPhotoUploading(false);
     }
@@ -550,6 +551,7 @@ export default function ProfileScreen() {
         onClose={() => setIsLogoutVisible(false)}
         onLogout={handleConfirmLogout}
       />
+      {alertModal}
     </SafeAreaView>
   );
 }

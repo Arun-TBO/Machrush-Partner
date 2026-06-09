@@ -9,10 +9,10 @@ import {
   Image,
   Modal,
   FlatList,
-  Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Colors, Spacing, Radius } from '@/lib/theme';
+import { useAppAlert } from './AppAlertModal';
 
 const backImage = require('@/assets/images/profile/back.png');
 const closedBodyImage = require('@/assets/images/vehicle-details/closed-body.png');
@@ -82,6 +82,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   const [showVehicleTypeModal, setShowVehicleTypeModal] = useState(false);
   const [vehicleOptions, setVehicleOptions] = useState<VehicleOption[]>([]);
   const [isLoadingVehicles, setIsLoadingVehicles] = useState(true);
+  const { alertModal, showAlert } = useAppAlert();
   
   // File URIs
   const [rcBookUri, setRcBookUri] = useState<string | null>(null);
@@ -139,7 +140,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   const requestMediaPermissions = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'We need permission to access your photo library');
+      showAlert('Permission Denied', 'We need permission to access your photo library');
       return false;
     }
     return true;
@@ -172,7 +173,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
         }
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to pick file');
+      showAlert('Error', 'Failed to pick file');
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -203,7 +204,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
         });
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to pick photo');
+      showAlert('Error', 'Failed to pick photo');
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -243,7 +244,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
 
   const handleContinue = () => {
     if (!isFormValid) {
-      Alert.alert('Incomplete Form', 'Please fill in all required fields and upload all documents');
+      showAlert('Incomplete Form', 'Please fill in all required fields and upload all documents');
       return;
     }
 
@@ -533,6 +534,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
           </View>
         </Pressable>
       </Modal>
+      {alertModal}
     </View>
   );
 };
