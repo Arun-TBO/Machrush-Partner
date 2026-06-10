@@ -502,11 +502,8 @@ const styles = StyleSheet.create({
   summaryBlock: {
     width: '100%',
     gap: vs(16),
-<<<<<<< HEAD
     paddingHorizontal: rs(16),
     paddingVertical: vs(24),
-=======
->>>>>>> a90b121 (resolving the alignmnet)
   },
   deliveryHeaderRow: {
     width: '100%',
