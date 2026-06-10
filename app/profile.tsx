@@ -469,7 +469,7 @@ export default function ProfileScreen() {
           <View style={styles.profileBlock}>
             <View style={styles.profileRow}>
               <View style={styles.identity}>
-                 <Text style={styles.driverName}>{driverName}</Text>
+                 <Text style={styles.driverName} numberOfLines={1} ellipsizeMode="tail">{driverName}</Text>
                 <View style={styles.nameRow}>
                  
                   <Image source={verifiedBadgeImage} style={styles.verifiedBadge} resizeMode="contain" />
@@ -629,8 +629,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 24,
     fontWeight: '500',
-    lineHeight: 24,
+    lineHeight: 32,
     letterSpacing: -1,
+    flexShrink: 1,
   },
   verified :{
     fontFamily: 'Poppins',

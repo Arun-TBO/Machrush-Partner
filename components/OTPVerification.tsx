@@ -215,7 +215,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
                 
                 placeholderTextColor={Colors.neutral700}
                  textAlign = 'center'
-                 textAlignVertical = 'top' // Android
+                 textAlignVertical = 'center' // Android
                
 
               />
@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
     textAlignVertical: 'center',
-    paddingTop: 4,
+    paddingTop: 2,
     paddingBottom: 0,
     paddingHorizontal: 0,
     borderWidth: 0,
@@ -400,7 +400,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    lineHeight: 16,
+    lineHeight: 20,
     letterSpacing: -0.5,
   },
 

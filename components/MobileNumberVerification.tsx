@@ -559,7 +559,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(16),
     fontWeight: '500',
-    lineHeight: 16,
+    lineHeight: 20,
     letterSpacing: -0.5,
   },
   navigation: {
