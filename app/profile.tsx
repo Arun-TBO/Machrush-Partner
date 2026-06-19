@@ -1,4 +1,4 @@
-import React from 'react';
+import React , {useEffect , useRef} from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
@@ -11,6 +11,8 @@ import {
   StyleSheet,
   Text,
   View,
+  PanResponder,
+  Animated
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -52,7 +54,7 @@ const menuRows = [
   { id: 'report', label: 'Report a problem', icon: reportImage, iconSize: 24 },
   { id: 'help', label: 'Get Help', icon: helpImage, iconSize: 24 },
   { id: 'terms', label: 'Terms & conditions', icon: termsImage, iconSize: 24 },
-  { id: 'Payment policy', label: 'Payment policy', icon: Paymentpolicy, iconSize: 24 },
+  { id: 'Payment policy', label: 'Payment policy', icon: Paymentpolicy, iconSize: 21 },
 ];
 
 type DeliveryRecord = {
@@ -163,14 +165,90 @@ function SupportModal({
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
+    
+  const translateY = useRef(
+    new Animated.Value(500)
+  ).current;
+
+  useEffect(() => {
+    if (visible) {
+      translateY.setValue(500);
+
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible]);
+
+  const handleClose = () => {
+    Animated.timing(translateY, {
+      toValue: 500,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      onClose();
+    });
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+
+      onMoveShouldSetPanResponder: (
+        _,
+        gestureState
+      ) => Math.abs(gestureState.dy) > 5,
+
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          translateY.setValue(
+            gestureState.dy
+          );
+        }
+      },
+
+      onPanResponderRelease: (
+        _,
+        gestureState
+      ) => {
+        if (gestureState.dy > 120) {
+          handleClose();
+        } else {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
 
   return (
     <Modal visible={visible} transparent statusBarTranslucent  onRequestClose={onClose}>
-      <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable
+      <Pressable style={styles.modalBackdrop} onPress={handleClose}>
+        
+         
+         <Animated.View
+          {...panResponder.panHandlers}
+          style={[
+            styles.supportSheet,
+            {
+              transform: [
+                { translateY },
+              ],
+            },
+          ]}
+          
+        >
+        
+        
+        {/* <Pressable
           style={[styles.supportSheet, { paddingBottom: insets.bottom + 16 }]}
           onPress={(event) => event.stopPropagation()}
-        >
+        > */}
           <View style={styles.sheetHeader}>
             <View style={styles.dragHandle} />
           </View>
@@ -186,7 +264,7 @@ function SupportModal({
             <SupportOption icon={supportCallImage} label="Call us (24x7)" value="022276110864" />
             <SupportOption icon={supportEmailImage} label="Email us" value="machrush@support.com" />
           </View>
-        </Pressable>
+        </Animated.View>
       </Pressable>
     </Modal>
   );
@@ -202,14 +280,89 @@ function LogoutModal({
   onLogout: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  
+  const translateY = useRef(
+    new Animated.Value(500)
+  ).current;
+
+  useEffect(() => {
+    if (visible) {
+      translateY.setValue(500);
+
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible]);
+
+  const handleClose = () => {
+    Animated.timing(translateY, {
+      toValue: 500,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      onClose();
+    });
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+
+      onMoveShouldSetPanResponder: (
+        _,
+        gestureState
+      ) => Math.abs(gestureState.dy) > 5,
+
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          translateY.setValue(
+            gestureState.dy
+          );
+        }
+      },
+
+      onPanResponderRelease: (
+        _,
+        gestureState
+      ) => {
+        if (gestureState.dy > 120) {
+          handleClose();
+        } else {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
+
 
   return (
     <Modal visible={visible} transparent  statusBarTranslucent onRequestClose={onClose}>
-      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+      <Pressable style={styles.modalBackdrop}  onPress={handleClose}>
+        
+          <Animated.View
+          {...panResponder.panHandlers}
+          style={[
+            styles.logoutSheet,
+            {
+              transform: [
+                { translateY },
+              ],
+            },
+          ]}
+          
+        >
+{/*         
         <Pressable
           style={[styles.logoutSheet, { paddingBottom: insets.bottom + 16 }]}
           onPress={(event) => event.stopPropagation()}
-        >
+        > */}
           <View style={styles.logoutDialog}>
             <View style={styles.sheetHeader}>
               <View style={styles.dragHandle} />
@@ -240,7 +393,7 @@ function LogoutModal({
               <Text style={styles.confirmLogoutButtonText}>Logout</Text>
             </Pressable>
           </View>
-        </Pressable>
+        </Animated.View>
       </Pressable>
     </Modal>
   );
@@ -956,16 +1109,17 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   logoutSheet: {
+   height :255,
     width: '100%',
     alignSelf: 'center',
-    gap: 32,
+    gap: 5,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     backgroundColor: '#ffffff',
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 16,
-    overflow: 'hidden',
+    
   },
   logoutDialog: {
     width: '100%',
@@ -1002,42 +1156,44 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'flex-start',
-    justifyContent: 'space-around',
-    gap: 2,
+    gap: 12,
   },
   goBackButton: {
-    flex: 1,
-    minWidth: 0,
+    width: 120,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
     borderWidth: 1,
     borderColor: '#0055cc',
     borderRadius: 8,
-    minHeight: 48
   },
   goBackButtonText: {
-    flexShrink: 1,
+    width : 120,
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    lineHeight: 19,
-    letterSpacing: -0.5,
+    lineHeight: 20,
+    letterSpacing: -0.5,  
+    textAlign: 'center',
   },
   confirmLogoutButton: {
-    flex: 1.8,
+    flex: 1,
     minHeight: 48,
-    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
     borderRadius: 8,
     backgroundColor: '#d00416',
-
   },
   confirmLogoutButtonText: {
-    flexShrink: 1,
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
+    lineHeight: 20,
+    letterSpacing: -0.5,
     textAlign: 'center',
   },
 });

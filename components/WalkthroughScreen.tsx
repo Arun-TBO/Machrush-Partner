@@ -206,9 +206,8 @@ Animated.parallel([
  
         showVerification ? (
           <>
-           <StatusBar  translucent
-  backgroundColor="transparent"
- /> 
+             <StatusBar hidden />
+ 
 
  <MobileNumberVerification
         onVerify={handleVerificationComplete}
@@ -219,9 +218,7 @@ Animated.parallel([
     ) : (
       
         <View style={styles.screen}   {...panResponder.panHandlers}>
-         <StatusBar  translucent
-  backgroundColor="transparent"
- />
+          <StatusBar hidden />
        
       
 
@@ -440,7 +437,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#0055cc',
   },
   actions: {
- 
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,

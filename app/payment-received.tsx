@@ -334,7 +334,7 @@ export default function PaymentReceivedScreen() {
           style={styles.scroll}
           contentContainerStyle={[
             styles.content,
-            { paddingBottom: insets.bottom + 24 },
+          
           ]}
           showsVerticalScrollIndicator={false}
         >
@@ -504,7 +504,6 @@ const styles = StyleSheet.create({
   content: {
     width: '100%',
     maxWidth: rs(412, 320, 430),
-    alignSelf: 'center',
     paddingTop: vs(116),
     paddingBottom: vs(24),
     gap: vs(24),
@@ -513,7 +512,7 @@ const styles = StyleSheet.create({
   summaryBlock: {
     width: '100%',
     gap: vs(16),
-    paddingHorizontal: rs(16),
+    paddingHorizontal: rs(4),
     paddingVertical: vs(24),
   },
   deliveryHeaderRow: {
@@ -584,10 +583,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e8e8e8',
     borderRadius: rs(12),
-    paddingHorizontal: rs(8),
+    paddingHorizontal: rs(4),
     paddingVertical: vs(12),
     gap: vs(12),
     overflow: 'hidden',
+    maxWidth: rs(380, 320, 420),
   },
   routeHeader: {
     flexDirection: 'row',
@@ -647,12 +647,6 @@ const styles = StyleSheet.create({
   routeText: {
     flex: 1,
     minWidth: 0,
-<<<<<<< HEAD
-    flexShrink: 1,
-   
-=======
-
->>>>>>> 10ae333 (Update Onboaeding screens)
   },
   routePointTitle: {
     fontFamily: 'Poppins_500Medium',
