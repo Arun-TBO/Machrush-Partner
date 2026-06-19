@@ -403,7 +403,8 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
+    position : 'fixed',
+    bottom : 0
   },
   continueButtonActive: {
     backgroundColor: '#05c',

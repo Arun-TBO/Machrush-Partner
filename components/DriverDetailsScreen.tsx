@@ -14,6 +14,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '@/lib/theme';
 
 const backImage = require('@/assets/images/profile/back.png');
+const uploadIcon = require('@/assets/images/uploadIcon.png');
+import { fs, hit, rs, vs } from '@/lib/responsive';
 
 interface DriverDetailsScreenProps {
   onContinue?: (data: DriverDetailsData) => void;
@@ -64,7 +66,7 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
+        allowsEditing: false,
         aspect: [1, 1],
         quality: 0.8,
       });
@@ -253,8 +255,8 @@ const DocumentUploadItem: React.FC<DocumentUploadItemProps> = ({
         <Text style={styles.documentDescription}>{description}</Text>
         {hasError && (
           <View style={styles.errorContainer}>
-            <Text style={styles.retryIcon}>↻</Text>
-            <Text style={styles.errorText}>Upload again</Text>
+             <Image source={uploadIcon} style={{height : 20 , width  : 20}}/>
+            <Text style={styles.errorText}>Upload</Text>
           </View>
         )}
       </View>
@@ -351,7 +353,7 @@ const styles = StyleSheet.create({
   title: {
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 40,
+    fontSize: fs(40),
     fontWeight: '500',
     lineHeight: 48,
   },
@@ -430,7 +432,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
-    lineHeight: 18,
+  
   },
   documentDescription: {
     minWidth: 0,
@@ -439,7 +441,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    lineHeight: 18,
   },
   errorContainer: {
     flexDirection: 'row',
@@ -465,10 +466,7 @@ const styles = StyleSheet.create({
 
   // Document Upload Box
   documentUploadBox: {
-    width: 64,
-    height: 64,
-    borderRadius: 12,
-    overflow: 'hidden',
+    
   },
   uploadButton: {
     width: 64,
@@ -491,9 +489,11 @@ const styles = StyleSheet.create({
   uploadedImageContainer: {
     width: 64,
     height: 64,
-    position: 'relative',
+   position: 'relative',
+  alignSelf: 'flex-start',
+  overflow: 'visible',
     borderRadius: 12,
-    overflow: 'hidden',
+
   },
   uploadedImage: {
     width: '100%',
@@ -502,15 +502,16 @@ const styles = StyleSheet.create({
   },
   removeButton: {
     position: 'absolute',
-    top: -7,
-    right: -7,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    top: -1,
+    right: -5,
+    width: 25,
+    height: 25,
+    borderRadius: 50,
     backgroundColor: '#d00416',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
+      elevation: 5, // Android
   },
   removeButtonIcon: {
     fontSize: 12,
@@ -526,6 +527,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom : 15
   },
   continueButtonDisabled: {
     opacity: 0.5,
