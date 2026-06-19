@@ -20,6 +20,7 @@ import { fs, hit, rs, vs } from '@/lib/responsive';
 interface DriverDetailsScreenProps {
   onContinue?: (data: DriverDetailsData) => void;
   onBack?: () => void;
+  initialData?: Partial<DriverDetailsData> | null;
 }
 
 interface DriverDetailsData {
@@ -32,11 +33,16 @@ interface DriverDetailsData {
 export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
   onContinue,
   onBack,
+  initialData,
 }) => {
-  const [fullName, setFullName] = useState('');
-  const [photoUri, setPhotoUri] = useState<string | undefined>();
-  const [drivingLicenseUri, setDrivingLicenseUri] = useState<string | undefined>();
-  const [identityProofUri, setIdentityProofUri] = useState<string | undefined>();
+  const [fullName, setFullName] = useState(initialData?.fullName || '');
+  const [photoUri, setPhotoUri] = useState<string | undefined>(initialData?.photoUri);
+  const [drivingLicenseUri, setDrivingLicenseUri] = useState<string | undefined>(
+    initialData?.drivingLicenseUri
+  );
+  const [identityProofUri, setIdentityProofUri] = useState<string | undefined>(
+    initialData?.identityProofUri
+  );
   const [isLoading, setIsLoading] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -50,26 +56,46 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
     }).start();
   }, []);
 
-  // Request permissions
   useEffect(() => {
-    (async () => {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        alert('Permission to access media library is required!');
-      }
-    })();
-  }, []);
+    if (!initialData) {
+      return;
+    }
+
+    setFullName(initialData.fullName || '');
+    setPhotoUri(initialData.photoUri);
+    setDrivingLicenseUri(initialData.drivingLicenseUri);
+    setIdentityProofUri(initialData.identityProofUri);
+  }, [initialData]);
 
   const pickImage = async (
     type: 'photo' | 'license' | 'identity',
   ) => {
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
+      const permission =
+        type === 'photo'
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (permission.status !== 'granted') {
+        alert(
+          type === 'photo'
+            ? 'Permission to access camera is required!'
+            : 'Permission to access media library is required!'
+        );
+        return;
+      }
+
+      const pickerOptions: ImagePicker.ImagePickerOptions = {
         mediaTypes: ['images'],
         allowsEditing: false,
         aspect: [1, 1],
         quality: 0.8,
-      });
+      };
+
+      const result =
+        type === 'photo'
+          ? await ImagePicker.launchCameraAsync(pickerOptions)
+          : await ImagePicker.launchImageLibraryAsync(pickerOptions);
 
       if (!result.canceled) {
         const uri = result.assets[0].uri;

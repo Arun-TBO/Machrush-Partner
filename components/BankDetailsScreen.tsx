@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,8 @@ const chevrondown = require('@/assets/images/chevron-down.png');
 interface BankDetailsScreenProps {
   onContinue?: (bankData: BankDetailsData) => void;
   onBack?: () => void;
+  initialData?: Partial<BankDetailsData> | null;
+  onDraftChange?: (bankData: Partial<BankDetailsData>) => void;
 }
 
 interface BankDetailsData {
@@ -42,12 +44,23 @@ const BANK_LIST = [
 export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
   onContinue,
   onBack,
+  initialData,
+  onDraftChange,
 }) => {
-  const [bankName, setBankName] = useState('');
-  const [accountNumber, setAccountNumber] = useState('');
-  const [ifscCode, setIfscCode] = useState('');
-  const [upiId, setUpiId] = useState('');
+  const [bankName, setBankName] = useState(initialData?.bankName || '');
+  const [accountNumber, setAccountNumber] = useState(initialData?.accountNumber || '');
+  const [ifscCode, setIfscCode] = useState(initialData?.ifscCode || '');
+  const [upiId, setUpiId] = useState(initialData?.upiId || '');
   const [showBankModal, setShowBankModal] = useState(false);
+
+  useEffect(() => {
+    onDraftChange?.({
+      bankName,
+      accountNumber,
+      ifscCode,
+      upiId,
+    });
+  }, [bankName, accountNumber, ifscCode, upiId, onDraftChange]);
 
   const handleBankSelect = (bank: string) => {
     setBankName(bank);

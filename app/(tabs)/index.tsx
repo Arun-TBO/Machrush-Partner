@@ -44,7 +44,13 @@ type CurrentLocationLabel = {
   district: string;
 };
 
+type LatLng = {
+  lat: number;
+  lng: number;
+};
+
 const DRIVER_ONLINE_MAX_DURATION_MS = 12 * 60 * 60 * 1000;
+const AVERAGE_CITY_SPEED_KMPH = 30;
 
 const jobRequests = [
   {
@@ -244,12 +250,112 @@ const getDistanceKm = (
   return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-const mapDeliveryToJobRequest = (delivery: OpenDelivery, index: number): JobRequest => {
+const getDistanceFromCoords = (from: LatLng | null, to?: DeliveryPoint) => {
+  if (!from) {
+    return null;
+  }
+
+  const toLat = to?.coords?.lat;
+  const toLng = to?.coords?.lng;
+
+  if (typeof toLat !== 'number' || typeof toLng !== 'number') {
+    return null;
+  }
+
+  return getDistanceKm(
+    {
+      coords: {
+        lat: from.lat,
+        lng: from.lng,
+      },
+    },
+    {
+      coords: {
+        lat: toLat,
+        lng: toLng,
+      },
+    }
+  );
+};
+
+const formatEta = (distanceKm: number | null, fallback: string | null | undefined) => {
+  if (typeof distanceKm === 'number' && Number.isFinite(distanceKm) && distanceKm > 0) {
+    const minutes = Math.max(1, Math.round((distanceKm / AVERAGE_CITY_SPEED_KMPH) * 60));
+    return `Approx. ${minutes} mins`;
+  }
+
+  return fallback || 'ETA unavailable';
+};
+
+const formatDistanceLabel = (distanceKm: number | null, fallback: string) => {
+  if (typeof distanceKm === 'number' && Number.isFinite(distanceKm) && distanceKm > 0) {
+    return `${Math.max(1, Math.round(distanceKm))}km pickup`;
+  }
+
+  return fallback;
+};
+
+const getAreaName = (address: string | null | undefined, fallback: string) => {
+  const parts = (address || '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (!parts.length) {
+    return fallback;
+  }
+
+  if (parts.length === 1) {
+    return parts[0];
+  }
+
+  const ignoredTailPattern = /^(tamil nadu|india|tn|\d{6})$/i;
+  const doorOrBuildingPattern =
+    /(^\s*(no\.?|door|flat|plot|shop|old no|new no)\b|\b(building|complex|tower|floor|block|apartment|villa|house)\b)/i;
+  const numberOnlyPattern = /^[\d\s/-]+$/;
+  const streetPattern = /\b(street|st\.?|road|rd\.?|lane|cross|main road|avenue|nagar|colony)\b/i;
+
+  const candidates = parts.filter(
+    (part) => !ignoredTailPattern.test(part) && !numberOnlyPattern.test(part)
+  );
+  const hyphenArea = candidates
+    .flatMap((part) =>
+      part
+        .split(/\s+-\s+/)
+        .map((piece) => piece.trim())
+        .filter(Boolean)
+    )
+    .reverse()
+    .find(
+      (part) =>
+        !numberOnlyPattern.test(part) &&
+        !doorOrBuildingPattern.test(part) &&
+        !/[&@]/.test(part)
+    );
+  const street = candidates.find((part) => streetPattern.test(part) && !doorOrBuildingPattern.test(part));
+  const locality = [...candidates]
+    .reverse()
+    .find(
+      (part) =>
+        !numberOnlyPattern.test(part) &&
+        !doorOrBuildingPattern.test(part) &&
+        !/[&@]/.test(part)
+    );
+
+  return street || hyphenArea || locality || candidates[candidates.length - 1] || fallback;
+};
+
+const mapDeliveryToJobRequest = (
+  delivery: OpenDelivery,
+  index: number,
+  currentCoords: LatLng | null
+): JobRequest => {
   const pickup = delivery.locations?.pickup;
   const dropoff = delivery.locations?.dropoff;
   const dbDistance = Number(delivery.pricing?.distanceKm ?? delivery.pricing?.distance);
   const calculatedDistance = getDistanceKm(pickup, dropoff);
   const distance = Number.isFinite(dbDistance) && dbDistance > 0 ? dbDistance : calculatedDistance;
+  const pickupDistance = getDistanceFromCoords(currentCoords, pickup);
   const distanceLabel = distance ? `Drop ${Math.round(distance)} km` : 'Drop';
   const isResumeTrip =
     delivery.status === 'assigned' ||
@@ -261,14 +367,14 @@ const mapDeliveryToJobRequest = (delivery: OpenDelivery, index: number): JobRequ
     deliveryId: delivery.id || '',
     isResumeTrip,
     earnings: formatCurrency(delivery.pricing?.tripFare ?? delivery.pricing?.total),
-    pickupDistance: distance ? `${Math.round(distance)}km pickup` : 'Open job',
+    pickupDistance: formatDistanceLabel(pickupDistance, 'Open job'),
     age: isResumeTrip ? 'Resume trip' : formatAge(delivery.timestamps?.createdAt),
     pickupTitle: 'To Pickup',
-    pickupTime: delivery.pickupTime || 'Pickup time not set',
-    pickupAddress: pickup?.address || 'Pickup address unavailable',
+    pickupTime: formatEta(pickupDistance, delivery.pickupTime),
+    pickupAddress: getAreaName(pickup?.address, 'Pickup area unavailable'),
     dropTitle: distanceLabel,
-    dropTime: delivery.dropoffTime || 'Drop time not set',
-    dropAddress: dropoff?.address || 'Drop address unavailable',
+    dropTime: formatEta(distance, delivery.dropoffTime),
+    dropAddress: getAreaName(dropoff?.address, 'Drop area unavailable'),
   };
 };
 
@@ -452,7 +558,11 @@ function JobCard({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Resume accepted trip"
-        style={({ pressed }) => [styles.jobCard, pressed ? styles.jobCardPressed : null]}
+        style={({ pressed }) => [
+          styles.jobCard,
+          styles.activeJobCard,
+          pressed ? styles.jobCardPressed : null,
+        ]}
         onPress={() => onAccept(job)}
       >
         {cardContent}
@@ -594,6 +704,7 @@ export default function HomeScreen() {
   const [pendingRejectedJob, setPendingRejectedJob] = useState<JobRequest | null>(null);
   const [isRejectingJob, setIsRejectingJob] = useState(false);
   const hasLoadedJobsRef = React.useRef(false);
+  const currentCoordsRef = React.useRef<LatLng | null>(null);
   const { alertModal, showAlert } = useAppAlert();
 
   React.useEffect(() => {
@@ -616,6 +727,10 @@ export default function HomeScreen() {
         const position = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
         });
+        currentCoordsRef.current = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        };
         const [address] = await Location.reverseGeocodeAsync(position.coords);
 
         const area =
@@ -638,6 +753,7 @@ export default function HomeScreen() {
         }
       } catch (error) {
         console.error('Error loading current location:', error);
+        currentCoordsRef.current = null;
         if (isActive) {
           setCurrentLocation({
             area: 'Location unavailable',
@@ -743,7 +859,11 @@ export default function HomeScreen() {
           });
 
           if (isActive) {
-            setJobRequestList(deliveries.map(mapDeliveryToJobRequest));
+            setJobRequestList(
+              deliveries.map((delivery, index) =>
+                mapDeliveryToJobRequest(delivery, index, currentCoordsRef.current)
+              )
+            );
             setTodayTotalEarnings(formatCurrency(todayEarningsAmount));
             setHasTripInProgress(activeDriverDeliveries.length > 0);
           }
@@ -923,6 +1043,14 @@ export default function HomeScreen() {
       return;
     }
 
+    if (!job.isResumeTrip && hasTripInProgress) {
+      showAlert(
+        'Trip in progress',
+        'Complete your current trip before accepting another trip.'
+      );
+      return;
+    }
+
     router.push({
       pathname: '/accepted-trip',
       params: { deliveryId: job.deliveryId },
@@ -1082,7 +1210,7 @@ export default function HomeScreen() {
                     job={job}
                     onAccept={handleAcceptJob}
                     onReject={handleRejectJobPress}
-                    canAcceptNewJobs={driverStatus === 'online'}
+                    canAcceptNewJobs={driverStatus === 'online' && !hasTripInProgress}
                   />
                 ))
               ) : (
@@ -1302,6 +1430,10 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 0 },
     elevation: 4,
+  },
+  activeJobCard: {
+    borderWidth: 1,
+    borderColor: '#d6a21f',
   },
   jobCardPressed: {
     opacity: 0.85,

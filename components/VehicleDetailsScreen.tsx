@@ -11,6 +11,7 @@ import {
   FlatList,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
 import { useAppAlert } from './AppAlertModal';
 
@@ -24,6 +25,8 @@ const bodynonactivetrak = require('@/assets/images/body-non-active-trak.png');
 interface VehicleDetailsScreenProps {
   onContinue?: (vehicleData: VehicleDetailsData) => void;
   onBack?: () => void;
+  initialData?: Partial<VehicleDetailsData> | null;
+  onDraftChange?: (vehicleData: Partial<VehicleDetailsData>) => void;
 }
 
 interface VehicleDetailsData {
@@ -86,26 +89,52 @@ const getVehicleCapacity = (vehicle: Record<string, any>) => {
 export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   onContinue,
   onBack,
+  initialData,
+  onDraftChange,
 }) => {
-  const [vehicleNumber, setVehicleNumber] = useState('');
-  const [vehicleType, setVehicleType] = useState('');
-  const [vehicleCapacity, setVehicleCapacity] = useState('');
-  const [selectedBodyType, setSelectedBodyType] = useState('');
+  const insets = useSafeAreaInsets();
+  const [vehicleNumber, setVehicleNumber] = useState(initialData?.vehicleNumber || '');
+  const [vehicleType, setVehicleType] = useState(initialData?.vehicleType || '');
+  const [vehicleCapacity, setVehicleCapacity] = useState(initialData?.vehicleCapacity || '');
+  const [selectedBodyType, setSelectedBodyType] = useState(initialData?.bodyType || '');
   const [showVehicleTypeModal, setShowVehicleTypeModal] = useState(false);
   const [vehicleOptions, setVehicleOptions] = useState<VehicleOption[]>([]);
   const [isLoadingVehicles, setIsLoadingVehicles] = useState(true);
   const { alertModal, showAlert } = useAppAlert();
   
   // File URIs
-  const [rcBookUri, setRcBookUri] = useState<string | null>(null);
+  const [rcBookUri, setRcBookUri] = useState<string | null>(initialData?.rcBook || null);
   const [rcBookFileName, setRcBookFileName] = useState<string>('');
-  const [insuranceUri, setInsuranceUri] = useState<string | null>(null);
+  const [insuranceUri, setInsuranceUri] = useState<string | null>(initialData?.insurance || null);
   const [insuranceFileName, setInsuranceFileName] = useState<string>('');
-  const [vehiclePhotoUris, setVehiclePhotoUris] = useState<string[]>([]);
+  const [vehiclePhotoUris, setVehiclePhotoUris] = useState<string[]>(
+    initialData?.vehiclePhotos || []
+  );
   
   const [isLoading, setIsLoading] = useState(false);
   
   const uploadIcon = require('@/assets/images/uploadIcon.png');
+
+  useEffect(() => {
+    onDraftChange?.({
+      vehicleNumber,
+      vehicleType,
+      vehicleCapacity,
+      bodyType: selectedBodyType,
+      rcBook: rcBookUri,
+      insurance: insuranceUri,
+      vehiclePhotos: vehiclePhotoUris.filter(Boolean),
+    });
+  }, [
+    vehicleNumber,
+    vehicleType,
+    vehicleCapacity,
+    selectedBodyType,
+    rcBookUri,
+    insuranceUri,
+    vehiclePhotoUris,
+    onDraftChange,
+  ]);
 
   useEffect(() => {
     let isMounted = true;
@@ -295,7 +324,10 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
       {/* Main Content */}
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom + 24, 40) },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Header Section */}

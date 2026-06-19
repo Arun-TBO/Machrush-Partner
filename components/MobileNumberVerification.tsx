@@ -48,6 +48,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
   // Collect data from all screens
   const [driverData, setDriverData] = useState<any>(null);
   const [vehicleData, setVehicleData] = useState<any>(null);
+  const [bankData, setBankData] = useState<any>(null);
   
   // Firebase UID after OTP verification
   const [firebaseUid, setFirebaseUid] = useState<string | null>(null);
@@ -227,6 +228,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
   const handleBankDetailsSubmit = async (bankData: any) => {
     // All data collected - store to Firestore
     console.log('Bank details submitted:', bankData);
+    setBankData(bankData);
 
     setIsLoading(true);
     try {
@@ -332,6 +334,8 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
       />
     ) : showBankDetails ? (
       <BankDetailsScreen
+        initialData={bankData}
+        onDraftChange={setBankData}
         onContinue={handleBankDetailsSubmit}
         onBack={() => {
           setShowBankDetails(false);
@@ -340,6 +344,8 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
       />
     ) : showVehicleDetails ? (
       <VehicleDetailsScreen
+        initialData={vehicleData}
+        onDraftChange={setVehicleData}
         onContinue={handleVehicleDetailsSubmit}
         onBack={() => {
           setShowVehicleDetails(false);
@@ -348,6 +354,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
       />
     ) : showDriverDetails ? (
       <DriverDetailsScreen
+        initialData={driverData}
         onContinue={handleDriverDetailsSubmit}
         onBack={() => {
           setShowDriverDetails(false);

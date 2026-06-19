@@ -1,7 +1,6 @@
 import React , {useEffect , useRef} from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  ActivityIndicator,
   Image,
   ImageSourcePropType,
   Modal,
@@ -14,12 +13,11 @@ import {
   PanResponder,
   Animated
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signOutUser } from '@/lib/firebaseAuthService';
 import { auth } from '@/lib/firebase';
-import { getDriverProfile, updateDriverProfilePhoto } from '@/lib/firestoreOnboardingService';
+import { getDriverProfile } from '@/lib/firestoreOnboardingService';
 import { useAppAlert } from '@/components/AppAlertModal';
 import {
   getCachedDriverName,
@@ -33,7 +31,6 @@ import { fs, hit, rs, vs } from '@/lib/responsive';
 const profileAvatarImage = require('@/assets/images/profile/profile-avatar.jpg');
 const backImage = require('@/assets/images/profile/back.png');
 const verifiedBadgeImage = require('@/assets/images/profile/verified-badge.png');
-const editImage = require('@/assets/images/profile/edit.png');
 const statArrowImage = require('@/assets/images/profile/stat-arrow.png');
 const starImage = require('@/assets/images/profile/star.png');
 const chevronImage = require('@/assets/images/profile/chevron.png');
@@ -165,6 +162,7 @@ function SupportModal({
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const sheetBottomPadding = Math.max(insets.bottom + 16, 32);
     
   const translateY = useRef(
     new Animated.Value(500)
@@ -236,6 +234,7 @@ function SupportModal({
           style={[
             styles.supportSheet,
             {
+              paddingBottom: sheetBottomPadding,
               transform: [
                 { translateY },
               ],
@@ -280,6 +279,7 @@ function LogoutModal({
   onLogout: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const sheetBottomPadding = Math.max(insets.bottom + 16, 32);
   
   const translateY = useRef(
     new Animated.Value(500)
@@ -351,6 +351,7 @@ function LogoutModal({
           style={[
             styles.logoutSheet,
             {
+              paddingBottom: sheetBottomPadding,
               transform: [
                 { translateY },
               ],
@@ -407,9 +408,8 @@ export default function ProfileScreen() {
   const [driverName, setDriverName] = React.useState('Driver');
   const [averageRating, setAverageRating] = React.useState('0.0');
   const [completedDeliveryCount, setCompletedDeliveryCount] = React.useState(0);
-  const [isPhotoUploading, setIsPhotoUploading] = React.useState(false);
   const router = useRouter();
-  const { alertModal, showAlert } = useAppAlert();
+  const { alertModal } = useAppAlert();
 
   const handleMenuPress = (rowId: string) => {
     if (rowId === 'documents') {
@@ -558,58 +558,6 @@ export default function ProfileScreen() {
     }, [getCurrentProfileSession])
   );
 
-  const handleEditProfilePhoto = async () => {
-    try {
-      const { uid, idToken } = await getCurrentProfileSession();
-
-      if (!uid) {
-        showAlert('Login required', 'Please login again before updating your profile picture.');
-        router.replace('/phone-number');
-        return;
-      }
-
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-      if (!permission.granted) {
-        showAlert('Permission needed', 'Please allow gallery access to choose a profile photo.');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        base64: true,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.6,
-      });
-
-      if (result.canceled) {
-        return;
-      }
-
-      const selectedAsset = result.assets[0];
-      const selectedUri = selectedAsset?.base64
-        ? `data:${selectedAsset.mimeType || 'image/jpeg'};base64,${selectedAsset.base64}`
-        : selectedAsset?.uri;
-
-      if (!selectedUri) {
-        return;
-      }
-
-      setProfilePhotoUrl(selectedUri);
-      setIsPhotoUploading(true);
-
-      const uploadedPhotoUrl = await updateDriverProfilePhoto(uid, selectedUri, idToken);
-      await setCachedProfilePhotoUrl(uid, uploadedPhotoUrl);
-      setProfilePhotoUrl(uploadedPhotoUrl);
-    } catch (error) {
-      console.error('Error updating profile photo:', error);
-      showAlert('Upload failed', 'Could not update your profile photo. Please try again.');
-    } finally {
-      setIsPhotoUploading(false);
-    }
-  };
-
   const handleConfirmLogout = async () => {
     await Promise.allSettled([
       signOutUser(),
@@ -652,21 +600,7 @@ export default function ProfileScreen() {
                   style={styles.avatar}
                   resizeMode="cover"
                 />
-                {isPhotoUploading ? (
-                  <View style={styles.avatarLoading}>
-                    <ActivityIndicator color="#0055cc" size="small" />
-                  </View>
-                ) : null}
               </View>
-              <Pressable
-                style={styles.editButton}
-                accessibilityRole="button"
-                accessibilityLabel="Edit profile picture"
-                disabled={isPhotoUploading}
-                onPress={handleEditProfilePhoto}
-              >
-                <Image source={editImage} style={styles.editIcon} resizeMode="contain" />
-              </Pressable>
             </View>
 
             <View style={styles.statsRow}>
@@ -835,29 +769,6 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-  },
-  avatarLoading: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.64)',
-  },
-  editButton: {
-    position: 'absolute',
-    right: 16,
-    top: 40,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: '#0055cc',
-    backgroundColor: '#dbe6f7',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  editIcon: {
-    width: 16,
-    height: 16,
   },
   statsRow: {
     flexDirection: 'row',
@@ -1109,10 +1020,9 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   logoutSheet: {
-   height :255,
     width: '100%',
     alignSelf: 'center',
-    gap: 5,
+    gap: 12,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     backgroundColor: '#ffffff',

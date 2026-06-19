@@ -214,7 +214,6 @@ function TopSummary({
 }) {
   return (
     <View style={styles.header}>
-      <View style={styles.statusSpacer} />
       <View style={styles.topNav}>
         <Text style={styles.navTitle}>Weekly breakdown</Text>
       </View>
@@ -604,7 +603,7 @@ export default function MyDeliveriesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#eff2f6',
+    backgroundColor: '#dbe6f7',
   },
   header: {
     backgroundColor: '#dbe6f7',
@@ -612,15 +611,12 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: rs(24),
     overflow: 'hidden',
   },
-  statusSpacer: {
-    height: vs(52),
-  },
   topNav: {
-    minHeight: vs(64),
+    minHeight: vs(56),
     justifyContent: 'center',
     paddingLeft: rs(16),
     paddingRight: rs(4),
-    paddingVertical: vs(8),
+    paddingVertical: vs(4),
   },
   navTitle: {
     minWidth: 0,
@@ -682,6 +678,7 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
+    backgroundColor: '#eff2f6',
   },
   content: {
     width: '100%',
