@@ -312,7 +312,7 @@ export default function PaymentPendingScreen() {
           style={styles.scroll}
           contentContainerStyle={[
             styles.content,
-            { paddingBottom: insets.bottom + 24 },
+           
           ]}
           showsVerticalScrollIndicator={false}
         >

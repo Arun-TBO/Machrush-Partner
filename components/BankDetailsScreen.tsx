@@ -13,7 +13,7 @@ import {
 import { Colors, Spacing, Radius } from '@/lib/theme';
 
 const backImage = require('@/assets/images/profile/back.png');
-
+const chevrondown = require('@/assets/images/chevron-down.png');
 interface BankDetailsScreenProps {
   onContinue?: (bankData: BankDetailsData) => void;
   onBack?: () => void;
@@ -128,7 +128,7 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
             >
               {bankName || 'Select Bank'}
             </Text>
-            <Text style={styles.dropdownIcon}>▼</Text>
+             <Image source={chevrondown} style={{height : 15 , width : 15}}/>
           </Pressable>
         </View>
 
@@ -183,18 +183,15 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
           <Text style={styles.buttonText}>Continue</Text>
         </Pressable>
 
-        <View style={{ height: 40 }} />
       </ScrollView>
 
-      <View style={styles.navigation}>
-        <View style={styles.homeIndicator} />
-      </View>
+      
 
       {/* Bank Selection Modal */}
       <Modal
         visible={showBankModal}
+        statusBarTranslucent
         transparent
-        animationType="slide"
         onRequestClose={() => setShowBankModal(false)}
       >
         <Pressable
@@ -373,6 +370,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom : 15
   },
   buttonDisabled: {
     opacity: 0.6,

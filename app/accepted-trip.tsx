@@ -1459,7 +1459,7 @@ function AcceptedPickupView({
         style={[
           styles.pickupSheet,
           {
-            height: TRACKING_SHEET_HEIGHT + insets.bottom,
+            height: TRACKING_SHEET_HEIGHT + 80,
             paddingBottom: insets.bottom + 16,
             transform: [{ translateY: sheetTranslateY }],
           },
@@ -1748,7 +1748,7 @@ function CompletedDropScreen({
         </View>
       </View>
 
-      <View style={[styles.completedCtaBar, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.completedCtaBar]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Find new jobs"
@@ -2198,7 +2198,7 @@ export default function AcceptedTripScreen() {
   if (showTrackingView) {
     return (
       <>
-        <AcceptedPickupView
+        < AcceptedPickupView
           delivery={delivery}
           deliveryId={deliveryId}
           pickupDistanceKm={pickupDistanceKm}
@@ -2246,7 +2246,7 @@ export default function AcceptedTripScreen() {
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: 88 + insets.bottom + 24 },
+          
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -2271,7 +2271,7 @@ export default function AcceptedTripScreen() {
         
            <View>
                 
-                <RouteRow
+              <RouteRow
               variant="pickup"
               title={
                 Number.isFinite(pickupDistanceKm) && pickupDistanceKm > 0
@@ -2306,7 +2306,7 @@ export default function AcceptedTripScreen() {
         </View>
       </ScrollView>
 
-      <View style={[styles.ctaBar, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.ctaBar]}>
         {isCompletedDelivery ? (
           <Pressable style={styles.reportButton} onPress={handleReportIssue}>
             <Text style={styles.reportButtonText}>Report issue</Text>
@@ -3041,7 +3041,7 @@ otpBox: {
     paddingHorizontal: 8,
     paddingTop: 8,
     gap: 24,
-    paddingBottom: 112,
+    paddingBottom: 50,
   },
   earningBlock: {
     paddingHorizontal: 8,
