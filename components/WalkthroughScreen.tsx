@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
     fontSize: fs(16),
     lineHeight: 16,
     letterSpacing: -0.5,
-    width : '100%',
+    width : '100%', 
     textAlign : 'center'
   },
   pressed: {

@@ -2271,7 +2271,7 @@ export default function AcceptedTripScreen() {
         
            <View>
                 
-                <RouteRow
+              <RouteRow
               variant="pickup"
               title={
                 Number.isFinite(pickupDistanceKm) && pickupDistanceKm > 0
