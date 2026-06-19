@@ -647,8 +647,12 @@ const styles = StyleSheet.create({
   routeText: {
     flex: 1,
     minWidth: 0,
+<<<<<<< HEAD
     flexShrink: 1,
    
+=======
+
+>>>>>>> 10ae333 (Update Onboaeding screens)
   },
   routePointTitle: {
     fontFamily: 'Poppins_500Medium',

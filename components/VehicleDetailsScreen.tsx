@@ -17,6 +17,9 @@ import { useAppAlert } from './AppAlertModal';
 const backImage = require('@/assets/images/profile/back.png');
 const closedBodyImage = require('@/assets/images/vehicle-details/closed-body.png');
 const openedBodyImage = require('@/assets/images/vehicle-details/opened-body.png');
+const chevrondown = require('@/assets/images/chevron-down.png');
+const opennonactivetrack = require('@/assets/images/open-non-active-track.png');
+const bodynonactivetrak = require('@/assets/images/body-non-active-trak.png');
 
 interface VehicleDetailsScreenProps {
   onContinue?: (vehicleData: VehicleDetailsData) => void;
@@ -40,9 +43,18 @@ interface VehicleOption {
 }
 
 const BODY_TYPES = [
-  { id: 'closed', label: 'Closed Body', image: closedBodyImage },
-  { id: 'open', label: 'Opened Body', image: openedBodyImage },
+  { id: 'closed', label: 'Closed Body', Activeimage: closedBodyImage , nonActiveImage: opennonactivetrack },
+  { id: 'open', label: 'Opened Body', Activeimage: openedBodyImage , nonActiveImage: bodynonactivetrak},
 ];
+
+
+
+// const BODY_TYPES = [
+//   { id: 'acclosed', label: 'Closed Body', image: closedBodyImage },
+//   { id: 'acopen', label: 'Opened Body', image: openedBodyImage },
+//   { id: 'inaclosed', label: 'Closed Body', image:opennonactivetrack },
+//   { id: 'inaopen', label: 'Opened Body', image: bodynonactivetrak },
+// ];
 
 const getApiBaseUrl = () => {
   return (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
@@ -92,6 +104,8 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   const [vehiclePhotoUris, setVehiclePhotoUris] = useState<string[]>([]);
   
   const [isLoading, setIsLoading] = useState(false);
+  
+  const uploadIcon = require('@/assets/images/uploadIcon.png');
 
   useEffect(() => {
     let isMounted = true;
@@ -190,7 +204,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsMultipleSelection: false,
-        allowsEditing: true,
+        allowsEditing: false,
         aspect: [1, 1],
         quality: 0.8,
       });
@@ -318,7 +332,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
             >
               {vehicleType || (isLoadingVehicles ? 'Loading vehicle types...' : 'Select Vehicle type')}
             </Text>
-            <Text style={styles.dropdownIcon}>▼</Text>
+            <Image source={chevrondown} style={{height : 15 , width : 15}}/>
           </Pressable>
         </View>
 
@@ -338,26 +352,31 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
         <View style={styles.bodyTypeSection}>
           <Text style={styles.inputLabel}>Select Body type</Text>
           <View style={styles.bodyTypeContainer}>
-            {BODY_TYPES.map((type) => (
+             {BODY_TYPES.map((type) => (
               <Pressable
                 key={type.id}
-                style={styles.bodyTypeCard}
+                style={[
+                  styles.bodyTypeCard,
+                  selectedBodyType === type.id && styles.bodyTypeCardSelected,
+                ]}
                 onPress={() => setSelectedBodyType(type.id)}
               >
-                <View
-                  style={[
-                    styles.bodyTypeImage,
-                    selectedBodyType === type.id && styles.bodyTypeCardSelected,
-                  ]}
-                >
-                  <Image
-                    source={type.image}
+                <View style={styles.bodyTypeImage}>
+                  <View
                     style={[
-                      styles.bodyTypeVehicleImage,
-                      type.id === 'closed' ? styles.closedBodyImage : styles.openedBodyImage,
+                      styles.vehicleImagePlaceholder,
+                      { backgroundColor: Colors.neutral200 },
                     ]}
-                    resizeMode="contain"
-                  />
+                  >
+                    <Image
+                      source={
+                        selectedBodyType === type.id
+                          ? type.Activeimage
+                          :   type.nonActiveImage
+                      }
+                      style={{ width: 120, height: 100 }}
+                    />
+                  </View>
                 </View>
                 <Text style={styles.bodyTypeLabel}>{type.label}</Text>
               </Pressable>
@@ -376,15 +395,11 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
               <Text style={styles.documentSubtitle}>Upload RC book photo or PDF</Text>
               {!rcBookUri && (
                 <View style={styles.errorContainer}>
-                  <Text style={styles.retryIcon}>↻</Text>
-                  <Text style={styles.errorText}>Upload again</Text>
+                   <Image source={uploadIcon} style={{height : 20 , width  : 20}}/>
+                  <Text style={styles.errorText}>Upload</Text>
                 </View>
               )}
-              {rcBookUri && (
-                <View style={styles.uploadedFileContainer}>
-                  <Text style={styles.uploadedFileName}>✓ {rcBookFileName}</Text>
-                </View>
-              )}
+              
             </View>
             {!rcBookUri ? (
               <Pressable
@@ -395,12 +410,16 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                 <Text style={styles.uploadButtonSmallText}>Upload</Text>
               </Pressable>
             ) : (
-              <Pressable
-                style={[styles.uploadButtonSmall, styles.removeButton]}
-                onPress={removeRcBook}
-              >
-                <Text style={styles.removeButtonText}>✕</Text>
-              </Pressable>
+              <View style={styles.uploadedImageContainer}>
+                          <Image source={{ uri: rcBookUri }} style={styles.uploadedImage} />
+                          <Pressable
+                            style={styles.removeButton}
+                            onPress={removeRcBook}
+                            disabled={isLoading}
+                          >
+                            <Text style={styles.removeButtonIcon}>✕</Text>
+                          </Pressable>
+                        </View>
             )}
           </View>
 
@@ -411,15 +430,11 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
               <Text style={styles.documentSubtitle}>Upload insurance photo or PDF</Text>
               {!insuranceUri && (
                 <View style={styles.errorContainer}>
-                  <Text style={styles.retryIcon}>↻</Text>
-                  <Text style={styles.errorText}>Upload again</Text>
+                  <Image source={uploadIcon} style={{height : 20 , width  : 20}}/>
+                  <Text style={styles.errorText}>Upload</Text>
                 </View>
               )}
-              {insuranceUri && (
-                <View style={styles.uploadedFileContainer}>
-                  <Text style={styles.uploadedFileName}>✓ {insuranceFileName}</Text>
-                </View>
-              )}
+              
             </View>
             {!insuranceUri ? (
               <Pressable
@@ -430,12 +445,16 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                 <Text style={styles.uploadButtonSmallText}>Upload</Text>
               </Pressable>
             ) : (
-              <Pressable
-                style={[styles.uploadButtonSmall, styles.removeButton]}
-                onPress={removeInsurance}
-              >
-                <Text style={styles.removeButtonText}>✕</Text>
-              </Pressable>
+              <View style={styles.uploadedImageContainer}>
+                          <Image source={{ uri: insuranceUri }} style={styles.uploadedImage} />
+                          <Pressable
+                            style={styles.removeButton}
+                            onPress={removeInsurance}
+                            disabled={isLoading}
+                          >
+                            <Text style={styles.removeButtonIcon}>✕</Text>
+                          </Pressable>
+                        </View>
             )}
           </View>
 
@@ -450,7 +469,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                 const photoUri = vehiclePhotoUris[slotIndex];
 
                 return photoUri ? (
-                  <View key={slotIndex} style={styles.vehiclePhotoPanel}>
+                  <View key={slotIndex} style={styles.uploadedImageContainer}>
                     <Image source={{ uri: photoUri }} style={styles.vehiclePhotoImage} />
                     <Pressable
                       style={styles.removePhotoButton}
@@ -485,14 +504,14 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
           <Text style={styles.buttonText}>Continue</Text>
         </Pressable>
 
-        <View style={{ height: 40 }} />
+       
       </ScrollView>
 
       {/* Vehicle Type Modal */}
       <Modal
         visible={showVehicleTypeModal}
+        statusBarTranslucent
         transparent
-        animationType="slide"
         onRequestClose={() => setShowVehicleTypeModal(false)}
       >
         <Pressable
@@ -815,6 +834,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
+  uploadedImageContainer: {
+    width : 80,
+    position: 'relative',
+    alignSelf: 'flex-start',
+    overflow: 'visible',
+    borderRadius: 12,
+    height: 86,
+  },
   vehiclePhotoPanel: {
     flex: 1,
     minWidth: 0,
@@ -865,12 +892,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     lineHeight: 18,
   },
-  removeButton: {
-    backgroundColor: '#d00416',
-    borderWidth: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+
   removeButtonText: {
     fontSize: 20,
     fontWeight: '400',
@@ -878,15 +900,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins',
   },
   removePhotoButton: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 28,
-    height: 28,
+   position: 'absolute',
+    top: -2,
+    right: -5,
+    width: 25,
+    height: 25,
+    borderRadius: 50,
     backgroundColor: '#d00416',
-    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 10,
+    elevation: 5, // Android
   },
   removePhotoIcon: {
     fontSize: 16,
@@ -982,6 +1006,37 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     color: '#606060',
     textAlign: 'center',
+  },
+
+  uploadedImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+  },
+  removeButton: {
+    position: 'absolute',
+    top: -1,
+    right: -5,
+    width: 25,
+    height: 25,
+    borderRadius: 50,
+    backgroundColor: '#d00416',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+      elevation: 5, // Android
+  },
+  removeButtonIcon: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'white',
+    fontFamily: 'Poppins',
+  },
+    vehicleImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 
