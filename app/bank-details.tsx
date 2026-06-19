@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth } from '@/lib/firebase';
 import { getDriverProfile, OnboardingData } from '@/lib/firestoreOnboardingService';
 
@@ -38,8 +39,8 @@ function SupportOption({
     <View style={styles.supportOption}>
       <Image source={icon} style={styles.supportOptionIcon} resizeMode="contain" />
       <View style={styles.supportOptionText}>
-        <Text style={styles.supportOptionLabel}>{label}</Text>
-        <Text style={styles.supportOptionValue}>{value}</Text>
+        <Text style={styles.supportOptionLabel} numberOfLines={1}>{label}</Text>
+        <Text style={styles.supportOptionValue} numberOfLines={1}>{value}</Text>
       </View>
     </View>
   );
@@ -52,10 +53,15 @@ function SupportModal({
   visible: boolean;
   onClose: () => void;
 }) {
+  const insets = useSafeAreaInsets();
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable style={styles.supportSheet} onPress={(event) => event.stopPropagation()}>
+        <Pressable
+          style={[styles.supportSheet, { paddingBottom: insets.bottom + 16 }]}
+          onPress={(event) => event.stopPropagation()}
+        >
           <View style={styles.sheetHeader}>
             <View style={styles.dragHandle} />
           </View>
@@ -142,9 +148,11 @@ export default function BankDetailsProfileScreen() {
       };
 
       loadDriverProfile();
+      const interval = setInterval(loadDriverProfile, 5000);
 
       return () => {
         isActive = false;
+        clearInterval(interval);
       };
     }, [])
   );
@@ -183,8 +191,8 @@ export default function BankDetailsProfileScreen() {
           style={styles.supportRow}
           onPress={() => setIsSupportVisible(true)}
         >
-          <Text style={styles.supportText}>Need to change?</Text>
-          <Text style={styles.supportLink}>Contact support</Text>
+          <Text style={styles.supportText} numberOfLines={1}>Need to change?</Text>
+          <Text style={styles.supportLink} numberOfLines={1}>Contact support</Text>
         </Pressable>
       </ScrollView>
 
@@ -205,7 +213,7 @@ const styles = StyleSheet.create({
     height: 52,
   },
   topNav: {
-    height: 64,
+    minHeight: 64,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 4,
@@ -222,16 +230,21 @@ const styles = StyleSheet.create({
     height: 24,
   },
   navTitle: {
-    fontFamily: 'Poppins',
+    flex: 1,
+    minWidth: 0,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 20,
     fontWeight: '500',
     lineHeight: 32,
-    color: '#1c1c1c',
   },
   scroll: {
     flex: 1,
   },
   content: {
+    width: '100%',
+    maxWidth: 412,
+    alignSelf: 'center',
     flexGrow: 1,
     paddingHorizontal: 16,
     paddingTop: 16,
@@ -242,18 +255,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    fontFamily: 'Poppins',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 24,
     fontWeight: '500',
+    lineHeight: 24,
     letterSpacing: -1,
-    color: '#1c1c1c',
   },
   description: {
-    fontFamily: 'Poppins',
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 24,
-    color: '#606060',
   },
   fields: {
     width: '100%',
@@ -266,15 +280,15 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     width: '100%',
-    fontFamily: 'Poppins',
+    color: '#a4a4a4',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 24,
-    color: '#a4a4a4',
   },
   valueBox: {
     width: '100%',
-    height: 56,
+    minHeight: 56,
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#a4a4a4',
@@ -285,54 +299,60 @@ const styles = StyleSheet.create({
   },
   valueText: {
     width: '100%',
-    fontFamily: 'Poppins',
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#a4a4a4',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 24,
-    color: '#a4a4a4',
   },
   helperText: {
     width: '100%',
-    fontFamily: 'Poppins',
+    color: '#a4a4a4',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
     lineHeight: 18,
-    color: '#a4a4a4',
   },
   supportRow: {
-    height: 40,
+    minHeight: 40,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
     marginTop: 40,
+    marginBottom : 20
   },
   supportText: {
-    fontFamily: 'Poppins',
+    flexShrink: 1,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
-    color: '#1c1c1c',
   },
   supportLink: {
-    fontFamily: 'Poppins',
+    flexShrink: 1,
+    color: '#0055cc',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
-    color: '#0055cc',
   },
   modalBackdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.28)',
+    backgroundColor: 'rgba(0, 0, 0, 0.12)',
   },
   supportSheet: {
     width: '100%',
+    alignSelf: 'center',
     gap: 24,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     backgroundColor: '#ffffff',
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 40,
+    paddingBottom: 16,
     overflow: 'hidden',
   },
   sheetHeader: {
@@ -353,20 +373,21 @@ const styles = StyleSheet.create({
   },
   supportTitle: {
     width: '100%',
-    fontFamily: 'Poppins',
+    color: '#29292b',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 24,
     fontWeight: '500',
+    lineHeight: 24,
     letterSpacing: -1,
-    color: '#29292b',
     textAlign: 'center',
   },
   supportSubtitle: {
     width: '100%',
-    fontFamily: 'Poppins',
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 14,
     fontWeight: '400',
     lineHeight: 21,
-    color: '#606060',
     textAlign: 'center',
   },
   supportOptions: {
@@ -396,17 +417,22 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   supportOptionLabel: {
-    fontFamily: 'Poppins',
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 24,
-    color: '#606060',
   },
   supportOptionValue: {
-    fontFamily: 'Poppins',
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
+    lineHeight: 16,
     letterSpacing: -0.5,
-    color: '#1c1c1c',
   },
 });

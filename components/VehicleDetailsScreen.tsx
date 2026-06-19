@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,13 +9,17 @@ import {
   Image,
   Modal,
   FlatList,
-  SafeAreaView,
-  Animated,
-  Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
+import { useAppAlert } from './AppAlertModal';
+
+const backImage = require('@/assets/images/profile/back.png');
+const closedBodyImage = require('@/assets/images/vehicle-details/closed-body.png');
+const openedBodyImage = require('@/assets/images/vehicle-details/opened-body.png');
+const chevrondown = require('@/assets/images/chevron-down.png');
+const opennonactivetrack = require('@/assets/images/open-non-active-track.png');
+const bodynonactivetrak = require('@/assets/images/body-non-active-trak.png');
 
 interface VehicleDetailsScreenProps {
   onContinue?: (vehicleData: VehicleDetailsData) => void;
@@ -32,11 +36,52 @@ interface VehicleDetailsData {
   vehiclePhotos: string[];
 }
 
-const VEHICLE_TYPES = ['2-Wheeler', '3-Wheeler', 'Auto', 'Car', 'Truck', 'Mini Truck'];
+interface VehicleOption {
+  id: string;
+  name: string;
+  capacity: string;
+}
+
 const BODY_TYPES = [
-  { id: 'closed', label: 'Closed Body', image: 'closed-vehicle' },
-  { id: 'open', label: 'Opened Body', image: 'open-vehicle' },
+  { id: 'closed', label: 'Closed Body', Activeimage: closedBodyImage , nonActiveImage: opennonactivetrack },
+  { id: 'open', label: 'Opened Body', Activeimage: openedBodyImage , nonActiveImage: bodynonactivetrak},
 ];
+
+
+
+// const BODY_TYPES = [
+//   { id: 'acclosed', label: 'Closed Body', image: closedBodyImage },
+//   { id: 'acopen', label: 'Opened Body', image: openedBodyImage },
+//   { id: 'inaclosed', label: 'Closed Body', image:opennonactivetrack },
+//   { id: 'inaopen', label: 'Opened Body', image: bodynonactivetrak },
+// ];
+
+const getApiBaseUrl = () => {
+  return (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
+};
+
+const getVehicleName = (vehicle: Record<string, any>) => {
+  return (
+    vehicle.name ||
+    vehicle.vehicleName ||
+    vehicle.title ||
+    vehicle.type ||
+    vehicle.vehicleType ||
+    ''
+  ).toString();
+};
+
+const getVehicleCapacity = (vehicle: Record<string, any>) => {
+  const capacity =
+    vehicle.capacity ||
+    vehicle.vehicleCapacity ||
+    vehicle.loadCapacity ||
+    vehicle.maxCapacity ||
+    vehicle.weightCapacity ||
+    '';
+
+  return capacity ? capacity.toString() : '';
+};
 
 export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   onContinue,
@@ -47,9 +92,9 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   const [vehicleCapacity, setVehicleCapacity] = useState('');
   const [selectedBodyType, setSelectedBodyType] = useState('');
   const [showVehicleTypeModal, setShowVehicleTypeModal] = useState(false);
-  const [isRCExpanded, setIsRCExpanded] = useState(false);
-  const [isInsuranceExpanded, setIsInsuranceExpanded] = useState(false);
-  const [isPhotosExpanded, setIsPhotosExpanded] = useState(false);
+  const [vehicleOptions, setVehicleOptions] = useState<VehicleOption[]>([]);
+  const [isLoadingVehicles, setIsLoadingVehicles] = useState(true);
+  const { alertModal, showAlert } = useAppAlert();
   
   // File URIs
   const [rcBookUri, setRcBookUri] = useState<string | null>(null);
@@ -59,14 +104,57 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   const [vehiclePhotoUris, setVehiclePhotoUris] = useState<string[]>([]);
   
   const [isLoading, setIsLoading] = useState(false);
+  
+  const uploadIcon = require('@/assets/images/uploadIcon.png');
 
-  const insets = useSafeAreaInsets();
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadVehicleOptions = async () => {
+      try {
+        setIsLoadingVehicles(true);
+        const response = await fetch(`${getApiBaseUrl()}/api/deliveries/vehicles`);
+        const responseBody = await response.json().catch(() => null);
+
+        if (!response.ok || !responseBody?.success || !Array.isArray(responseBody.data)) {
+          throw new Error(responseBody?.error || 'Failed to load vehicle types');
+        }
+
+        const options = responseBody.data
+          .map((vehicle: Record<string, any>) => ({
+            id: (vehicle.id || getVehicleName(vehicle)).toString(),
+            name: getVehicleName(vehicle),
+            capacity: getVehicleCapacity(vehicle),
+          }))
+          .filter((vehicle: VehicleOption) => vehicle.id && vehicle.name);
+
+        if (isMounted) {
+          setVehicleOptions(options);
+        }
+      } catch (error) {
+        console.error('Error loading vehicle types:', error);
+        if (isMounted) {
+          setVehicleOptions([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingVehicles(false);
+        }
+      }
+    };
+
+    loadVehicleOptions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Request permissions and open image picker
   const requestMediaPermissions = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'We need permission to access your photo library');
+      showAlert('Permission Denied', 'We need permission to access your photo library');
       return false;
     }
     return true;
@@ -99,15 +187,15 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
         }
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to pick file');
+      showAlert('Error', 'Failed to pick file');
       console.error(error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Pick multiple images for vehicle photos
-  const pickMultiplePhotos = async () => {
+  // Pick one image for a specific vehicle photo slot
+  const pickVehiclePhoto = async (slotIndex: number) => {
     const hasPermission = await requestMediaPermissions();
     if (!hasPermission) return;
 
@@ -115,16 +203,22 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
       setIsLoading(true);
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsMultipleSelection: true,
+        allowsMultipleSelection: false,
+        allowsEditing: false,
+        aspect: [1, 1],
         quality: 0.8,
       });
 
       if (!result.canceled) {
-        const uris = result.assets.map((asset) => asset.uri);
-        setVehiclePhotoUris((prev) => [...prev, ...uris].slice(0, 4)); // Max 4 photos
+        const uri = result.assets[0].uri;
+        setVehiclePhotoUris((prev) => {
+          const next = [...prev];
+          next[slotIndex] = uri;
+          return next.slice(0, 4);
+        });
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to pick photos');
+      showAlert('Error', 'Failed to pick photo');
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -145,19 +239,26 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
 
   // Remove vehicle photo
   const removeVehiclePhoto = (index: number) => {
-    setVehiclePhotoUris((prev) => prev.filter((_, i) => i !== index));
+    setVehiclePhotoUris((prev) => {
+      const next = [...prev];
+      next[index] = '';
+      return next;
+    });
   };
 
-  const handleVehicleTypeSelect = (type: string) => {
-    setVehicleType(type);
+  const handleVehicleTypeSelect = (vehicle: VehicleOption) => {
+    setVehicleType(vehicle.name);
+    setVehicleCapacity(vehicle.capacity);
     setShowVehicleTypeModal(false);
   };
 
-  const isFormValid = vehicleNumber && vehicleType && vehicleCapacity && selectedBodyType && rcBookUri && insuranceUri && vehiclePhotoUris.length > 0;
+  const uploadedVehiclePhotos = vehiclePhotoUris.filter(Boolean);
+
+  const isFormValid = vehicleNumber && vehicleType && vehicleCapacity && selectedBodyType && rcBookUri && insuranceUri && uploadedVehiclePhotos.length > 0;
 
   const handleContinue = () => {
     if (!isFormValid) {
-      Alert.alert('Incomplete Form', 'Please fill in all required fields and upload all documents');
+      showAlert('Incomplete Form', 'Please fill in all required fields and upload all documents');
       return;
     }
 
@@ -169,20 +270,26 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
         bodyType: selectedBodyType,
         rcBook: rcBookUri,
         insurance: insuranceUri,
-        vehiclePhotos: vehiclePhotoUris,
+        vehiclePhotos: uploadedVehiclePhotos,
       });
     }
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
+      <View style={styles.statusSpacer} />
+
       {/* Top Navigation */}
       <View style={styles.topNav}>
-        <Pressable style={styles.backButton} onPress={onBack}>
-          <Text style={styles.backIcon}>←</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          style={styles.backButton}
+          onPress={onBack}
+        >
+          <Image source={backImage} style={styles.backIcon} resizeMode="contain" />
         </Pressable>
         <Text style={styles.navTitle}>Onboarding</Text>
-        <View style={{ width: 48 }} />
       </View>
 
       {/* Main Content */}
@@ -213,8 +320,9 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
         <View style={styles.inputSection}>
           <Text style={styles.inputLabel}>Vehicle type</Text>
           <Pressable
-            style={styles.dropdownButton}
+            style={[styles.dropdownButton, isLoadingVehicles && styles.dropdownButtonDisabled]}
             onPress={() => setShowVehicleTypeModal(true)}
+            disabled={isLoadingVehicles}
           >
             <Text
               style={[
@@ -222,9 +330,9 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                 { color: vehicleType ? Colors.neutral900 : Colors.neutral800 },
               ]}
             >
-              {vehicleType || 'Select Vehicle type'}
+              {vehicleType || (isLoadingVehicles ? 'Loading vehicle types...' : 'Select Vehicle type')}
             </Text>
-            <Text style={styles.dropdownIcon}>▼</Text>
+            <Image source={chevrondown} style={{height : 15 , width : 15}}/>
           </Pressable>
         </View>
 
@@ -232,11 +340,11 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
         <View style={styles.inputSection}>
           <Text style={styles.inputLabel}>Enter vehicle capacity</Text>
           <TextInput
-            style={styles.textInput}
-            placeholder="e.g. 500kg"
+            style={[styles.textInput, styles.readOnlyInput]}
+            placeholder="Select vehicle type first"
             placeholderTextColor={Colors.neutral800}
             value={vehicleCapacity}
-            onChangeText={setVehicleCapacity}
+            editable={false}
           />
         </View>
 
@@ -244,7 +352,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
         <View style={styles.bodyTypeSection}>
           <Text style={styles.inputLabel}>Select Body type</Text>
           <View style={styles.bodyTypeContainer}>
-            {BODY_TYPES.map((type) => (
+             {BODY_TYPES.map((type) => (
               <Pressable
                 key={type.id}
                 style={[
@@ -260,7 +368,14 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                       { backgroundColor: Colors.neutral200 },
                     ]}
                   >
-                    <Text style={styles.imageText}>🚚</Text>
+                    <Image
+                      source={
+                        selectedBodyType === type.id
+                          ? type.Activeimage
+                          :   type.nonActiveImage
+                      }
+                      style={{ width: 120, height: 100 }}
+                    />
                   </View>
                 </View>
                 <Text style={styles.bodyTypeLabel}>{type.label}</Text>
@@ -280,15 +395,11 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
               <Text style={styles.documentSubtitle}>Upload RC book photo or PDF</Text>
               {!rcBookUri && (
                 <View style={styles.errorContainer}>
-                  <Text style={styles.retryIcon}>↻</Text>
-                  <Text style={styles.errorText}>Upload again</Text>
+                   <Image source={uploadIcon} style={{height : 20 , width  : 20}}/>
+                  <Text style={styles.errorText}>Upload</Text>
                 </View>
               )}
-              {rcBookUri && (
-                <View style={styles.uploadedFileContainer}>
-                  <Text style={styles.uploadedFileName}>✓ {rcBookFileName}</Text>
-                </View>
-              )}
+              
             </View>
             {!rcBookUri ? (
               <Pressable
@@ -299,12 +410,16 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                 <Text style={styles.uploadButtonSmallText}>Upload</Text>
               </Pressable>
             ) : (
-              <Pressable
-                style={[styles.uploadButtonSmall, styles.removeButton]}
-                onPress={removeRcBook}
-              >
-                <Text style={styles.removeButtonText}>✕</Text>
-              </Pressable>
+              <View style={styles.uploadedImageContainer}>
+                          <Image source={{ uri: rcBookUri }} style={styles.uploadedImage} />
+                          <Pressable
+                            style={styles.removeButton}
+                            onPress={removeRcBook}
+                            disabled={isLoading}
+                          >
+                            <Text style={styles.removeButtonIcon}>✕</Text>
+                          </Pressable>
+                        </View>
             )}
           </View>
 
@@ -315,15 +430,11 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
               <Text style={styles.documentSubtitle}>Upload insurance photo or PDF</Text>
               {!insuranceUri && (
                 <View style={styles.errorContainer}>
-                  <Text style={styles.retryIcon}>↻</Text>
-                  <Text style={styles.errorText}>Upload again</Text>
+                  <Image source={uploadIcon} style={{height : 20 , width  : 20}}/>
+                  <Text style={styles.errorText}>Upload</Text>
                 </View>
               )}
-              {insuranceUri && (
-                <View style={styles.uploadedFileContainer}>
-                  <Text style={styles.uploadedFileName}>✓ {insuranceFileName}</Text>
-                </View>
-              )}
+              
             </View>
             {!insuranceUri ? (
               <Pressable
@@ -334,69 +445,54 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                 <Text style={styles.uploadButtonSmallText}>Upload</Text>
               </Pressable>
             ) : (
-              <Pressable
-                style={[styles.uploadButtonSmall, styles.removeButton]}
-                onPress={removeInsurance}
-              >
-                <Text style={styles.removeButtonText}>✕</Text>
-              </Pressable>
+              <View style={styles.uploadedImageContainer}>
+                          <Image source={{ uri: insuranceUri }} style={styles.uploadedImage} />
+                          <Pressable
+                            style={styles.removeButton}
+                            onPress={removeInsurance}
+                            disabled={isLoading}
+                          >
+                            <Text style={styles.removeButtonIcon}>✕</Text>
+                          </Pressable>
+                        </View>
             )}
           </View>
 
-          {/* Vehicle Photos */}
-          <Pressable
-            style={[styles.documentItem, styles.vehiclePhotosItem]}
-            onPress={() => setIsPhotosExpanded(!isPhotosExpanded)}
-          >
-            <View style={styles.documentContent}>
+          <View style={styles.vehiclePhotosBlock}>
+            <View style={styles.vehiclePhotoTextBlock}>
               <Text style={styles.documentTitle}>Vehicle photos</Text>
               <Text style={styles.documentSubtitle}>Front, back & side photos</Text>
-              {vehiclePhotoUris.length > 0 && (
-                <Text style={styles.uploadedCount}>✓ {vehiclePhotoUris.length} photo(s) uploaded</Text>
-              )}
             </View>
-            <Text style={[styles.expandIcon, isPhotosExpanded && styles.expandIconOpen]}>
-              ›
-            </Text>
-          </Pressable>
 
-          {isPhotosExpanded && (
-            <View style={styles.photoThumbnailsContainer}>
-              {vehiclePhotoUris.length === 0 ? (
-                <Pressable
-                  style={styles.addPhotoButton}
-                  onPress={pickMultiplePhotos}
-                  disabled={isLoading}
-                >
-                  <Text style={styles.addPhotoIcon}>+</Text>
-                  <Text style={styles.addPhotoText}>Add Photos</Text>
-                </Pressable>
-              ) : (
-                <>
-                  {vehiclePhotoUris.map((uri, index) => (
-                    <View key={index} style={styles.photoThumbnail}>
-                      <Image source={{ uri }} style={styles.photoImage} />
-                      <Pressable
-                        style={styles.removePhotoButton}
-                        onPress={() => removeVehiclePhoto(index)}
-                      >
-                        <Text style={styles.removePhotoIcon}>✕</Text>
-                      </Pressable>
-                    </View>
-                  ))}
-                  {vehiclePhotoUris.length < 4 && (
+            <View style={styles.vehiclePhotosGrid}>
+              {[0, 1, 2, 3].map((slotIndex) => {
+                const photoUri = vehiclePhotoUris[slotIndex];
+
+                return photoUri ? (
+                  <View key={slotIndex} style={styles.uploadedImageContainer}>
+                    <Image source={{ uri: photoUri }} style={styles.vehiclePhotoImage} />
                     <Pressable
-                      style={styles.addMorePhotoButton}
-                      onPress={pickMultiplePhotos}
+                      style={styles.removePhotoButton}
+                      onPress={() => removeVehiclePhoto(slotIndex)}
                       disabled={isLoading}
                     >
-                      <Text style={styles.addMorePhotoIcon}>+</Text>
+                      <Text style={styles.removePhotoIcon}>x</Text>
                     </Pressable>
-                  )}
-                </>
-              )}
+                  </View>
+                ) : (
+                  <Pressable
+                    key={slotIndex}
+                    style={styles.vehiclePhotoPanel}
+                    onPress={() => pickVehiclePhoto(slotIndex)}
+                    disabled={isLoading}
+                  >
+                    <Text style={styles.vehiclePhotoPlus}>+</Text>
+                    <Text style={styles.vehiclePhotoUploadText}>Upload</Text>
+                  </Pressable>
+                );
+              })}
             </View>
-          )}
+          </View>
         </View>
 
         {/* Continue Button */}
@@ -408,14 +504,14 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
           <Text style={styles.buttonText}>Continue</Text>
         </Pressable>
 
-        <View style={{ height: 40 }} />
+       
       </ScrollView>
 
       {/* Vehicle Type Modal */}
       <Modal
         visible={showVehicleTypeModal}
+        statusBarTranslucent
         transparent
-        animationType="slide"
         onRequestClose={() => setShowVehicleTypeModal(false)}
       >
         <Pressable
@@ -426,29 +522,38 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Vehicle Type</Text>
               <Pressable onPress={() => setShowVehicleTypeModal(false)}>
-                <Text style={styles.closeIcon}>✕</Text>
+                <Text style={styles.closeIcon}>x</Text>
               </Pressable>
             </View>
 
-            <FlatList
-              data={VEHICLE_TYPES}
-              keyExtractor={(item) => item}
-              scrollEnabled={false}
-              renderItem={({ item }) => (
-                <Pressable
-                  style={styles.modalOption}
-                  onPress={() => handleVehicleTypeSelect(item)}
-                >
-                  <Text style={styles.modalOptionText}>{item}</Text>
-                </Pressable>
-              )}
-            />
+            {isLoadingVehicles ? (
+              <Text style={styles.modalEmptyText}>Loading vehicle types...</Text>
+            ) : vehicleOptions.length === 0 ? (
+              <Text style={styles.modalEmptyText}>No vehicle types found</Text>
+            ) : (
+              <FlatList
+                data={vehicleOptions}
+                keyExtractor={(item) => item.id}
+                scrollEnabled={false}
+                renderItem={({ item }) => (
+                  <Pressable
+                    style={styles.modalOption}
+                    onPress={() => handleVehicleTypeSelect(item)}
+                  >
+                    <View style={styles.modalOptionTextGroup}>
+                      <Text style={styles.modalOptionText}>{item.name}</Text>
+                      {item.capacity ? (
+                        <Text style={styles.modalOptionSubtext}>{item.capacity}</Text>
+                      ) : null}
+                    </View>
+                  </Pressable>
+                )}
+              />
+            )}
           </View>
         </Pressable>
       </Modal>
-
-      {/* Navigation Handle */}
-   
+      {alertModal}
     </View>
   );
 };
@@ -458,19 +563,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#eff2f6',
   },
+  statusSpacer: {
+    height: 52,
+    backgroundColor: '#ffffff',
+  },
 
   // Top Navigation
   topNav: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 4,
     paddingVertical: 8,
-    height: 64,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    gap: 12,
+    minHeight: 64,
+    backgroundColor: '#ffffff',
   },
   backButton: {
     width: 48,
@@ -479,18 +584,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   backIcon: {
-    fontSize: 24,
-    color: '#1c1c1c',
+    width: 24,
+    height: 24,
   },
   navTitle: {
-    fontSize: 30,
-    fontWeight: '600',
+    flex: 1,
+    minWidth: 0,
     color: '#1c1c1c',
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 20,
+    fontWeight: '500',
     lineHeight: 32,
-    textAlign: 'center',
-    flex: -1,
-    alignSelf: 'center',
   },
 
   // Scroll View
@@ -499,29 +603,31 @@ const styles = StyleSheet.create({
     backgroundColor: '#eff2f6',
   },
   scrollContent: {
+    width: '100%',
+    maxWidth: 412,
+    alignSelf: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 24,
+    paddingTop: 24,
     paddingBottom: 24,
     gap: 24,
   },
 
   // Header Section
   headerSection: {
-    marginBottom: 12,
     gap: 12,
   },
   title: {
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 40,
     fontWeight: '500',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
     lineHeight: 48,
   },
   subtitle: {
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
     lineHeight: 24,
   },
 
@@ -530,10 +636,10 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   inputLabel: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 24,
   },
   textInput: {
@@ -543,12 +649,16 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
     lineHeight: 24,
-    height: 56,
+    minHeight: 56,
+  },
+  readOnlyInput: {
+    backgroundColor: '#f8f8f8',
+    color: '#606060',
   },
 
   // Dropdown
@@ -559,17 +669,22 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    height: 56,
+    minHeight: 56,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  dropdownButtonDisabled: {
+    opacity: 0.7,
+  },
   dropdownText: {
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    fontFamily: 'Poppins',
     lineHeight: 24,
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
   },
   dropdownIcon: {
     fontSize: 12,
@@ -584,82 +699,88 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 16,
     width: '100%',
+    maxWidth: 264,
   },
   bodyTypeCard: {
     flex: 1,
     alignItems: 'center',
     gap: 12,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 2.5,
-    borderColor: 'transparent',
-  },
-  bodyTypeCardSelected: {
-    borderColor: '#05c',
+    minWidth: 0,
   },
   bodyTypeImage: {
-    width: '100%',
-    aspectRatio: 1.16,
+    width: 116,
+    height: 100,
     backgroundColor: '#e8e8e8',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
   },
-  vehicleImagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
+  bodyTypeCardSelected: {
+    borderRadius: 12,
+    borderWidth: 2.5,
+    borderColor: '#05c',
   },
-  imageText: {
-    fontSize: 32,
+  bodyTypeVehicleImage: {
+    width: 120,
+    height: 98,
+  },
+  closedBodyImage: {
+    width: 190,
+    height: 98,
+    marginLeft: -70,
+    marginTop: 18,
+  },
+  openedBodyImage: {
+    width: 117,
+    height: 85,
+    marginLeft: -34,
+    marginTop: 10,
   },
   bodyTypeLabel: {
+    color: '#2c2c2c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 14,
     fontWeight: '500',
-    color: '#2c2c2c',
-    fontFamily: 'Poppins',
     textAlign: 'center',
     lineHeight: 21,
   },
 
   // Documents Section
   documentsSection: {
-    marginBottom: Spacing.lg,
     gap: 24,
   },
   documentItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#d2d2d2',
     gap: 12,
   },
-  vehiclePhotosItem: {
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomWidth: 0,
-  },
   documentContent: {
     flex: 1,
+    minWidth: 0,
     gap: 4,
   },
   documentTitle: {
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
     lineHeight: 18,
   },
   documentSubtitle: {
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 18,
   },
   errorContainer: {
@@ -669,51 +790,95 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   retryIcon: {
+    color: '#0055cc',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    color: '#d00416',
-    fontFamily: 'Poppins',
   },
   errorText: {
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#0055cc',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    color: '#d00416',
-    fontFamily: 'Poppins',
     lineHeight: 18,
   },
   uploadedFileContainer: {
     marginTop: 4,
   },
   uploadedFileName: {
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#05c',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    color: '#05c',
-    fontFamily: 'Poppins',
     lineHeight: 18,
   },
-  uploadedCount: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: '#05c',
-    fontFamily: 'Poppins',
-    lineHeight: 18,
-    marginTop: 4,
+  vehiclePhotosBlock: {
+    width: '100%',
+    justifyContent: 'center',
+    gap: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#d2d2d2',
+    paddingHorizontal: 8,
+    paddingBottom: 12,
   },
-  expandIcon: {
-    fontSize: 20,
+  vehiclePhotoTextBlock: {
+    width: '100%',
+    gap: 4,
+  },
+  vehiclePhotosGrid: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  uploadedImageContainer: {
+    width : 80,
+    position: 'relative',
+    alignSelf: 'flex-start',
+    overflow: 'visible',
+    borderRadius: 12,
+    height: 86,
+  },
+  vehiclePhotoPanel: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 86,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d2d2d2',
+    borderStyle: 'dashed',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  vehiclePhotoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  vehiclePhotoPlus: {
+    fontSize: 28,
     color: '#606060',
-    transform: [{ rotate: '0deg' }],
+    lineHeight: 32,
   },
-  expandIconOpen: {
-    transform: [{ rotate: '90deg' }],
+  vehiclePhotoUploadText: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 12,
+    fontWeight: '400',
+    lineHeight: 18,
   },
 
   // Upload Button Small (inline)
   uploadButtonSmall: {
     width: 64,
-    height: 64,
+    minHeight: 64,
     backgroundColor: 'white',
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 0.5,
     borderColor: '#a4a4a4',
     borderStyle: 'dashed',
@@ -721,128 +886,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   uploadButtonSmallText: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 18,
   },
-  removeButton: {
-    backgroundColor: '#d00416',
-    borderWidth: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+
   removeButtonText: {
     fontSize: 20,
     fontWeight: '400',
     color: 'white',
     fontFamily: 'Poppins',
   },
-
-  // Vehicle Photos Thumbnails
-  photoThumbnailsContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#d2d2d2',
-    flexWrap: 'wrap',
-  },
-  photoThumbnail: {
-    width: '48%',
-    aspectRatio: 1,
-    backgroundColor: 'white',
-    borderRadius: 8,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  photoImage: {
-    width: '100%',
-    height: '100%',
-  },
   removePhotoButton: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 28,
-    height: 28,
+   position: 'absolute',
+    top: -2,
+    right: -5,
+    width: 25,
+    height: 25,
+    borderRadius: 50,
     backgroundColor: '#d00416',
-    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 10,
+    elevation: 5, // Android
   },
   removePhotoIcon: {
     fontSize: 16,
     fontWeight: '400',
     color: 'white',
-    fontFamily: 'Poppins',
-  },
-  addPhotoButton: {
-    width: '100%',
-    aspectRatio: 1.5,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#d2d2d2',
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  addPhotoIcon: {
-    fontSize: 32,
-    color: '#606060',
-  },
-  addPhotoText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#606060',
-    fontFamily: 'Poppins',
-  },
-  addMorePhotoButton: {
-    width: '48%',
-    aspectRatio: 1,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#d2d2d2',
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addMorePhotoIcon: {
-    fontSize: 28,
-    color: '#606060',
-  },
-
-  photoPlaceholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f0f0f0',
-  },
-  photoPlaceholderText: {
-    fontSize: 32,
-  },
-
-  // Upload Prompt (old - keeping for reference)
-  uploadPrompt: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.md,
-    backgroundColor: Colors.neutral100,
-  },
-  uploadButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: Radius.sm,
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
-  },
-  uploadButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.neutral100,
     fontFamily: 'Poppins',
   },
 
@@ -854,19 +927,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 40,
-    marginBottom: 24,
-    height: 56,
+    minHeight: 56,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
+    flexShrink: 1,
+    color: 'white',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    color: 'white',
-    fontFamily: 'Poppins',
-    lineHeight: 20,
+    lineHeight: 16,
     letterSpacing: -0.5,
   },
 
@@ -877,6 +949,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     backgroundColor: Colors.neutral100,
     borderTopLeftRadius: Radius.lg,
     borderTopRightRadius: Radius.lg,
@@ -893,10 +968,10 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.neutral300,
   },
   modalTitle: {
+    fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
     color: Colors.neutral900,
-    fontFamily: 'Poppins',
   },
   closeIcon: {
     fontSize: 24,
@@ -908,25 +983,60 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.neutral200,
   },
+  modalOptionTextGroup: {
+    gap: 4,
+  },
   modalOptionText: {
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
     color: Colors.neutral900,
-    fontFamily: 'Poppins',
+  },
+  modalOptionSubtext: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#606060',
+    lineHeight: 18,
+  },
+  modalEmptyText: {
+    paddingVertical: Spacing.lg,
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 16,
+    fontWeight: '400',
+    color: '#606060',
+    textAlign: 'center',
   },
 
-  // Navigation Handle
-  navigationHandle: {
-    height: 24,
+  uploadedImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+  },
+  removeButton: {
+    position: 'absolute',
+    top: -1,
+    right: -5,
+    width: 25,
+    height: 25,
+    borderRadius: 50,
+    backgroundColor: '#d00416',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingBottom: Spacing.sm,
+    zIndex: 10,
+      elevation: 5, // Android
   },
-  handleBar: {
-    width: 108,
-    height: 4,
-    backgroundColor: Colors.neutral900,
-    borderRadius: 12,
+  removeButtonIcon: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'white',
+    fontFamily: 'Poppins',
+  },
+    vehicleImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

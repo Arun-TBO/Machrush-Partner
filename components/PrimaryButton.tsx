@@ -7,7 +7,7 @@ import {
   TextStyle,
   GestureResponderEvent,
 } from 'react-native';
-import { Colors, Spacing, Radius, Typography } from '@/lib/theme';
+import { Colors, Spacing, Radius } from '@/lib/theme';
 
 export type ButtonVariant = 'primary' | 'secondary';
 
@@ -72,6 +72,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   text: {
+    flexShrink: 1,
     fontSize: 16,
     fontWeight: '500',
     letterSpacing: -0.5,

@@ -2,7 +2,6 @@ import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   ImageSourcePropType,
   Modal,
@@ -14,13 +13,22 @@ import {
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signOutUser } from '@/lib/firebaseAuthService';
 import { auth } from '@/lib/firebase';
 import { getDriverProfile, updateDriverProfilePhoto } from '@/lib/firestoreOnboardingService';
-import { getCachedProfilePhotoUrl, setCachedProfilePhotoUrl } from '@/lib/profilePhotoCache';
+import { useAppAlert } from '@/components/AppAlertModal';
+import {
+  getCachedDriverName,
+  getCachedProfilePhotoUrl,
+  setCachedDriverName,
+  setCachedProfilePhotoUrl,
+} from '@/lib/profileCache';
 
-const profileAvatarImage = require('@/assets/images/profile/profile-avatar.png');
+import { fs, hit, rs, vs } from '@/lib/responsive';
+
+const profileAvatarImage = require('@/assets/images/profile/profile-avatar.jpg');
 const backImage = require('@/assets/images/profile/back.png');
 const verifiedBadgeImage = require('@/assets/images/profile/verified-badge.png');
 const editImage = require('@/assets/images/profile/edit.png');
@@ -34,12 +42,9 @@ const reportImage = require('@/assets/images/profile/report.png');
 const helpImage = require('@/assets/images/profile/help.png');
 const termsImage = require('@/assets/images/profile/terms.png');
 const logoutImage = require('@/assets/images/profile/logout.png');
-const tabHomeImage = require('@/assets/images/profile/tab-home.png');
-const tabEarningsImage = require('@/assets/images/profile/tab-earnings.png');
-const tabProfileActiveImage = require('@/assets/images/profile/tab-profile-active.png');
 const supportCallImage = require('@/assets/images/profile/support-call.png');
 const supportEmailImage = require('@/assets/images/profile/support-email.png');
-
+const Paymentpolicy = require('@/assets/images/profile/Paymentpolicy.png');
 const menuRows = [
   { id: 'documents', label: 'Documents', icon: documentsImage, iconSize: 24 },
   { id: 'bank', label: 'Bank details', icon: bankImage, iconSize: 20 },
@@ -47,7 +52,25 @@ const menuRows = [
   { id: 'report', label: 'Report a problem', icon: reportImage, iconSize: 24 },
   { id: 'help', label: 'Get Help', icon: helpImage, iconSize: 24 },
   { id: 'terms', label: 'Terms & conditions', icon: termsImage, iconSize: 24 },
+  { id: 'Payment policy', label: 'Payment policy', icon: Paymentpolicy, iconSize: 24 },
 ];
+
+type DeliveryRecord = {
+  status?: string;
+  review?: {
+    rating?: number | string | null;
+    isSubmitted?: boolean;
+  } | null;
+};
+
+const getApiBaseUrl = () => {
+  return (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
+};
+
+const isCompletedDelivery = (status?: string) => {
+  const normalizedStatus = String(status || '').toLowerCase();
+  return normalizedStatus === 'delivered' || normalizedStatus === 'completed' || normalizedStatus === 'paid';
+};
 
 function TopNav() {
   const router = useRouter();
@@ -78,9 +101,14 @@ function StatCard({
     <Pressable style={styles.statCard} accessibilityRole="button">
       <View style={styles.statHeader}>
         <Text style={styles.statTitle}>{title}</Text>
-        <View style={styles.statArrowCircle}>
+         {
+          title === "Delivery's" && (
+               <View style={styles.statArrowCircle}>
           <Image source={statArrowImage} style={styles.statArrowIcon} resizeMode="contain" />
         </View>
+          )
+         }
+         
       </View>
       {children}
     </Pressable>
@@ -101,7 +129,7 @@ function MenuRow({
   return (
     <Pressable style={styles.menuRow} accessibilityRole="button" onPress={onPress}>
       <Image source={icon} style={{ width: iconSize, height: iconSize }} resizeMode="contain" />
-      <Text style={styles.menuLabel}>{label}</Text>
+      <Text style={styles.menuLabel} numberOfLines={1}>{label}</Text>
       <Image source={chevronImage} style={styles.chevronIcon} resizeMode="contain" />
     </Pressable>
   );
@@ -120,8 +148,8 @@ function SupportOption({
     <View style={styles.supportOption}>
       <Image source={icon} style={styles.supportOptionIcon} resizeMode="contain" />
       <View style={styles.supportOptionText}>
-        <Text style={styles.supportOptionLabel}>{label}</Text>
-        <Text style={styles.supportOptionValue}>{value}</Text>
+        <Text style={styles.supportOptionLabel} numberOfLines={1}>{label}</Text>
+        <Text style={styles.supportOptionValue} numberOfLines={1}>{value}</Text>
       </View>
     </View>
   );
@@ -134,10 +162,15 @@ function SupportModal({
   visible: boolean;
   onClose: () => void;
 }) {
+  const insets = useSafeAreaInsets();
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent  onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable style={styles.supportSheet} onPress={(event) => event.stopPropagation()}>
+        <Pressable
+          style={[styles.supportSheet, { paddingBottom: insets.bottom + 16 }]}
+          onPress={(event) => event.stopPropagation()}
+        >
           <View style={styles.sheetHeader}>
             <View style={styles.dragHandle} />
           </View>
@@ -168,10 +201,15 @@ function LogoutModal({
   onClose: () => void;
   onLogout: () => void;
 }) {
+  const insets = useSafeAreaInsets();
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent  statusBarTranslucent onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable style={styles.logoutSheet} onPress={(event) => event.stopPropagation()}>
+        <Pressable
+          style={[styles.logoutSheet, { paddingBottom: insets.bottom + 16 }]}
+          onPress={(event) => event.stopPropagation()}
+        >
           <View style={styles.logoutDialog}>
             <View style={styles.sheetHeader}>
               <View style={styles.dragHandle} />
@@ -208,38 +246,17 @@ function LogoutModal({
   );
 }
 
-function BottomTabBar() {
-  const router = useRouter();
-
-  return (
-    <View style={styles.tabBar}>
-      <Pressable
-        style={styles.tabItem}
-        accessibilityRole="button"
-        accessibilityLabel="Open home"
-        onPress={() => router.push('/(tabs)')}
-      >
-        <Image source={tabHomeImage} style={styles.tabIcon} resizeMode="contain" />
-        <Text style={styles.tabLabel}>Home</Text>
-      </Pressable>
-      <View style={styles.tabItem}>
-        <Image source={tabEarningsImage} style={styles.tabIcon} resizeMode="contain" />
-        <Text style={styles.tabLabel}>Earnings</Text>
-      </View>
-      <View style={styles.tabItem}>
-        <Image source={tabProfileActiveImage} style={styles.tabIcon} resizeMode="contain" />
-        <Text style={styles.tabLabelActive}>Profile</Text>
-      </View>
-    </View>
-  );
-}
-
 export default function ProfileScreen() {
+  const insets = useSafeAreaInsets();
   const [isSupportVisible, setIsSupportVisible] = React.useState(false);
   const [isLogoutVisible, setIsLogoutVisible] = React.useState(false);
   const [profilePhotoUrl, setProfilePhotoUrl] = React.useState<string | null>(null);
+  const [driverName, setDriverName] = React.useState('Driver');
+  const [averageRating, setAverageRating] = React.useState('0.0');
+  const [completedDeliveryCount, setCompletedDeliveryCount] = React.useState(0);
   const [isPhotoUploading, setIsPhotoUploading] = React.useState(false);
   const router = useRouter();
+  const { alertModal, showAlert } = useAppAlert();
 
   const handleMenuPress = (rowId: string) => {
     if (rowId === 'documents') {
@@ -289,38 +306,111 @@ export default function ProfileScreen() {
         return;
       }
 
-      const cachedPhotoUrl = await getCachedProfilePhotoUrl(uid);
+      const [cachedPhotoUrl, cachedDriverName] = await Promise.all([
+        getCachedProfilePhotoUrl(uid),
+        getCachedDriverName(uid),
+      ]);
+
       if (isMounted && cachedPhotoUrl) {
         setProfilePhotoUrl(cachedPhotoUrl);
+      }
+      if (isMounted && cachedDriverName) {
+        setDriverName(cachedDriverName);
       }
 
       const driverProfile = await getDriverProfile(uid, idToken);
       const savedPhotoUrl =
         driverProfile?.profilePhotoUrl ||
         (driverProfile?.photoUri?.startsWith('http') ? driverProfile.photoUri : null);
+      const savedDriverName = driverProfile?.fullName?.trim();
 
       if (savedPhotoUrl) {
         await setCachedProfilePhotoUrl(uid, savedPhotoUrl);
       }
+      if (savedDriverName) {
+        await setCachedDriverName(uid, savedDriverName);
+      }
 
       if (isMounted) {
         setProfilePhotoUrl(savedPhotoUrl || cachedPhotoUrl || null);
+        setDriverName(savedDriverName || cachedDriverName || 'Driver');
       }
     };
 
     loadProfilePhoto();
+    const interval = setInterval(loadProfilePhoto, 5000);
 
     return () => {
       isMounted = false;
+      clearInterval(interval);
     };
   }, [getCurrentProfileSession]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+
+      const loadProfileStats = async () => {
+        const { uid } = await getCurrentProfileSession();
+
+        if (!uid) {
+          if (isActive) {
+            setAverageRating('0.0');
+            setCompletedDeliveryCount(0);
+          }
+          return;
+        }
+
+        try {
+          const response = await fetch(
+            `${getApiBaseUrl()}/api/deliveries/driver/${encodeURIComponent(uid)}?type=all`
+          );
+          const body = (await response.json().catch(() => null)) as {
+            success?: boolean;
+            data?: DeliveryRecord[];
+            error?: string;
+          } | null;
+
+          if (!response.ok || body?.success === false) {
+            throw new Error(body?.error || 'Unable to load profile stats');
+          }
+
+          const deliveries = Array.isArray(body?.data) ? body.data : [];
+          const completedCount = deliveries.filter((delivery) =>
+            isCompletedDelivery(delivery.status)
+          ).length;
+          const ratings = deliveries
+            .map((delivery) => Number(delivery.review?.rating))
+            .filter((rating) => Number.isFinite(rating) && rating > 0);
+          const rating = ratings.length
+            ? ratings.reduce((sum, value) => sum + value, 0) / ratings.length
+            : 0;
+
+          if (isActive) {
+            setCompletedDeliveryCount(completedCount);
+            setAverageRating(rating.toFixed(1));
+          }
+        } catch (error) {
+          console.error('Error loading profile stats:', error);
+        }
+      };
+
+      loadProfileStats();
+      const interval = setInterval(loadProfileStats, 5000);
+
+      return () => {
+        isActive = false;
+        clearInterval(interval);
+      };
+    }, [getCurrentProfileSession])
+  );
 
   const handleEditProfilePhoto = async () => {
     try {
       const { uid, idToken } = await getCurrentProfileSession();
 
       if (!uid) {
-        Alert.alert('Login required', 'Please login again before updating your profile picture.');
+        showAlert('Login required', 'Please login again before updating your profile picture.');
         router.replace('/phone-number');
         return;
       }
@@ -328,7 +418,7 @@ export default function ProfileScreen() {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (!permission.granted) {
-        Alert.alert('Permission needed', 'Please allow gallery access to choose a profile photo.');
+        showAlert('Permission needed', 'Please allow gallery access to choose a profile photo.');
         return;
       }
 
@@ -361,7 +451,7 @@ export default function ProfileScreen() {
       setProfilePhotoUrl(uploadedPhotoUrl);
     } catch (error) {
       console.error('Error updating profile photo:', error);
-      Alert.alert('Upload failed', 'Could not update your profile photo. Please try again.');
+      showAlert('Upload failed', 'Could not update your profile photo. Please try again.');
     } finally {
       setIsPhotoUploading(false);
     }
@@ -381,7 +471,10 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: 85 + insets.bottom + 24 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
@@ -391,11 +484,13 @@ export default function ProfileScreen() {
           <View style={styles.profileBlock}>
             <View style={styles.profileRow}>
               <View style={styles.identity}>
+                 <Text style={styles.driverName} numberOfLines={1} ellipsizeMode="tail">{driverName}</Text>
                 <View style={styles.nameRow}>
-                  <Text style={styles.driverName}>Ralph Edwards</Text>
+                 
                   <Image source={verifiedBadgeImage} style={styles.verifiedBadge} resizeMode="contain" />
+                  <Text style={styles.verified} numberOfLines={1}>Verified</Text>
                 </View>
-                <Text style={styles.viewProfile}>View Profile</Text>
+         
               </View>
 
               <View style={styles.avatarWrap}>
@@ -424,15 +519,16 @@ export default function ProfileScreen() {
             <View style={styles.statsRow}>
               <StatCard title="Review">
                 <View style={styles.reviewValueRow}>
-                  <Text style={styles.statValue}>4.8</Text>
+                  <Text style={styles.statValue} numberOfLines={1}>{averageRating}</Text>
                   <Image source={starImage} style={styles.starIcon} resizeMode="contain" />
                 </View>
               </StatCard>
 
               <StatCard title="Delivery's">
+               
                 <View style={styles.deliveryValueRow}>
-                  <Text style={styles.statValue}>12</Text>
-                  <Text style={styles.completedText}>Completed</Text>
+                  <Text style={styles.statValue} numberOfLines={1}>{completedDeliveryCount}</Text>
+                  <Text style={styles.completedText} numberOfLines={1}>Completed</Text>
                 </View>
               </StatCard>
             </View>
@@ -457,20 +553,20 @@ export default function ProfileScreen() {
             onPress={() => setIsLogoutVisible(true)}
           >
             <Image source={logoutImage} style={styles.logoutIcon} resizeMode="contain" />
-            <Text style={styles.logoutText}>Logout</Text>
+            <Text style={styles.logoutText} numberOfLines={1}>Logout</Text>
           </Pressable>
         </View>
 
         <Text style={styles.poweredText}>Powered by thebrandopedia</Text>
       </ScrollView>
 
-      <BottomTabBar />
       <SupportModal visible={isSupportVisible} onClose={() => setIsSupportVisible(false)} />
       <LogoutModal
         visible={isLogoutVisible}
         onClose={() => setIsLogoutVisible(false)}
         onLogout={handleConfirmLogout}
       />
+      {alertModal}
     </SafeAreaView>
   );
 }
@@ -484,7 +580,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 108,
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
+    paddingBottom: 120,
   },
   header: {
     backgroundColor: '#dbe6f7',
@@ -496,7 +595,7 @@ const styles = StyleSheet.create({
     height: 52,
   },
   topNav: {
-    height: 64,
+    minHeight: 64,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 4,
@@ -513,11 +612,13 @@ const styles = StyleSheet.create({
     height: 24,
   },
   topNavTitle: {
-    fontFamily: 'Poppins',
+    flex: 1,
+    minWidth: 0,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 20,
     fontWeight: '500',
     lineHeight: 32,
-    color: '#1c1c1c',
   },
   profileBlock: {
     gap: 16,
@@ -542,22 +643,33 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   driverName: {
-    fontFamily: 'Poppins',
+    color: '#000000',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 24,
     fontWeight: '500',
+    lineHeight: 32,
     letterSpacing: -1,
-    color: '#000000',
+    flexShrink: 1,
+  },
+  verified :{
+    minWidth: 0,
+    flexShrink: 1,
+    fontFamily: 'Poppins',
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1FC16B',
+
   },
   verifiedBadge: {
     width: 24,
     height: 24,
   },
   viewProfile: {
-    fontFamily: 'Poppins',
+    color: '#0055cc',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 24,
-    color: '#0055cc',
   },
   avatarWrap: {
     width: 72,
@@ -602,7 +714,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    height: 104,
+    minHeight: 104,
     borderRadius: 16,
     backgroundColor: '#ffffff',
     padding: 12,
@@ -613,13 +725,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minWidth: 0,
   },
   statTitle: {
-    fontFamily: 'Poppins',
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 14,
     fontWeight: '500',
     lineHeight: 21,
-    color: '#1c1c1c',
   },
   statArrowCircle: {
     width: 24,
@@ -633,40 +749,48 @@ const styles = StyleSheet.create({
   statArrowIcon: {
     width: 20,
     height: 20,
-    transform: [{ rotate: '45deg' }],
   },
   reviewValueRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    minWidth: 0,
   },
   deliveryValueRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
+    gap: 1,
+    minWidth: 0,
   },
   statValue: {
-    fontFamily: 'Poppins',
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 32,
     fontWeight: '500',
     lineHeight: 32,
-    color: '#1c1c1c',
   },
   starIcon: {
     width: 24,
     height: 24,
   },
   completedText: {
-    fontFamily: 'Poppins',
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#8e8e8e',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
     lineHeight: 18,
-    color: '#8e8e8e',
     marginBottom: 1,
   },
   menuSection: {
     gap: 8,
     paddingHorizontal: 16,
-    paddingTop: 34,
+    paddingTop: 16,
+    paddingBottom: 24,
+   
   },
   menuRow: {
     minHeight: 67,
@@ -678,19 +802,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 21,
     overflow: 'hidden',
+  
   },
   menuLabel: {
     flex: 1,
-    fontFamily: 'Poppins',
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
+    lineHeight: 16,
     letterSpacing: -0.5,
-    color: '#1c1c1c',
   },
   chevronIcon: {
     width: 24,
     height: 24,
-    transform: [{ rotate: '-90deg' }],
+  
   },
   logoutRow: {
     minHeight: 67,
@@ -711,58 +839,22 @@ const styles = StyleSheet.create({
     height: 24,
   },
   logoutText: {
-    fontFamily: 'Poppins',
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#d00416',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 24,
-    color: '#d00416',
   },
   poweredText: {
-    marginTop: 18,
-    fontFamily: 'Poppins',
+    marginTop: 0,
+    color: '#8e8e8e',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    letterSpacing: -0.5,
-    color: '#8e8e8e',
-    textAlign: 'center',
-  },
-  tabBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    gap: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#a4cbff',
-    backgroundColor: '#eff2f6',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 16,
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 8,
-  },
-  tabIcon: {
-    width: 28,
-    height: 28,
-  },
-  tabLabel: {
-    fontFamily: 'Poppins',
-    fontSize: 14,
-    fontWeight: '400',
-    lineHeight: 21,
-    color: '#606060',
-    textAlign: 'center',
-  },
-  tabLabelActive: {
-    fontFamily: 'Poppins',
-    fontSize: 14,
-    fontWeight: '500',
-    lineHeight: 21,
-    color: '#1c1c1c',
+
     textAlign: 'center',
   },
   modalBackdrop: {
@@ -772,13 +864,14 @@ const styles = StyleSheet.create({
   },
   supportSheet: {
     width: '100%',
+    alignSelf: 'center',
     gap: 24,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     backgroundColor: '#ffffff',
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 40,
+    paddingBottom: 16,
     overflow: 'hidden',
   },
   sheetHeader: {
@@ -799,20 +892,21 @@ const styles = StyleSheet.create({
   },
   supportTitle: {
     width: '100%',
-    fontFamily: 'Poppins',
+    color: '#29292b',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 24,
     fontWeight: '500',
+    lineHeight: 24,
     letterSpacing: -1,
-    color: '#29292b',
     textAlign: 'center',
   },
   supportSubtitle: {
     width: '100%',
-    fontFamily: 'Poppins',
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 14,
     fontWeight: '400',
     lineHeight: 21,
-    color: '#606060',
     textAlign: 'center',
   },
   supportOptions: {
@@ -836,32 +930,41 @@ const styles = StyleSheet.create({
   },
   supportOptionText: {
     flex: 1,
+    flexShrink: 1,
     justifyContent: 'center',
     gap: 4,
     minHeight: 52,
     minWidth: 0,
   },
   supportOptionLabel: {
-    fontFamily: 'Poppins',
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 24,
-    color: '#606060',
   },
   supportOptionValue: {
-    fontFamily: 'Poppins',
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
+    lineHeight: 16,
     letterSpacing: -0.5,
-    color: '#1c1c1c',
   },
   logoutSheet: {
     width: '100%',
+    alignSelf: 'center',
     gap: 32,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     backgroundColor: '#ffffff',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
     overflow: 'hidden',
   },
   logoutDialog: {
@@ -881,63 +984,60 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   logoutTitle: {
-    fontFamily: 'Poppins',
-    fontSize: 24,
-    fontWeight: '500',
-    letterSpacing: -1,
     color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 24,
+    letterSpacing: -1,
     textAlign: 'center',
   },
   logoutMessage: {
     width: '100%',
-    fontFamily: 'Lato',
-    fontSize: 16,
-    fontWeight: '400',
     color: 'rgba(0, 0, 0, 0.75)',
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 16,
+    lineHeight: 24,
     textAlign: 'center',
   },
   logoutActions: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
+    justifyContent: 'space-around',
+    gap: 2,
   },
   goBackButton: {
-    width: 120,
+    flex: 1,
+    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#0055cc',
     borderRadius: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    overflow: 'hidden',
+    minHeight: 48
   },
   goBackButtonText: {
-    fontFamily: 'Poppins',
-    fontSize: 16,
-    fontWeight: '500',
-    letterSpacing: -0.5,
+    flexShrink: 1,
     color: '#606060',
-    textAlign: 'center',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 16,
+    lineHeight: 19,
+    letterSpacing: -0.5,
   },
   confirmLogoutButton: {
-    flex: 1,
+    flex: 1.8,
+    minHeight: 48,
     minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
     backgroundColor: '#d00416',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    overflow: 'hidden',
+
   },
   confirmLogoutButtonText: {
-    fontFamily: 'Poppins',
-    fontSize: 16,
-    fontWeight: '500',
-    letterSpacing: -0.5,
+    flexShrink: 1,
     color: '#ffffff',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 16,
     textAlign: 'center',
   },
 });

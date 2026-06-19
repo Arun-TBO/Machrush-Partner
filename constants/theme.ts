@@ -7,6 +7,7 @@ import { Platform } from 'react-native';
 
 const tintColorLight = '#0a7ea4';
 const tintColorDark = '#fff';
+const poppins = 'Poppins_400Regular';
 
 export const Colors = {
   light: {
@@ -30,24 +31,24 @@ export const Colors = {
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
+    sans: poppins,
     /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
+    serif: poppins,
     /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
+    rounded: poppins,
     /** iOS `UIFontDescriptorSystemDesignMonospaced` */
     mono: 'ui-monospace',
   },
   default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
+    sans: poppins,
+    serif: poppins,
+    rounded: poppins,
     mono: 'monospace',
   },
   web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
+    sans: poppins,
+    serif: poppins,
+    rounded: poppins,
     mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
   },
 });

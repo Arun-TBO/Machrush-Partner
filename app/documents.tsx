@@ -57,7 +57,7 @@ function VerifiedStatus() {
   return (
     <View style={styles.statusRow}>
       <Image source={verifiedStatusImage} style={styles.statusIcon} resizeMode="contain" />
-      <Text style={styles.statusText}>Verified</Text>
+      <Text style={styles.statusText} numberOfLines={1}>Verified</Text>
     </View>
   );
 }
@@ -74,8 +74,8 @@ function DocumentRow({
   return (
     <View style={styles.documentRow}>
       <View style={styles.documentTextBlock}>
-        <Text style={styles.documentTitle}>{title}</Text>
-        <Text style={styles.documentDescription}>{description}</Text>
+        <Text style={styles.documentTitle} numberOfLines={1}>{title}</Text>
+        <Text style={styles.documentDescription} numberOfLines={1}>{description}</Text>
         <VerifiedStatus />
       </View>
 
@@ -121,8 +121,8 @@ function VehiclePhotosDocument({ photos }: { photos: ImageSourcePropType[] }) {
   return (
     <View style={styles.vehiclePhotosDocument}>
       <View style={styles.vehiclePhotoTextBlock}>
-        <Text style={styles.documentTitle}>Vehicle photos</Text>
-        <Text style={styles.documentDescription}>Your vehicle photos are verified</Text>
+        <Text style={styles.documentTitle} numberOfLines={1}>Vehicle photos</Text>
+        <Text style={styles.documentDescription} numberOfLines={1}>Your vehicle photos are verified</Text>
         <VerifiedStatus />
       </View>
       <VehiclePhotosRow photos={photos} />
@@ -159,9 +159,11 @@ export default function DocumentsScreen() {
       };
 
       loadDriverProfile();
+      const interval = setInterval(loadDriverProfile, 5000);
 
       return () => {
         isActive = false;
+        clearInterval(interval);
       };
     }, [])
   );
@@ -260,7 +262,7 @@ const styles = StyleSheet.create({
     height: 52,
   },
   topNav: {
-    height: 64,
+    minHeight: 64,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 4,
@@ -277,16 +279,21 @@ const styles = StyleSheet.create({
     height: 24,
   },
   navTitle: {
-    fontFamily: 'Poppins',
+    flex: 1,
+    minWidth: 0,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 20,
     fontWeight: '500',
     lineHeight: 32,
-    color: '#1c1c1c',
   },
   scroll: {
     flex: 1,
   },
   content: {
+    width: '100%',
+    maxWidth: 412,
+    alignSelf: 'center',
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 40,
@@ -298,18 +305,18 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     width: '100%',
-    fontFamily: 'Poppins',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 24,
     fontWeight: '500',
+    lineHeight: 24,
     letterSpacing: -1,
-    color: '#1c1c1c',
   },
   sectionRows: {
     width: '100%',
   },
   documentRow: {
     width: '100%',
-    minHeight: 113,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
@@ -321,41 +328,50 @@ const styles = StyleSheet.create({
   documentTextBlock: {
     flex: 1,
     minWidth: 0,
+    flexShrink: 1,
     gap: 4,
     alignItems: 'flex-start',
   },
   documentTitle: {
-    fontFamily: 'Poppins',
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
-    color: '#1c1c1c',
+    lineHeight: 18,
   },
   documentDescription: {
-    fontFamily: 'Poppins',
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
     lineHeight: 18,
-    color: '#606060',
   },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    minWidth: 0,
   },
   statusIcon: {
     width: 16,
     height: 16,
   },
   statusText: {
-    fontFamily: 'Poppins',
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#1fc16b',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
     lineHeight: 18,
-    color: '#1fc16b',
   },
   uploadButton: {
     width: 64,
-    height: 64,
+    minHeight: 64,
     borderRadius: 12,
     overflow: 'hidden',
     alignItems: 'center',

@@ -40,7 +40,7 @@ export interface OnboardingData {
   upiId?: string;
 
   // Verification Status
-  verificationStatus: 'pending' | 'verified' | 'rejected';
+  verificationStatus: 'pending' | 'verified' | 'rejected' | 'suspended';
   rejectionReason?: string;
   rejectedDocuments?: string[];
   verificationNotes?: string;
@@ -59,7 +59,12 @@ export interface DriverReportData {
   imageUris: string[];
 }
 
-type VerificationStatus = 'pending' | 'verified' | 'rejected';
+type VerificationStatus = 'pending' | 'verified' | 'rejected' | 'suspended';
+export type DriverAvailabilityStatus = 'online' | 'offline';
+export type DriverAvailabilityState = {
+  status: DriverAvailabilityStatus;
+  changedAt?: Timestamp | string | Date | null;
+};
 
 const getApiBaseUrl = () => {
   return (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
@@ -86,6 +91,130 @@ const getApiErrorMessage = (responseBody: unknown, fallback: string) => {
   }
 
   return fallback;
+};
+
+const isRemoteUrl = (uri: string) => /^https?:\/\//i.test(uri);
+
+const getExtensionForContentType = (contentType: string) => {
+  if (contentType.includes('png')) {
+    return 'png';
+  }
+
+  if (contentType.includes('webp')) {
+    return 'webp';
+  }
+
+  if (contentType.includes('pdf')) {
+    return 'pdf';
+  }
+
+  if (contentType.includes('mp4')) {
+    return 'mp4';
+  }
+
+  if (contentType.includes('quicktime')) {
+    return 'mov';
+  }
+
+  return 'jpg';
+};
+
+const uploadDriverStorageAsset = async (
+  uid: string,
+  localUri: string,
+  folder: string,
+  fileName: string,
+  fallbackContentType = 'image/jpeg'
+) => {
+  if (!localUri || isRemoteUrl(localUri)) {
+    return localUri;
+  }
+
+  const response = await fetch(localUri);
+  const blob = await response.blob();
+  const contentType = blob.type || fallbackContentType;
+  const extension = getExtensionForContentType(contentType);
+  const storageRef = ref(
+    storage,
+    `drivers/${uid}/${folder}/${fileName}-${Date.now()}.${extension}`
+  );
+
+  await uploadBytes(storageRef, blob, {
+    contentType,
+    customMetadata: {
+      ownerUid: uid,
+    },
+  });
+
+  return getDownloadURL(storageRef);
+};
+
+const blobToDataUrl = (blob: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('Failed to read selected file'));
+      }
+    };
+    reader.onerror = () => reject(new Error('Failed to read selected file'));
+    reader.readAsDataURL(blob);
+  });
+
+const localUriToDataUrl = async (uri: string) => {
+  if (uri.startsWith('data:')) {
+    return uri;
+  }
+
+  const response = await fetch(uri);
+  const blob = await response.blob();
+  return blobToDataUrl(blob);
+};
+
+type OnboardingUploadAsset = {
+  type: string;
+  uri: string;
+  index?: number;
+};
+
+const uploadOnboardingAssetsViaBackend = async (
+  uid: string,
+  assets: OnboardingUploadAsset[],
+  idToken: string
+) => {
+  const assetsToUpload = await Promise.all(
+    assets.map(async (asset) => ({
+      type: asset.type,
+      index: asset.index,
+      dataUrl: await localUriToDataUrl(asset.uri),
+    }))
+  );
+
+  const response = await fetch(`${getApiBaseUrl()}/api/uploads/driver-onboarding-assets`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      uid,
+      assets: assetsToUpload,
+    }),
+  });
+
+  const responseBody = await response.json().catch(() => null);
+
+  if (!response.ok || !responseBody?.success) {
+    throw new Error(getApiErrorMessage(responseBody, 'Failed to upload onboarding files'));
+  }
+
+  return (responseBody.assets || []) as Array<{
+    type: string;
+    index?: number;
+    url: string;
+  }>;
 };
 
 const uploadProfilePhotoViaBackend = async (
@@ -164,6 +293,15 @@ const normalizeVerificationStatus = (status: unknown): VerificationStatus | null
     return 'rejected';
   }
 
+  if (
+    normalized === 'suspend' ||
+    normalized === 'suspended' ||
+    normalized === 'blocked' ||
+    normalized === 'block'
+  ) {
+    return 'suspended';
+  }
+
   return null;
 };
 
@@ -185,23 +323,23 @@ export const updateDriverProfilePhoto = async (
       throw new Error('Firebase ID token is required to update profile photo on web');
     }
 
-    const profilePhotoUrl = await resizeWebImageToDataUrl(localImageUri);
+    const profilePhotoDataUrl = await resizeWebImageToDataUrl(localImageUri);
+    const profilePhotoUrl = await uploadDriverStorageAsset(
+      uid,
+      profilePhotoDataUrl,
+      'profile',
+      'profile-photo'
+    );
     await updateDriverProfilePhotoViaRest(uid, profilePhotoUrl, idToken);
     return profilePhotoUrl;
   }
 
-  const response = await fetch(localImageUri);
-  const blob = await response.blob();
-  const storageRef = ref(storage, `drivers/${uid}/profile-photo.jpg`);
-
-  await uploadBytes(storageRef, blob, {
-    contentType: blob.type || 'image/jpeg',
-    customMetadata: {
-      ownerUid: uid,
-    },
-  });
-
-  const profilePhotoUrl = await getDownloadURL(storageRef);
+  const profilePhotoUrl = await uploadDriverStorageAsset(
+    uid,
+    localImageUri,
+    'profile',
+    'profile-photo'
+  );
 
   if (auth.currentUser?.uid === uid) {
     await setDoc(
@@ -227,26 +365,25 @@ const uploadReportImage = async (
   reportSeed: number,
   index: number
 ) => {
-  if (localImageUri.startsWith('data:image')) {
-    return localImageUri;
-  }
-
   if (Platform.OS === 'web') {
-    return resizeWebImageToDataUrl(localImageUri, 720, 0.76);
+    const imageDataUrl = localImageUri.startsWith('data:image')
+      ? localImageUri
+      : await resizeWebImageToDataUrl(localImageUri, 720, 0.76);
+
+    return uploadDriverStorageAsset(
+      uid,
+      imageDataUrl,
+      'reports',
+      `${reportSeed}-${index + 1}`
+    );
   }
 
-  const response = await fetch(localImageUri);
-  const blob = await response.blob();
-  const storageRef = ref(storage, `driver-reports/${uid}/${reportSeed}-${index + 1}.jpg`);
-
-  await uploadBytes(storageRef, blob, {
-    contentType: blob.type || 'image/jpeg',
-    customMetadata: {
-      ownerUid: uid,
-    },
-  });
-
-  return getDownloadURL(storageRef);
+  return uploadDriverStorageAsset(
+    uid,
+    localImageUri,
+    'reports',
+    `${reportSeed}-${index + 1}`
+  );
 };
 
 const storeDriverReportViaRest = async (
@@ -520,6 +657,124 @@ const updateDriverProfilePhotoViaRest = async (
   }
 };
 
+const createDriverAvailabilityLogViaRest = async (
+  uid: string,
+  status: DriverAvailabilityStatus,
+  idToken: string
+) => {
+  const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID;
+
+  if (!projectId) {
+    throw new Error('Firebase project ID is not configured');
+  }
+
+  const now = Timestamp.now();
+  const logId = `${uid}_${now.toMillis()}_${status}`;
+  const fields = {
+    uid: toFirestoreRestValue(uid),
+    status: toFirestoreRestValue(status),
+    changedAt: toFirestoreRestValue(now),
+    createdAt: toFirestoreRestValue(now),
+  };
+
+  const response = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/driverAvailabilityLogs?documentId=${encodeURIComponent(logId)}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fields }),
+    }
+  );
+
+  const responseBody = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    console.error('Firestore REST availability log create failed:', responseBody);
+    throw new Error(responseBody?.error?.message || 'Failed to create driver availability log');
+  }
+};
+
+const setDriverAvailabilityStateViaRest = async (
+  uid: string,
+  status: DriverAvailabilityStatus,
+  idToken: string,
+  changedAt: Timestamp
+) => {
+  const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID;
+
+  if (!projectId) {
+    throw new Error('Firebase project ID is not configured');
+  }
+
+  const fields = {
+    uid: toFirestoreRestValue(uid),
+    status: toFirestoreRestValue(status),
+    changedAt: toFirestoreRestValue(changedAt),
+    updatedAt: toFirestoreRestValue(Timestamp.now()),
+  };
+
+  const response = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/driverAvailabilityStates/${encodeURIComponent(uid)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fields }),
+    }
+  );
+
+  const responseBody = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    console.error('Firestore REST availability state update failed:', responseBody);
+    throw new Error(responseBody?.error?.message || 'Failed to update driver availability state');
+  }
+};
+
+const getDriverAvailabilityStateViaRest = async (
+  uid: string,
+  idToken: string
+): Promise<DriverAvailabilityState | null> => {
+  const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID;
+
+  if (!projectId) {
+    throw new Error('Firebase project ID is not configured');
+  }
+
+  const response = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/driverAvailabilityStates/${encodeURIComponent(uid)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+    }
+  );
+
+  if (response.status === 404 || response.status === 403) {
+    if (response.status === 403) {
+      console.warn('Driver availability state read is blocked by Firestore rules.');
+    }
+    return null;
+  }
+
+  const responseBody = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    console.error('Firestore REST availability state read failed:', responseBody);
+    throw new Error(responseBody?.error?.message || 'Failed to fetch driver availability');
+  }
+
+  const data = fromFirestoreRestFields(responseBody.fields || {});
+  return data.status === 'online' || data.status === 'offline'
+    ? { status: data.status, changedAt: data.changedAt || null }
+    : null;
+};
+
 const resizeWebImageToDataUrl = async (
   imageUri: string,
   size = 256,
@@ -635,6 +890,93 @@ const getDriverByPhoneViaRest = async (phoneNumber: string, idToken: string) => 
   return fromFirestoreRestFields(result.document.fields || {}) as OnboardingData;
 };
 
+const uploadOnboardingAssets = async (
+  uid: string,
+  onboardingData: Omit<OnboardingData, 'createdAt' | 'updatedAt' | 'submittedAt'>,
+  idToken?: string
+): Promise<Omit<OnboardingData, 'createdAt' | 'updatedAt' | 'submittedAt'>> => {
+  const vehiclePhotoUris = onboardingData.vehiclePhotoUris || [];
+
+  if (idToken) {
+    const assets: OnboardingUploadAsset[] = [
+      { type: 'photoUri', uri: onboardingData.photoUri },
+      { type: 'drivingLicenseUri', uri: onboardingData.drivingLicenseUri },
+      { type: 'identityProofUri', uri: onboardingData.identityProofUri },
+      { type: 'rcBookUri', uri: onboardingData.rcBookUri },
+      { type: 'insuranceUri', uri: onboardingData.insuranceUri },
+      ...vehiclePhotoUris.map((uri, index) => ({
+        type: 'vehiclePhotoUris',
+        uri,
+        index,
+      })),
+    ].filter((asset) => asset.uri && !isRemoteUrl(asset.uri));
+
+    if (assets.length > 0) {
+      const uploadedAssets = await uploadOnboardingAssetsViaBackend(uid, assets, idToken);
+      const nextData = {
+        ...onboardingData,
+        vehiclePhotoUris: [...vehiclePhotoUris],
+      };
+
+      uploadedAssets.forEach((asset) => {
+        if (!asset.url) {
+          return;
+        }
+
+        if (asset.type === 'vehiclePhotoUris' && typeof asset.index === 'number') {
+          nextData.vehiclePhotoUris[asset.index] = asset.url;
+          return;
+        }
+
+        if (asset.type in nextData) {
+          (nextData as Record<string, any>)[asset.type] = asset.url;
+        }
+      });
+
+      return {
+        ...nextData,
+        profilePhotoUrl: nextData.profilePhotoUrl || nextData.photoUri,
+      };
+    }
+  }
+
+  const [
+    photoUri,
+    drivingLicenseUri,
+    identityProofUri,
+    rcBookUri,
+    insuranceUri,
+    uploadedVehiclePhotoUris,
+  ] = await Promise.all([
+    uploadDriverStorageAsset(uid, onboardingData.photoUri, 'onboarding', 'driver-photo'),
+    uploadDriverStorageAsset(uid, onboardingData.drivingLicenseUri, 'onboarding', 'driving-license'),
+    uploadDriverStorageAsset(uid, onboardingData.identityProofUri, 'onboarding', 'identity-proof'),
+    uploadDriverStorageAsset(uid, onboardingData.rcBookUri, 'onboarding', 'rc-book'),
+    uploadDriverStorageAsset(uid, onboardingData.insuranceUri, 'onboarding', 'insurance'),
+    Promise.all(
+      vehiclePhotoUris.map((uri, index) =>
+        uploadDriverStorageAsset(
+          uid,
+          uri,
+          'onboarding/vehicle-photos',
+          `vehicle-photo-${index + 1}`
+        )
+      )
+    ),
+  ]);
+
+  return {
+    ...onboardingData,
+    photoUri,
+    profilePhotoUrl: onboardingData.profilePhotoUrl || photoUri,
+    drivingLicenseUri,
+    identityProofUri,
+    rcBookUri,
+    insuranceUri,
+    vehiclePhotoUris: uploadedVehiclePhotoUris,
+  };
+};
+
 /**
  * Store complete onboarding data to Firestore
  * Uses Firebase UID as document ID for security and proper auth rules
@@ -656,8 +998,10 @@ export const storeOnboardingData = async (
 
     const now = Timestamp.now();
 
+    const uploadedOnboardingData = await uploadOnboardingAssets(uid, onboardingData, idToken);
+
     const dataToStore: OnboardingData = {
-      ...onboardingData,
+      ...uploadedOnboardingData,
       phoneNumber,
       createdAt: now,
       updatedAt: now,
@@ -810,13 +1154,90 @@ export const getDriverProfile = async (uidOrPhone: string, idToken?: string | nu
   }
 };
 
+export const updateDriverAvailability = async (
+  uid: string,
+  status: DriverAvailabilityStatus,
+  idToken?: string | null
+) => {
+  try {
+    if (!uid) {
+      throw new Error('Firebase UID is required');
+    }
+
+    const now = Timestamp.now();
+    const logId = `${uid}_${now.toMillis()}_${status}`;
+    const availabilityLog = {
+      uid,
+      status,
+      changedAt: now,
+      createdAt: now,
+    };
+
+    if (auth.currentUser?.uid === uid) {
+      await setDoc(
+        doc(db, 'driverAvailabilityLogs', logId),
+        availabilityLog
+      );
+      await setDoc(doc(db, 'driverAvailabilityStates', uid), {
+        uid,
+        status,
+        changedAt: now,
+        updatedAt: now,
+      });
+      return { success: true };
+    }
+
+    if (idToken) {
+      await createDriverAvailabilityLogViaRest(uid, status, idToken);
+      await setDriverAvailabilityStateViaRest(uid, status, idToken, now);
+      return { success: true };
+    }
+
+    throw new Error('Firebase user is not signed in and no ID token was provided');
+  } catch (error: any) {
+    console.error('Error updating driver availability:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to update driver availability',
+    };
+  }
+};
+
+export const getLatestDriverAvailability = async (
+  uid: string,
+  idToken?: string | null
+): Promise<DriverAvailabilityState | null> => {
+  try {
+    if (!uid) {
+      return null;
+    }
+
+    if (auth.currentUser?.uid === uid) {
+      const docSnap = await getDoc(doc(db, 'driverAvailabilityStates', uid));
+      const latest = docSnap.exists() ? docSnap.data() : null;
+      return latest?.status === 'online' || latest?.status === 'offline'
+        ? { status: latest.status, changedAt: latest.changedAt || null }
+        : null;
+    }
+
+    if (idToken) {
+      return getDriverAvailabilityStateViaRest(uid, idToken);
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error fetching latest driver availability:', error);
+    return null;
+  }
+};
+
 /**
  * Update verification status (Admin function)
  * Can update using either UID or phone number
  */
 export const updateVerificationStatus = async (
   uidOrPhone: string,
-  status: 'pending' | 'verified' | 'rejected',
+  status: 'pending' | 'verified' | 'rejected' | 'suspended',
   rejectionReason?: string,
   rejectedDocuments?: string[]
 ): Promise<{ success: boolean; error?: string }> => {

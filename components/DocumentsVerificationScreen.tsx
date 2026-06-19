@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
   Image,
   Modal,
   Pressable,
@@ -10,10 +9,14 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Ionicons, MaterialIcons, Octicons } from '@expo/vector-icons';
+import { MaterialIcons, Octicons } from '@expo/vector-icons';
 import { getVerificationStatus } from '@/lib/firestoreOnboardingService';
+import { useAppAlert } from './AppAlertModal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const verifiedImage = require('@/assets/images/verified.png');
+const backImage = require('@/assets/images/profile/back.png');
+const supportCallImage = require('@/assets/images/profile/support-call.png');
 
 interface DocumentsVerificationScreenProps {
   phoneNumber?: string;
@@ -22,10 +25,11 @@ interface DocumentsVerificationScreenProps {
   onBack?: () => void;
   onVerificationComplete?: () => void;
   onRetryUpload?: () => void;
+  onSuspended?: () => void;
 }
 
 interface VerificationData {
-  status: 'pending' | 'verified' | 'rejected';
+  status: 'pending' | 'verified' | 'rejected' | 'suspended';
   rejectionReason?: string;
   rejectedDocuments?: string[];
   reviewedAt?: string;
@@ -38,12 +42,15 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
   onBack,
   onVerificationComplete,
   onRetryUpload,
+  onSuspended,
 }) => {
+  const insets = useSafeAreaInsets();
   const [verificationData, setVerificationData] = useState<VerificationData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showSupportModal, setShowSupportModal] = useState(false);
+  const { alertModal, showAlert } = useAppAlert();
 
-  const fetchVerificationStatus = async () => {
+  const fetchVerificationStatus = useCallback(async () => {
     try {
       const identifier = uid || phoneNumber;
 
@@ -63,6 +70,12 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
         return;
       }
 
+      if (data.status === 'suspended') {
+        onSuspended?.();
+        setIsLoading(false);
+        return;
+      }
+
       setVerificationData({
         status: data.status,
         rejectionReason: data.rejectionReason,
@@ -75,13 +88,13 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
       console.error('Error fetching verification status:', error);
       setIsLoading(false);
     }
-  };
+  }, [idToken, onSuspended, phoneNumber, uid]);
 
   useEffect(() => {
     fetchVerificationStatus();
     const interval = setInterval(fetchVerificationStatus, 5000);
     return () => clearInterval(interval);
-  }, [uid, phoneNumber, idToken]);
+  }, [fetchVerificationStatus]);
 
   const status = verificationData?.status || 'pending';
   const isVerified = status === 'verified';
@@ -98,6 +111,8 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={styles.statusSpacer} />
+
       <View style={styles.topNav}>
         <Pressable
           style={styles.navIconButton}
@@ -105,7 +120,7 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
           disabled={!onBack}
           hitSlop={8}
         >
-          <Ionicons name="arrow-back" size={24} color="#9d9d9d" />
+          <Image source={backImage} style={styles.backIcon} resizeMode="contain" />
         </Pressable>
         <Text style={styles.navTitle}>Onboarding</Text>
         <Pressable
@@ -124,7 +139,10 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
       ) : (
         <View style={styles.screenBody}>
           <ScrollView
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: 80 + insets.bottom + 24 },
+            ]}
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.reviewCard}>
@@ -150,7 +168,7 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
             <Text style={styles.infoText}>Complete all document uploads to access the app</Text>
           </ScrollView>
 
-          <View style={styles.bottomArea}>
+          <View style={[styles.bottomArea, { paddingBottom: insets.bottom + 16 }]}>
             <Pressable
               style={[
                 styles.continueButton,
@@ -163,7 +181,7 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
                 } else if (isRejected && onRetryUpload) {
                   onRetryUpload();
                 } else {
-                  Alert.alert('Info', 'Your documents are under review. Please check back soon.');
+                  showAlert('Info', 'Your documents are under review. Please check back soon.');
                 }
               }}
               disabled={!canUseButton}
@@ -177,10 +195,6 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
                 {buttonLabel}
               </Text>
             </Pressable>
-
-            <View style={styles.navigationHandle}>
-              <View style={styles.handleBar} />
-            </View>
           </View>
         </View>
       )}
@@ -192,9 +206,12 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
         onRequestClose={() => setShowSupportModal(false)}
       >
         <Pressable style={styles.modalOverlay} onPress={() => setShowSupportModal(false)}>
-          <Pressable style={styles.supportSheet} onPress={(event) => event.stopPropagation()}>
-            <View style={styles.sheetHeader}>
-              <View style={styles.sheetHandle} />
+          <Pressable
+            style={[styles.supportSheet, { paddingBottom: insets.bottom + 16 }]}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View style={styles.supportSheetHeader}>
+              <View style={styles.supportDragHandle} />
             </View>
 
             <View style={styles.supportIntro}>
@@ -207,11 +224,11 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
             <View style={styles.supportOptions}>
               <View style={styles.supportRow}>
                 <View style={styles.supportIconCircle}>
-                  <Ionicons name="call" size={22} color="#05c" />
+                  <Image source={supportCallImage} style={styles.supportIconImage} resizeMode="contain" />
                 </View>
                 <View style={styles.supportTextGroup}>
-                  <Text style={styles.supportLabel}>Call us (24x7)</Text>
-                  <Text style={styles.supportValue}>022276110864</Text>
+                  <Text style={styles.supportLabel} numberOfLines={1}>Call us (24x7)</Text>
+                  <Text style={styles.supportValue} numberOfLines={1}>022276110864</Text>
                 </View>
               </View>
 
@@ -220,14 +237,15 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
                   <MaterialIcons name="email" size={22} color="#05c" />
                 </View>
                 <View style={styles.supportTextGroup}>
-                  <Text style={styles.supportLabel}>Email us</Text>
-                  <Text style={styles.supportValue}>machrush@support.com</Text>
+                  <Text style={styles.supportLabel} numberOfLines={1}>Email us</Text>
+                  <Text style={styles.supportValue} numberOfLines={1}>machrush@support.com</Text>
                 </View>
               </View>
             </View>
           </Pressable>
         </Pressable>
       </Modal>
+      {alertModal}
     </SafeAreaView>
   );
 };
@@ -237,8 +255,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#eff2f6',
   },
+  statusSpacer: {
+    height: 52,
+    backgroundColor: '#ffffff',
+  },
   topNav: {
-    height: 64,
+    minHeight: 64,
     backgroundColor: '#ffffff',
     flexDirection: 'row',
     alignItems: 'center',
@@ -252,22 +274,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  backIcon: {
+    width: 24,
+    height: 24,
+  },
   navTitle: {
     flex: 1,
+    minWidth: 0,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 20,
     fontWeight: '500',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
     lineHeight: 32,
   },
   screenBody: {
     flex: 1,
   },
   scrollContent: {
+    width: '100%',
+    maxWidth: 412,
+    alignSelf: 'center',
     flexGrow: 1,
     paddingHorizontal: 16,
     paddingTop: 24,
-    paddingBottom: 24,
+    paddingBottom: 120,
   },
   loadingContainer: {
     flex: 1,
@@ -276,10 +306,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   loadingText: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
+    lineHeight: 24,
   },
   reviewCard: {
     width: '100%',
@@ -287,7 +318,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 24,
-    gap: 10,
+    gap: 24,
     alignItems: 'center',
     overflow: 'hidden',
   },
@@ -296,23 +327,24 @@ const styles = StyleSheet.create({
     height: 80,
   },
   mainTitle: {
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 40,
     fontWeight: '500',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
     lineHeight: 48,
     textAlign: 'center',
   },
   mainDescription: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 18,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     textAlign: 'center',
     letterSpacing: -0.5,
+    lineHeight: 27,
   },
   actionRequiredBox: {
-    height: 140,
+    minHeight: 140,
     width: '100%',
     backgroundColor: '#ffffff',
     borderWidth: 1,
@@ -330,33 +362,41 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   actionTitle: {
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    color: '#000000',
-    fontFamily: 'Poppins',
+    lineHeight: 16,
     letterSpacing: -0.5,
   },
   actionMessage: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 24,
   },
   infoText: {
     marginTop: 40,
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 14,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 21,
   },
   bottomArea: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
   },
   continueButton: {
     width: '100%',
-    height: 56,
+    minHeight: 56,
     backgroundColor: '#a4a4a4',
     borderRadius: 8,
     paddingHorizontal: 24,
@@ -372,25 +412,16 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   continueButtonText: {
+    flexShrink: 1,
+    color: '#606060',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    color: '#606060',
-    fontFamily: 'Poppins',
+    lineHeight: 16,
     letterSpacing: -0.5,
   },
   continueButtonTextActive: {
     color: '#ffffff',
-  },
-  navigationHandle: {
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  handleBar: {
-    width: 108,
-    height: 4,
-    backgroundColor: '#1d1b20',
-    borderRadius: 12,
   },
   modalOverlay: {
     flex: 1,
@@ -399,21 +430,21 @@ const styles = StyleSheet.create({
   },
   supportSheet: {
     width: '100%',
+    alignSelf: 'center',
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 40,
+    paddingBottom: 16,
     gap: 24,
     overflow: 'hidden',
   },
-  sheetHeader: {
+  supportSheetHeader: {
     width: '100%',
-    padding: 16,
     alignItems: 'center',
+    padding: 16,
   },
-  sheetHandle: {
+  supportDragHandle: {
     width: 32,
     height: 4,
     borderRadius: 100,
@@ -426,19 +457,20 @@ const styles = StyleSheet.create({
   },
   supportTitle: {
     width: '100%',
+    color: '#29292b',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 24,
     fontWeight: '500',
-    color: '#29292b',
-    fontFamily: 'Poppins',
     textAlign: 'center',
+    lineHeight: 24,
     letterSpacing: -1,
   },
   supportSubtitle: {
     width: '100%',
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 14,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 21,
     textAlign: 'center',
   },
@@ -461,27 +493,37 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 40,
-    backgroundColor: 'rgba(27, 124, 255, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  supportIconImage: {
+    width: 52,
+    height: 52,
+  },
   supportTextGroup: {
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
     justifyContent: 'center',
     gap: 4,
   },
   supportLabel: {
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 24,
   },
   supportValue: {
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
+    lineHeight: 16,
     letterSpacing: -0.5,
   },
 });

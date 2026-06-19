@@ -5,16 +5,16 @@ import {
   StyleSheet,
   TextInput,
   Pressable,
-  Dimensions,
   Animated,
-  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
+import { useAppAlert } from './AppAlertModal';
+import { fs, hit, rs, vs } from '@/lib/responsive';
 
 import { verifyOTP, resendOTP } from '@/lib/firebaseAuthService'; // Real Firebase
 
-const { width } = Dimensions.get('window');
+const RESEND_OTP_SECONDS = 40;
 
 interface OTPVerificationProps {
   mobileNumber: string;
@@ -32,9 +32,10 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
   const [otp, setOtp] = useState(['', '', '', '', '', '']); // 6-digit OTP
   const [isLoading, setIsLoading] = useState(false);
   const [resendCount, setResendCount] = useState(0);
-  const [canResend, setCanResend] = useState(true);
-  const [resendTimer, setResendTimer] = useState(0);
+  const [canResend, setCanResend] = useState(false);
+  const [resendTimer, setResendTimer] = useState(RESEND_OTP_SECONDS);
   const insets = useSafeAreaInsets();
+  const { alertModal, showAlert } = useAppAlert();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const inputRefs = useRef<(TextInput | null)[]>([null, null, null, null, null, null]);
 
@@ -46,12 +47,12 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
       duration: 400,
       useNativeDriver: true,
     }).start();
-  }, []);
+  }, [fadeAnim]);
 
   // Resend timer with countdown
   useEffect(() => {
     if (!canResend) {
-      setResendTimer(30);
+      setResendTimer(RESEND_OTP_SECONDS);
       const interval = setInterval(() => {
         setResendTimer((prev) => {
           if (prev <= 1) {
@@ -64,6 +65,8 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
       return () => clearInterval(interval);
     }
   }, [canResend]);
+
+  const formattedResendTimer = `00:${String(resendTimer).padStart(2, '0')}`;
 
   const handleOtpInput = (index: number, value: string) => {
     // Only allow numbers
@@ -90,7 +93,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
 
   const handleVerifyAndContinue = async () => {
     if (!isOtpComplete) {
-      Alert.alert('Invalid OTP', 'Please enter the complete 6-digit verification code');
+      showAlert('Invalid OTP', 'Please enter the complete 6-digit verification code');
       return;
     }
 
@@ -116,7 +119,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
       }
     } catch (error: any) {
       console.error('❌ Error verifying OTP:', error);
-      Alert.alert(
+      showAlert(
         'Verification Failed',
         error.message || 'Invalid OTP. Please check and try again.'
       );
@@ -149,12 +152,13 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
       }
     } catch (error: any) {
       console.error('❌ Error resending OTP:', error);
-      Alert.alert(
+      showAlert(
         'Resend Failed',
         error.message || 'Failed to resend OTP. Please try again.'
       );
       // Allow user to try again
       setCanResend(true);
+      setResendTimer(0);
     }
   };
 
@@ -172,64 +176,70 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
 
       {/* Main Content */}
       <View style={styles.contentContainer}>
-        {/* Title and Description */}
-        <View style={styles.headerContainer}>
-          <Text style={styles.title}>Verify Your
-            {'\n'}Number</Text>
-          <View style={styles.descriptionContainer}>
-            <Text style={styles.description}>6-digit code sent to </Text>
-            <Pressable onPress={onChangeNumber}>
-              <Text style={styles.phoneNumberLink}>{mobileNumber}</Text>
-            </Pressable>
+        <View style={styles.otpContainer}>
+          {/* Title and Description */}
+          <View style={styles.headerContainer}>
+            <Text style={styles.title}>Verify Your Number</Text>
+            <View style={styles.descriptionContainer}>
+              <Text style={styles.description}>6-digit code sent to </Text>
+              <Pressable onPress={onChangeNumber}>
+                <Text style={styles.phoneNumberLink}>{mobileNumber}</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* OTP Input Fields */}
+          <View style={styles.otpInputContainer}>
+            {otp.map((digit, index) => (
+              <TextInput
+                key={index}
+                ref={(ref) => {
+                  inputRefs.current[index] = ref;
+                }}
+                style={[
+                  styles.otpInput,
+                  digit && styles.otpInputFilled,
+                  
+                ]}
+                value={digit}
+                onChangeText={(value) => handleOtpInput(index, value)}
+                onKeyPress={({ nativeEvent }) => {
+                  if (nativeEvent.key === 'Backspace') {
+                    handleOtpBackspace(index, digit);
+                  }
+                }}
+                keyboardType="number-pad"
+                maxLength={1}
+                editable={!isLoading}
+                
+                placeholderTextColor={Colors.neutral700}
+                 textAlign = 'center'
+                 textAlignVertical = 'center' // Android
+               
+
+              />
+            ))}
           </View>
         </View>
 
-        {/* OTP Input Fields */}
-        <View style={styles.otpInputContainer}>
-          {otp.map((digit, index) => (
-            <TextInput
-              key={index}
-              ref={(ref) => {
-                inputRefs.current[index] = ref;
-              }}
-              style={[
-                styles.otpInput,
-                digit && styles.otpInputFilled,
-              ]}
-              value={digit}
-              onChangeText={(value) => handleOtpInput(index, value)}
-              onKeyPress={({ nativeEvent }) => {
-                if (nativeEvent.key === 'Backspace') {
-                  handleOtpBackspace(index, digit);
-                }
-              }}
-              keyboardType="number-pad"
-              maxLength={1}
-              editable={!isLoading}
-              
-              placeholderTextColor={Colors.neutral700}
-              textAlign="center"
-            />
-          ))}
-        </View>
+        <View style={styles.actionContainer}>
+          {/* Verify & Continue Button */}
+          <Pressable
+            style={[
+              styles.verifyButton,
+              (!isOtpComplete || isLoading) && styles.verifyButtonDisabled,
+            ]}
+            onPress={handleVerifyAndContinue}
+            disabled={!isOtpComplete || isLoading}
+          >
+            <Text style={styles.verifyButtonText}>
+              {isLoading ? 'Verifying...' : 'Verify & Continue'}
+            </Text>
+          </Pressable>
 
-        {/* Verify & Continue Button */}
-        <Pressable
-          style={[
-            styles.verifyButton,
-            (!isOtpComplete || isLoading) && styles.verifyButtonDisabled,
-          ]}
-          onPress={handleVerifyAndContinue}
-          disabled={!isOtpComplete || isLoading}
-        >
-          <Text style={styles.verifyButtonText}>
-            {isLoading ? 'Verifying...' : 'Verify & Continue'}
-          </Text>
-        </Pressable>
-
-        {/* Footer Actions */}
-        <View style={styles.footerContainer}>
-          <View style={styles.resendContainer}>
+          {/* Footer Actions */}
+          <View style={styles.footerContainer}>
+            <Text style={styles.timerText}>{canResend ? '00:00' : formattedResendTimer}</Text>
             <Pressable
               onPress={handleResendOTP}
               disabled={!canResend || isLoading}
@@ -242,17 +252,14 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
                 Resend OTP
               </Text>
             </Pressable>
-            {resendTimer > 0 && (
-              <Text style={styles.timerText}>{resendTimer}s</Text>
-            )}
           </View>
         </View>
       </View>
 
-      {/* Navigation Handle (Bottom) */}
-      <View style={styles.navigationHandle}>
-        <View style={styles.handleBar} />
+      <View style={styles.navigation}>
+
       </View>
+      {alertModal}
     </Animated.View>
   );
 };
@@ -278,7 +285,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: Colors.neutral900,
-    fontFamily: 'Roboto',
+    fontFamily: 'Poppins',
   },
   statusIcons: {
     flexDirection: 'row',
@@ -292,50 +299,63 @@ const styles = StyleSheet.create({
   // Content Container
   contentContainer: {
     flex: 1,
-    paddingHorizontal: Spacing.sm,
-    paddingTop: Spacing.lg,
-    gap: Spacing.lg,
+    width: '100%',
+    maxWidth: 412,
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 40,
+    gap: 40,
   },
 
   // Header Container
+  otpContainer: {
+    width: '100%',
+    gap: 16,
+  },
   headerContainer: {
-    gap: Spacing.md,
+    gap: 12,
   },
   title: {
-    fontSize: 40,
-    fontWeight: '600',
-    color: Colors.neutral900,
-    fontFamily: 'Poppins',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: fs(40),
+    fontWeight: '500',
     lineHeight: 48,
     letterSpacing: 0,
   },
   descriptionContainer: {
+    width : '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
+    minWidth: 0,
+    
   },
   description: {
-    fontSize: 18,
+    flexShrink: 1,
+    color: '#606060',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: fs(18),
     fontWeight: '500',
-    color: Colors.neutral700,
-    fontFamily: 'Poppins',
-    lineHeight: 18,
     letterSpacing: 0,
   },
   phoneNumberLink: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#316aff', // Blue link color
-    fontFamily: 'Poppins',
+    flexShrink: 1,
+    color: '#0055cc',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: fs(18),
+    fontWeight: '500',
+    lineHeight: 18,
     textDecorationLine: 'underline',
+    letterSpacing: 0,
   },
 
   // OTP Input Container
   otpInputContainer: {
     flexDirection: 'row',
-    gap: 8, // mini-2 from design
-    justifyContent: 'flex-start',
+    gap: 2, // mini-2 from design
+    justifyContent: 'space-between',
     alignItems: 'center',
+    
   },
 
   // OTP Input Fields
@@ -344,86 +364,96 @@ const styles = StyleSheet.create({
     height: 60,
     backgroundColor: 'white',
     borderRadius: Radius.md,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 24,
-    fontWeight: '600',
-    color: Colors.neutral900,
+    fontWeight: '500',
     textAlign: 'center',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    textAlignVertical: 'center',
+    paddingTop: 2,
+    paddingBottom: 0,
+    paddingHorizontal: 0,
+    borderWidth: 0,
+    // flexDirection : 'column',
+    // justifyContent : 'center',
+    // alignItems : 'center'
   },
   otpInputFilled: {
     borderColor: Colors.primary,
   },
 
   // Verify & Continue Button
+  actionContainer: {
+    width: '100%',
+    minHeight: 148,
+    gap: 24,
+  },
   verifyButton: {
-    height: 56,
+    minHeight: 56,
     backgroundColor: Colors.primary,
     borderRadius: Radius.md,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: Spacing.lg,
   },
   verifyButtonDisabled: {
     backgroundColor: '#A4A4A4',
   },
   verifyButtonText: {
+    flexShrink: 1,
+    color: '#ffffff',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '600',
-    color: Colors.neutral100,
-    fontFamily: 'Poppins',
+    fontWeight: '500',
+    lineHeight: 20,
     letterSpacing: -0.5,
   },
 
   // Footer Container
   footerContainer: {
-    justifyContent: 'flex-end',
-    alignItems: 'flex-end',
     width: '100%',
-  },
-
-  // Resend Container with Timer
-  resendContainer: {
+    minHeight: 40,
+    paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    justifyContent: 'space-between',
   },
   resendButton: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
+    minHeight: 40,
+    justifyContent: 'center',
   },
 
   // Resend OTP Link
   resendOtpText: {
+    flexShrink: 1,
+    color: '#0055cc',
+    fontFamily: 'Poppins_600SemiBold',
     fontSize: 16,
     fontWeight: '600',
-    color: '#316aff', // Blue color from design
-    fontFamily: 'DM Sans',
+    lineHeight: 16,
     textAlign: 'center',
   },
   resendOtpTextDisabled: {
-    opacity: 0.5,
+    color: '#a4a4a4',
   },
 
   // Timer Text
   timerText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.neutral700,
-    fontFamily: 'DM Sans',
+    flexShrink: 1,
+    color: '#0055cc',
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 16,
+    fontWeight: '600',
+    lineHeight: 16,
   },
-
-  // Navigation Handle
-  navigationHandle: {
+  navigation: {
     height: 24,
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingBottom: Spacing.sm,
+    justifyContent: 'center',
   },
-  handleBar: {
+  homeIndicator: {
     width: 108,
     height: 4,
-    backgroundColor: '#1d1b20',
     borderRadius: 12,
+    backgroundColor: '#1d1b20',
   },
 });

@@ -106,9 +106,11 @@ export default function VehicleDetailsProfileScreen() {
       };
 
       loadDriverProfile();
+      const interval = setInterval(loadDriverProfile, 5000);
 
       return () => {
         isActive = false;
+        clearInterval(interval);
       };
     }, [])
   );
@@ -177,7 +179,7 @@ const styles = StyleSheet.create({
     height: 52,
   },
   topNav: {
-    height: 64,
+    minHeight: 64,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 4,
@@ -194,16 +196,21 @@ const styles = StyleSheet.create({
     height: 24,
   },
   navTitle: {
-    fontFamily: 'Poppins',
+    flex: 1,
+    minWidth: 0,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 20,
     fontWeight: '500',
     lineHeight: 32,
-    color: '#1c1c1c',
   },
   scroll: {
     flex: 1,
   },
   content: {
+    width: '100%',
+    maxWidth: 412,
+    alignSelf: 'center',
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 40,
@@ -213,18 +220,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    fontFamily: 'Poppins',
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 24,
     fontWeight: '500',
+    lineHeight: 24,
     letterSpacing: -1,
-    color: '#1c1c1c',
   },
   description: {
-    fontFamily: 'Poppins',
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 24,
-    color: '#606060',
   },
   fields: {
     width: '100%',
@@ -237,15 +245,15 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     width: '100%',
-    fontFamily: 'Poppins',
+    color: '#a4a4a4',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 24,
-    color: '#a4a4a4',
   },
   valueBox: {
     width: '100%',
-    height: 56,
+    minHeight: 56,
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#a4a4a4',
@@ -256,22 +264,26 @@ const styles = StyleSheet.create({
   },
   valueText: {
     width: '100%',
-    fontFamily: 'Poppins',
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#a4a4a4',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 24,
-    color: '#a4a4a4',
   },
   bodyTypeSection: {
     width: '100%',
     gap: 16,
   },
   bodyTypesRow: {
-    width: 264,
-    height: 140,
+    width: '100%',
+    maxWidth: 264,
+    minHeight: 140,
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 16,
+      marginBottom : 20
   },
   bodyTypeCard: {
     flex: 1,
@@ -280,8 +292,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bodyImageFrame: {
-    width: '100%',
-    aspectRatio: 116 / 100,
+    width: 116,
+    height: 100,
     borderRadius: 12,
     backgroundColor: '#e8e8e8',
     overflow: 'hidden',
@@ -309,11 +321,13 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   bodyTypeLabel: {
-    fontFamily: 'Poppins',
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#2c2c2c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 14,
     fontWeight: '500',
     lineHeight: 21,
-    color: '#2c2c2c',
     textAlign: 'center',
   },
 });

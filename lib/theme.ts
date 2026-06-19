@@ -29,22 +29,19 @@ export const Radius = {
 
 export const Typography = {
   title: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 24,
-    fontWeight: '500',
     letterSpacing: -1,
     lineHeight: 'normal',
   },
   subtitle: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 18,
-    fontWeight: '400',
     lineHeight: 'normal',
   },
   button: {
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    fontWeight: '500',
     letterSpacing: -0.5,
     lineHeight: 'normal',
   },

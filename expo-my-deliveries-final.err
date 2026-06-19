@@ -1,0 +1,19 @@
+none : The term 'none' is not recognized as the name of a cmdlet, function, script file, or operable program. Check 
+the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:14
++ $env:BROWSER=none; $env:EXPO_NO_TELEMETRY=1; npx expo start --web --o ...
++              ~~~~
+    + CategoryInfo          : ObjectNotFound: (none:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+Skipping dependency validation in offline mode
+Error: spawn EPERM
+Error: spawn EPERM
+    at ChildProcess.spawn (node:internal/child_process:441:11)
+    at Object.spawn (node:child_process:796:9)
+    at baseOpen (D:\macrush App\Frontend\macrush-mobile\node_modules\better-opn\node_modules\open\index.js:224:34)
+    at openBrowserAsync (D:\macrush App\Frontend\macrush-mobile\node_modules\expo\node_modules\@expo\cli\src\utils\open.ts:20:12)
+    at MetroBundlerDevServer.openPlatformAsync (D:\macrush App\Frontend\macrush-mobile\node_modules\expo\node_modules\@expo\cli\src\start\server\BundlerDevServer.ts:438:7)
+    at async Promise.allSettled (index 2)
+    at openPlatformsAsync (D:\macrush App\Frontend\macrush-mobile\node_modules\expo\node_modules\@expo\cli\src\start\server\openPlatforms.ts:10:19)
+    at startAsync (D:\macrush App\Frontend\macrush-mobile\node_modules\expo\node_modules\@expo\cli\src\start\startAsync.ts:114:3)

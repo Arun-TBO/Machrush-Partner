@@ -7,15 +7,16 @@ import {
   TextInput,
   Pressable,
   Animated,
-  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
+import { useAppAlert } from './AppAlertModal';
 import { OTPVerification } from './OTPVerification';
 import { DriverDetailsScreen } from './DriverDetailsScreen';
 import { VehicleDetailsScreen } from './VehicleDetailsScreen';
 import { BankDetailsScreen } from './BankDetailsScreen';
 import { DocumentsVerificationScreen } from './DocumentsVerificationScreen';
+import { SuspendedScreen } from './SuspendedScreen';
 import {
   storeOnboardingData,
   getVerificationStatus,
@@ -23,6 +24,8 @@ import {
 } from '@/lib/firestoreOnboardingService'; // Real Firebase Firestore
 
 import { sendOTP } from '@/lib/firebaseAuthService'; // Real Firebase Auth
+
+import { fs, hit, rs, vs } from '@/lib/responsive';
 
 interface MobileNumberVerificationProps {
   onVerify?: (mobileNumber: string) => void;
@@ -40,6 +43,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
   const [showVehicleDetails, setShowVehicleDetails] = useState(false);
   const [showBankDetails, setShowBankDetails] = useState(false);
   const [showVerification, setShowVerification] = useState(false);
+  const [showSuspended, setShowSuspended] = useState(false);
 
   // Collect data from all screens
   const [driverData, setDriverData] = useState<any>(null);
@@ -50,6 +54,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
   const [firebaseIdToken, setFirebaseIdToken] = useState<string | null>(null);
 
   const insets = useSafeAreaInsets();
+  const { alertModal, showAlert } = useAppAlert();
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // Fade in animation on mount
@@ -69,7 +74,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
 
   const handleVerifyAndContinue = async () => {
     if (!isValidMobileNumber(mobileNumber)) {
-      Alert.alert('Invalid Mobile Number', 'Please enter a valid 10-digit mobile number');
+      showAlert('Invalid Mobile Number', 'Please enter a valid 10-digit mobile number');
       return;
     }
 
@@ -94,7 +99,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
         errorMessage = error.message;
       }
       
-      Alert.alert(
+      showAlert(
         'Verification Failed',
         errorMessage,
         [
@@ -168,6 +173,17 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
         return;
       }
 
+      if (verificationStatus?.status === 'suspended') {
+        console.log('Blocked driver account detected; showing suspended screen');
+        setShowSuspended(true);
+        setShowOTP(false);
+        setShowVerification(false);
+        setShowDriverDetails(false);
+        setShowVehicleDetails(false);
+        setShowBankDetails(false);
+        return;
+      }
+
       if (verificationStatus?.status === 'pending') {
         console.log('⏳ Existing driver verification pending, showing review screen');
         setShowVerification(true);
@@ -185,7 +201,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
       setShowDriverDetails(true);
     } catch (error) {
       console.error('Error processing OTP verification:', error);
-      Alert.alert('Error', 'Failed to process verification. Please try again.');
+      showAlert('Error', 'Failed to process verification. Please try again.');
     }
   };
 
@@ -215,7 +231,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
     setIsLoading(true);
     try {
       if (!firebaseUid) {
-        Alert.alert('Error', 'Firebase UID not found. Please try again from the beginning.');
+        showAlert('Error', 'Firebase UID not found. Please try again from the beginning.');
         setIsLoading(false);
         return;
       }
@@ -263,7 +279,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
       );
 
       if (!result.success) {
-        Alert.alert('Error', result.error || 'Failed to store onboarding data');
+        showAlert('Error', result.error || 'Failed to store onboarding data');
         setIsLoading(false);
         return;
       }
@@ -275,7 +291,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
       setShowBankDetails(false);
     } catch (error) {
       console.error('❌ Error storing onboarding data:', error);
-      Alert.alert(
+      showAlert(
         'Error',
         'Failed to complete onboarding. Please try again.'
       );
@@ -300,14 +316,19 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
     setShowDriverDetails(true);
   };
 
-  return (
-    showVerification ? (
+  const content = showSuspended ? (
+      <SuspendedScreen />
+    ) : showVerification ? (
       <DocumentsVerificationScreen
         uid={firebaseUid || undefined}
         phoneNumber={`+91${mobileNumber}`}
         idToken={firebaseIdToken || undefined}
         onVerificationComplete={handleVerificationComplete}
         onRetryUpload={handleRetryUpload}
+        onSuspended={() => {
+          setShowVerification(false);
+          setShowSuspended(true);
+        }}
       />
     ) : showBankDetails ? (
       <BankDetailsScreen
@@ -370,16 +391,17 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
             </View>
 
             {/* Mobile Number Input */}
-            <TextInput
-              style={styles.mobileNumberInput}
-              placeholder="Mobile Number"
-              placeholderTextColor={Colors.neutral700}
-              keyboardType="number-pad"
-              maxLength={10}
-              value={mobileNumber}
-              onChangeText={setMobileNumber}
-              editable={!isLoading}
-            />
+            <View style={styles.mobileNumberBox}>
+              <Text style={styles.mobileNumberLabel}>Mobile Number</Text>
+              <TextInput
+                style={styles.mobileNumberInput}
+                keyboardType="number-pad"
+                maxLength={10}
+                value={mobileNumber}
+                onChangeText={setMobileNumber}
+                editable={!isLoading}
+              />
+            </View>
           </View>
 
           {/* Verify & Continue Button */}
@@ -394,12 +416,17 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
           </Pressable>
         </View>
 
-        {/* Navigation Handle (Bottom) */}
-        <View style={styles.navigationHandle}>
-          <View style={styles.handleBar} />
+        <View style={styles.navigation}>
+         
         </View>
       </Animated.View>
-    )
+    );
+
+  return (
+    <>
+      {content}
+      {alertModal}
+    </>
   );
 };
 
@@ -407,8 +434,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#eff2f6', // neutral bg-color from design
-    justifyContent: 'space-between',
     paddingBottom: 0,
+    
   },
 
   // Status Bar
@@ -425,109 +452,131 @@ const styles = StyleSheet.create({
   // Content Container
   contentContainer: {
     flex: 1,
-    paddingHorizontal: Spacing.sm,
-    paddingTop: Spacing.lg,
-    gap: Spacing.lg,
+    width: '100%',
+    maxWidth: 412,
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 40,
+    gap: 40,
   },
 
   // Header (Title & Description)
   headerContainer: {
-    gap: Spacing.md,
+    gap: 16,
   },
   title: {
-    fontSize: 40,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: fs(40),
     fontWeight: '500',
-    color: Colors.neutral900,
-    fontFamily: 'Poppins',
     lineHeight: 48,
     letterSpacing: 0,
   },
   description: {
-    fontSize: 18,
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#606060',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: fs(18),
     fontWeight: '500',
-    color: Colors.neutral700,
-    fontFamily: 'Poppins',
-    lineHeight: 24,
     letterSpacing: 0,
   },
 
   // Input Container
   inputContainer: {
     flexDirection: 'row',
-    gap: Spacing.md,
+    justifyContent : 'space-around',
+    gap: 8,
     alignItems: 'center',
+    minWidth: 0,
   },
 
   // Country Code Box
   countryCodeBox: {
-    width: 52,
-    height: 60,
+    width: rs(52),
+    height: rs(60),
     backgroundColor: 'white',
     borderRadius: Radius.md,
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 9,
   },
   countryCodeLabel: {
-    fontSize: 12,
-    fontWeight: '400',
     color: '#9d9d8a',
-    fontFamily: 'DM Sans',
+    fontFamily: 'Poppins_400Regular',
+    fontSize: fs(12),
+    fontWeight: '400',
+    lineHeight: 12,
   },
   countryCode: {
-    fontSize: 14,
+    color: '#1c1c1a',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: fs(14),
     fontWeight: '500',
-    color: Colors.neutral900,
-    fontFamily: 'DM Sans',
     lineHeight: 21,
+    letterSpacing : 0
   },
 
   // Mobile Number Input
-  mobileNumberInput: {
+  mobileNumberBox: {
     flex: 1,
-    height: 60,
+    minHeight: rs(60),
+    minWidth: 0,
     backgroundColor: 'white',
     borderRadius: Radius.md,
     paddingHorizontal: 16,
-    paddingVertical: Spacing.sm,
+    paddingTop: 8,
+    paddingBottom: 7,
+    justifyContent: 'space-between',
+  },
+  mobileNumberLabel: {
+    color: '#9d9d8a',
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 12,
+    fontWeight: '400',
+    lineHeight: 12,
+  },
+  mobileNumberInput: {
+    height: 24,
+    padding: 0,
+    margin: 0,
+    color: '#1c1c1a',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 14,
     fontWeight: '500',
-    color: Colors.neutral900,
-    fontFamily: 'DM Sans',
     lineHeight: 21,
   },
 
   // Verify & Continue Button
   verifyButton: {
-    height: 56,
+    minHeight: 56,
     backgroundColor: Colors.primary,
     borderRadius: Radius.md,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: Spacing.lg,
   },
   verifyButtonDisabled: {
     opacity: 0.7,
   },
   verifyButtonText: {
+    flexShrink: 1,
+    color: '#ffffff',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    color: Colors.neutral100,
-    fontFamily: 'Poppins',
+    lineHeight: 20,
     letterSpacing: -0.5,
   },
-
-  // Navigation Handle
-  navigationHandle: {
+  navigation: {
     height: 24,
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingBottom: Spacing.sm,
+    justifyContent: 'center',
   },
-  handleBar: {
+  homeIndicator: {
     width: 108,
     height: 4,
-    backgroundColor: '#1d1b20',
     borderRadius: 12,
+    backgroundColor: '#1d1b20',
   },
 });

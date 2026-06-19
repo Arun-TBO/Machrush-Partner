@@ -5,13 +5,15 @@ import {
   StyleSheet,
   TextInput,
   Pressable,
+  Image,
   ScrollView,
   Modal,
   FlatList,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
 
+const backImage = require('@/assets/images/profile/back.png');
+const chevrondown = require('@/assets/images/chevron-down.png');
 interface BankDetailsScreenProps {
   onContinue?: (bankData: BankDetailsData) => void;
   onBack?: () => void;
@@ -46,8 +48,6 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
   const [ifscCode, setIfscCode] = useState('');
   const [upiId, setUpiId] = useState('');
   const [showBankModal, setShowBankModal] = useState(false);
-
-  const insets = useSafeAreaInsets();
 
   const handleBankSelect = (bank: string) => {
     setBankName(bank);
@@ -85,14 +85,20 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
+      <View style={styles.statusSpacer} />
+
       {/* Top Navigation */}
       <View style={styles.topNav}>
-        <Pressable style={styles.backButton} onPress={onBack}>
-          <Text style={styles.backIcon}>←</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          style={styles.backButton}
+          onPress={onBack}
+        >
+          <Image source={backImage} style={styles.backIcon} resizeMode="contain" />
         </Pressable>
         <Text style={styles.navTitle}>Onboarding</Text>
-        <View style={{ width: 48 }} />
       </View>
 
       {/* Main Content */}
@@ -122,7 +128,7 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
             >
               {bankName || 'Select Bank'}
             </Text>
-            <Text style={styles.dropdownIcon}>▼</Text>
+             <Image source={chevrondown} style={{height : 15 , width : 15}}/>
           </Pressable>
         </View>
 
@@ -177,14 +183,15 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
           <Text style={styles.buttonText}>Continue</Text>
         </Pressable>
 
-        <View style={{ height: 40 }} />
       </ScrollView>
+
+      
 
       {/* Bank Selection Modal */}
       <Modal
         visible={showBankModal}
+        statusBarTranslucent
         transparent
-        animationType="slide"
         onRequestClose={() => setShowBankModal(false)}
       >
         <Pressable
@@ -215,11 +222,6 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
           </View>
         </Pressable>
       </Modal>
-
-      {/* Navigation Handle */}
-      <View style={styles.navigationHandle}>
-        <View style={styles.handleBar} />
-      </View>
     </View>
   );
 };
@@ -227,20 +229,21 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.neutral100,
+    backgroundColor: '#eff2f6',
+  },
+  statusSpacer: {
+    height: 52,
+    backgroundColor: '#ffffff',
   },
 
   // Top Navigation
   topNav: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    height: 64,
-    backgroundColor: Colors.neutral100,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+    minHeight: 64,
+    backgroundColor: '#ffffff',
   },
   backButton: {
     width: 48,
@@ -249,14 +252,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   backIcon: {
-    fontSize: 24,
-    color: Colors.neutral900,
+    width: 24,
+    height: 24,
   },
   navTitle: {
+    flex: 1,
+    minWidth: 0,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 20,
     fontWeight: '500',
-    color: Colors.neutral900,
-    fontFamily: 'Poppins',
+    lineHeight: 32,
   },
 
   // Scroll View
@@ -264,40 +270,43 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.lg,
-    paddingBottom: Spacing.xl,
+    width: '100%',
+    maxWidth: 412,
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 24,
+    paddingBottom: 24,
+    gap: 40,
   },
 
   // Header Section
   headerSection: {
-    marginBottom: Spacing.lg,
+    gap: 12,
   },
   title: {
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 40,
     fontWeight: '500',
-    color: Colors.neutral900,
-    fontFamily: 'Poppins',
-    marginBottom: Spacing.sm,
+    lineHeight: 48,
   },
   subtitle: {
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: Colors.neutral800,
-    fontFamily: 'Poppins',
     lineHeight: 24,
   },
 
   // Input Section
   inputSection: {
-    marginBottom: Spacing.lg,
+    gap: 16,
   },
   inputLabel: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: Colors.neutral800,
-    fontFamily: 'Poppins',
-    marginBottom: Spacing.md,
     lineHeight: 24,
   },
   textInput: {
@@ -305,14 +314,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.neutral600,
     borderRadius: Radius.sm,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: Colors.neutral900,
-    fontFamily: 'Poppins',
     lineHeight: 24,
-    height: 56,
+    minHeight: 56,
   },
 
   // Dropdown
@@ -321,19 +330,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.neutral600,
     borderRadius: Radius.sm,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.sm,
-    height: 56,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minHeight: 56,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   dropdownText: {
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    fontFamily: 'Poppins',
     lineHeight: 24,
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
   },
   dropdownIcon: {
     fontSize: 12,
@@ -342,32 +353,47 @@ const styles = StyleSheet.create({
 
   // Helper Text
   helperText: {
+    color: '#8e8e8e',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    color: Colors.neutral600,
-    fontFamily: 'Poppins',
     lineHeight: 18,
-    marginTop: Spacing.sm,
+    marginTop: 12,
   },
 
   // Continue Button
   continueButton: {
     backgroundColor: Colors.primary,
     borderRadius: Radius.md,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
+    minHeight: 56,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: Spacing.lg,
+    marginBottom : 15
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
+    flexShrink: 1,
+    color: '#ffffff',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    color: Colors.neutral100,
-    fontFamily: 'Poppins',
+    lineHeight: 16,
+    letterSpacing: -0.5,
+  },
+  navigation: {
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeIndicator: {
+    width: 108,
+    height: 4,
+    borderRadius: 12,
+    backgroundColor: '#1d1b20',
   },
 
   // Modal
@@ -377,6 +403,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     backgroundColor: Colors.neutral100,
     borderTopLeftRadius: Radius.lg,
     borderTopRightRadius: Radius.lg,
@@ -393,10 +422,10 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.neutral300,
   },
   modalTitle: {
+    fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
     color: Colors.neutral900,
-    fontFamily: 'Poppins',
   },
   closeIcon: {
     fontSize: 24,
@@ -409,24 +438,10 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.neutral200,
   },
   modalOptionText: {
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
     color: Colors.neutral900,
-    fontFamily: 'Poppins',
-  },
-
-  // Navigation Handle
-  navigationHandle: {
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: Spacing.sm,
-  },
-  handleBar: {
-    width: 108,
-    height: 4,
-    backgroundColor: Colors.neutral900,
-    borderRadius: 12,
   },
 });
 

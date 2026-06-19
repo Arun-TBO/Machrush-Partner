@@ -11,8 +11,11 @@ import {
   SafeAreaView,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Spacing, Radius } from '@/lib/theme';
+import { Colors } from '@/lib/theme';
+
+const backImage = require('@/assets/images/profile/back.png');
+const uploadIcon = require('@/assets/images/uploadIcon.png');
+import { fs, hit, rs, vs } from '@/lib/responsive';
 
 interface DriverDetailsScreenProps {
   onContinue?: (data: DriverDetailsData) => void;
@@ -35,7 +38,6 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
   const [drivingLicenseUri, setDrivingLicenseUri] = useState<string | undefined>();
   const [identityProofUri, setIdentityProofUri] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(false);
-  const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // Fade in animation on mount
@@ -64,7 +66,7 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
+        allowsEditing: false,
         aspect: [1, 1],
         quality: 0.8,
       });
@@ -124,11 +126,18 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={styles.statusSpacer} />
+
       {/* Header */}
 
       <View style={styles.header}>
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backButtonText}>←</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          onPress={onBack}
+          style={styles.backButton}
+        >
+          <Image source={backImage} style={styles.backIcon} resizeMode="contain" />
         </Pressable>
         <Text style={styles.headerTitle}>Onboarding</Text>
       </View>
@@ -215,9 +224,6 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
           </View>
         </ScrollView>
       </Animated.View>
-
-      {/* Navigation Handle */}
-   
     </SafeAreaView>
   );
 };
@@ -249,8 +255,8 @@ const DocumentUploadItem: React.FC<DocumentUploadItemProps> = ({
         <Text style={styles.documentDescription}>{description}</Text>
         {hasError && (
           <View style={styles.errorContainer}>
-            <Text style={styles.retryIcon}>↻</Text>
-            <Text style={styles.errorText}>Upload again</Text>
+             <Image source={uploadIcon} style={{height : 20 , width  : 20}}/>
+            <Text style={styles.errorText}>Upload</Text>
           </View>
         )}
       </View>
@@ -287,41 +293,38 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#eff2f6',
   },
+  statusSpacer: {
+    height: 52,
+    backgroundColor: '#ffffff',
+  },
 
-  
-  // Header
   header: {
-    height: 100,
-    paddingHorizontal: 24,
+    minHeight: 64,
+    paddingHorizontal: 4,
     paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    gap: 12,
+    backgroundColor: '#ffffff',
   },
   backButton: {
-    width: 38,
-    height: 38,
+    width: 48,
+    height: 48,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  backButtonText: {
-    fontSize: 24,
-    color: '#1c1c1c',
-    fontWeight: '400',
+  backIcon: {
+    width: 24,
+    height: 24,
   },
   headerTitle: {
-    fontSize: 30,
-    fontWeight: '600',
+    flex: 1,
+    minWidth: 0,
     color: '#1c1c1c',
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 20,
+    fontWeight: '500',
     lineHeight: 32,
-    textAlign: 'center',
-    flex: -1,
-    alignSelf: 'center',
   },
   // Content Wrapper
   contentWrapper: {
@@ -334,9 +337,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#eff2f6',
   },
   contentContainer: {
+    width: '100%',
+    maxWidth: 412,
+    alignSelf: 'center',
     paddingHorizontal: 16,
     paddingTop: 24,
-    paddingBottom: 8,
+    paddingBottom: 24,
     gap: 40,
   },
 
@@ -345,17 +351,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   title: {
-    fontSize: 40,
-    fontWeight: '500',
     color: '#1c1c1c',
-    fontFamily: 'Poppins',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: fs(40),
+    fontWeight: '500',
     lineHeight: 48,
   },
   subtitle: {
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
     lineHeight: 24,
   },
 
@@ -369,10 +375,10 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   fieldLabel: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 24,
   },
   inputWrapper: {
@@ -384,11 +390,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   nameInput: {
-    height: 56,
+    minHeight: 56,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
     lineHeight: 24,
   },
 
@@ -397,10 +403,10 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   documentsLabel: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 16,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 24,
   },
 
@@ -412,25 +418,29 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#d2d2d2',
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
   documentInfo: {
     gap: 4,
     flex: 1,
+    minWidth: 0,
   },
   documentTitle: {
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#1c1c1c',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
-    color: '#1c1c1c',
-    fontFamily: 'Poppins',
-    lineHeight: 18,
+  
   },
   documentDescription: {
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
-    lineHeight: 18,
   },
   errorContainer: {
     flexDirection: 'row',
@@ -439,31 +449,30 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   retryIcon: {
+    color: '#0055cc',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    color: '#d00416',
-    fontFamily: 'Poppins',
   },
   errorText: {
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#0055cc',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    color: '#d00416',
-    fontFamily: 'Poppins',
     lineHeight: 18,
   },
 
   // Document Upload Box
   documentUploadBox: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
-    overflow: 'hidden',
+    
   },
   uploadButton: {
     width: 64,
     height: 64,
     backgroundColor: 'white',
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 0.5,
     borderColor: '#a4a4a4',
     borderStyle: 'dashed',
@@ -471,35 +480,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   uploadButtonText: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    color: '#606060',
-    fontFamily: 'Poppins',
     lineHeight: 18,
   },
   uploadedImageContainer: {
     width: 64,
     height: 64,
-    position: 'relative',
-    borderRadius: 8,
-    overflow: 'hidden',
+   position: 'relative',
+  alignSelf: 'flex-start',
+  overflow: 'visible',
+    borderRadius: 12,
+
   },
   uploadedImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 8,
+    borderRadius: 12,
   },
   removeButton: {
     position: 'absolute',
-    top: -7,
-    right: -7,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    top: -1,
+    right: -5,
+    width: 25,
+    height: 25,
+    borderRadius: 50,
     backgroundColor: '#d00416',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
+      elevation: 5, // Android
   },
   removeButtonIcon: {
     fontSize: 12,
@@ -510,39 +522,24 @@ const styles = StyleSheet.create({
 
   // Continue Button
   continueButton: {
-    height: 56,
+    minHeight: 56,
     backgroundColor: '#05c',
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 24,
+    marginBottom : 15
   },
   continueButtonDisabled: {
     opacity: 0.5,
   },
   continueButtonText: {
+    flexShrink: 1,
+    color: 'white',
+    fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    color: 'white',
-    fontFamily: 'Poppins',
-    lineHeight: 20,
+    lineHeight: 16,
     letterSpacing: -0.5,
-  },
-
-  // Navigation Handle
-  navigationHandle: {
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: 16,
-    backgroundColor: '#eff2f6',
-  },
-  handleBar: {
-    width: 108,
-    height: 4,
-    backgroundColor: '#1d1b20',
-    borderRadius: 12,
   },
 });
 
