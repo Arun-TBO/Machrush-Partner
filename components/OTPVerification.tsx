@@ -6,15 +6,25 @@ import {
   TextInput,
   Pressable,
   Animated,
+  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Spacing, Radius } from '@/lib/theme';
+import { Colors, Radius } from '@/lib/theme';
 import { useAppAlert } from './AppAlertModal';
-import { fs, hit, rs, vs } from '@/lib/responsive';
 
 import { verifyOTP, resendOTP } from '@/lib/firebaseAuthService'; // Real Firebase
 
-const RESEND_OTP_SECONDS = 40;
+const BASE_WIDTH = 390;
+const MAX_TABLET_WIDTH = 480;
+const RESEND_OTP_SECONDS = 30;
+
+const rf = (size: number) => {
+  const { width } = Dimensions.get('window');
+  const scale = Math.min(width, MAX_TABLET_WIDTH) / BASE_WIDTH;
+  return Math.round(size * scale);
+};
+const fs = rf;
 
 interface OTPVerificationProps {
   mobileNumber: string;
@@ -29,6 +39,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
   onChangeNumber,
   onResendOTP,
 }) => {
+  const { height, width } = useWindowDimensions();
   const [otp, setOtp] = useState(['', '', '', '', '', '']); // 6-digit OTP
   const [isLoading, setIsLoading] = useState(false);
   const [resendCount, setResendCount] = useState(0);
@@ -38,6 +49,12 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
   const { alertModal, showAlert } = useAppAlert();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const inputRefs = useRef<(TextInput | null)[]>([null, null, null, null, null, null]);
+  const horizontalPadding = 32;
+  const otpGap = 8;
+  const otpInputSize = Math.floor(
+    Math.min(52, Math.max(40, (width - horizontalPadding - otpGap * (otp.length - 1)) / otp.length))
+  );
+  const isCompactHeight = height < 760;
 
   // Fade in animation on mount
   useEffect(() => {
@@ -166,22 +183,17 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
     <Animated.View
       style={[
         styles.container,
-        { opacity: fadeAnim, paddingTop: insets.top },
+        { opacity: fadeAnim },
       ]}
     >
-      {/* Status Bar */}
-      <View style={styles.statusBar}>
-      
-      </View>
-
       {/* Main Content */}
-      <View style={styles.contentContainer}>
+      <View style={[styles.contentContainer, isCompactHeight && styles.compactContent]}>
         <View style={styles.otpContainer}>
           {/* Title and Description */}
           <View style={styles.headerContainer}>
             <Text style={styles.title}>Verify Your Number</Text>
             <View style={styles.descriptionContainer}>
-              <Text style={styles.description}>6-digit code sent to </Text>
+              <Text style={styles.description}>6-digit code sent to</Text>
               <Pressable onPress={onChangeNumber}>
                 <Text style={styles.phoneNumberLink}>{mobileNumber}</Text>
               </Pressable>
@@ -198,6 +210,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
                 }}
                 style={[
                   styles.otpInput,
+                  { width: otpInputSize },
                   digit && styles.otpInputFilled,
                   
                 ]}
@@ -227,6 +240,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
           <Pressable
             style={[
               styles.verifyButton,
+              isOtpComplete && styles.verifyButtonActive,
               (!isOtpComplete || isLoading) && styles.verifyButtonDisabled,
             ]}
             onPress={handleVerifyAndContinue}
@@ -239,7 +253,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
 
           {/* Footer Actions */}
           <View style={styles.footerContainer}>
-            <Text style={styles.timerText}>{canResend ? '00:00' : formattedResendTimer}</Text>
+            <Text style={styles.timerText}>{canResend ? '' : formattedResendTimer}</Text>
             <Pressable
               onPress={handleResendOTP}
               disabled={!canResend || isLoading}
@@ -247,7 +261,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
             >
               <Text style={[
                 styles.resendOtpText,
-                (!canResend || isLoading) && styles.resendOtpTextDisabled,
+                canResend && !isLoading && styles.resendOtpTextActive,
               ]}>
                 Resend OTP
               </Text>
@@ -256,9 +270,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
         </View>
       </View>
 
-      <View style={styles.navigation}>
-
-      </View>
+     
       {alertModal}
     </Animated.View>
   );
@@ -268,43 +280,23 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#eff2f6', // neutral bg-color from design
-    justifyContent: 'space-between',
-    paddingBottom: 0,
-  },
-
-  // Status Bar
-  statusBar: {
-    height: 52,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 10,
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexDirection: 'row',
-  },
-  statusTime: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.neutral900,
-    fontFamily: 'Poppins',
-  },
-  statusIcons: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  statusIcon: {
-    fontSize: 16,
-    color: Colors.neutral900,
+   
   },
 
   // Content Container
   contentContainer: {
     flex: 1,
     width: '100%',
-    maxWidth: 412,
+    maxWidth: 430,
     alignSelf: 'center',
     paddingHorizontal: 16,
-    paddingTop: 40,
+    paddingTop: 94,
     gap: 40,
+    marginTop : 52
+  },
+  compactContent: {
+    gap: 32,
+   
   },
 
   // Header Container
@@ -313,7 +305,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   headerContainer: {
-    gap: 12,
+    gap: 10,
   },
   title: {
     color: '#1c1c1c',
@@ -327,14 +319,14 @@ const styles = StyleSheet.create({
     width : '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    minWidth: 0,
+    gap: 3,
     
   },
   description: {
     flexShrink: 1,
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(18),
+    fontSize: fs(17),
     fontWeight: '500',
     letterSpacing: 0,
   },
@@ -342,7 +334,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: '#0055cc',
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(18),
+    fontSize: fs(17),
     fontWeight: '500',
     lineHeight: 18,
     textDecorationLine: 'underline',
@@ -351,26 +343,31 @@ const styles = StyleSheet.create({
 
   // OTP Input Container
   otpInputContainer: {
+    width: '100%',
+    minHeight: 60,
     flexDirection: 'row',
-    gap: 2, // mini-2 from design
-    justifyContent: 'space-between',
+    gap: 8,
+    justifyContent: 'flex-start',
     alignItems: 'center',
     
   },
 
   // OTP Input Fields
   otpInput: {
-    width: 52,
-    height: 60,
+    flexShrink: 0,
+    maxWidth: 52,
+    minHeight: 60,
+    margin: 0,
     backgroundColor: 'white',
     borderRadius: Radius.md,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 24,
     fontWeight: '500',
+    lineHeight: 28,
     textAlign: 'center',
     textAlignVertical: 'center',
-    paddingTop: 2,
+    paddingTop: 0,
     paddingBottom: 0,
     paddingHorizontal: 0,
     borderWidth: 0,
@@ -390,13 +387,16 @@ const styles = StyleSheet.create({
   },
   verifyButton: {
     minHeight: 56,
-    backgroundColor: Colors.primary,
+    backgroundColor: '#a4a4a4',
     borderRadius: Radius.md,
     justifyContent: 'center',
     alignItems: 'center',
   },
   verifyButtonDisabled: {
     backgroundColor: '#A4A4A4',
+  },
+  verifyButtonActive: {
+    backgroundColor: Colors.primary,
   },
   verifyButtonText: {
     flexShrink: 1,
@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
   // Resend OTP Link
   resendOtpText: {
     flexShrink: 1,
-    color: '#0055cc',
+    color: '#a4a4a4',
     fontFamily: 'Poppins_600SemiBold',
     fontSize: 16,
     fontWeight: '600',
@@ -434,6 +434,9 @@ const styles = StyleSheet.create({
   },
   resendOtpTextDisabled: {
     color: '#a4a4a4',
+  },
+  resendOtpTextActive: {
+    color: '#0055cc',
   },
 
   // Timer Text
@@ -445,15 +448,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 16,
   },
-  navigation: {
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   homeIndicator: {
-    width: 108,
-    height: 4,
-    borderRadius: 12,
-    backgroundColor: '#1d1b20',
+    position: 'absolute',
+    left: '50%',
+    width: 139,
+    height: 5,
+    marginLeft: -69.5,
+    borderRadius: 100,
+    backgroundColor: '#212121',
   },
 });

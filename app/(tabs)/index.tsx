@@ -386,10 +386,12 @@ function RoutePoint({
 function JobCard({
   job,
   onAccept,
+  onReject,
   canAcceptNewJobs,
 }: {
   job: JobRequest;
   onAccept: (job: JobRequest) => void;
+  onReject: (job: JobRequest) => void;
   canAcceptNewJobs: boolean;
 }) {
   const cardContent = (
@@ -430,7 +432,7 @@ function JobCard({
 
       {!job.isResumeTrip ? (
         <View style={styles.cardActions}>
-          <Pressable style={styles.rejectButton}>
+          <Pressable style={styles.rejectButton} onPress={() => onReject(job)}>
             <Text style={styles.rejectText}>Reject</Text>
           </Pressable>
           <Pressable
@@ -462,6 +464,51 @@ function JobCard({
     <View style={styles.jobCard}>
       {cardContent}
     </View>
+  );
+}
+
+function RejectJobModal({
+  job,
+  isSubmitting,
+  onCancel,
+  onConfirm,
+}: {
+  job: JobRequest | null;
+  isSubmitting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal visible={Boolean(job)} transparent animationType="fade" onRequestClose={onCancel}>
+      <View style={styles.confirmOverlay}>
+        <View style={styles.confirmCard}>
+          <View style={styles.confirmContent}>
+            <View style={[styles.confirmIconCircle, styles.confirmIconOffline]}>
+              <Text style={styles.rejectModalIcon}>!</Text>
+            </View>
+            <View style={styles.confirmTextGroup}>
+              <Text style={styles.confirmTitle}>Reject this trip?</Text>
+              <Text style={styles.confirmDescription}>
+                This request will be removed from your job list.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.confirmActions}>
+            <Pressable style={styles.confirmNoButton} onPress={onCancel} disabled={isSubmitting}>
+              <Text style={styles.confirmNoText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.confirmYesButton, styles.confirmYesOffline, isSubmitting ? styles.confirmButtonDisabled : null]}
+              onPress={onConfirm}
+              disabled={isSubmitting}
+            >
+              <Text style={styles.confirmYesText}>{isSubmitting ? 'Rejecting...' : 'Reject'}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -544,6 +591,8 @@ export default function HomeScreen() {
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
   const [todayTotalEarnings, setTodayTotalEarnings] = useState(formatCurrency(0));
   const [hasTripInProgress, setHasTripInProgress] = useState(false);
+  const [pendingRejectedJob, setPendingRejectedJob] = useState<JobRequest | null>(null);
+  const [isRejectingJob, setIsRejectingJob] = useState(false);
   const hasLoadedJobsRef = React.useRef(false);
   const { alertModal, showAlert } = useAppAlert();
 
@@ -650,7 +699,7 @@ export default function HomeScreen() {
 
           if (driverVehicleType) {
             const openResponse = await fetch(
-              `${getApiBaseUrl()}/api/deliveries/open?vehicleType=${encodeURIComponent(driverVehicleType)}`
+              `${getApiBaseUrl()}/api/deliveries/open?vehicleType=${encodeURIComponent(driverVehicleType)}&driverId=${encodeURIComponent(uid || '')}`
             );
             const openBody = (await openResponse.json().catch(() => null)) as {
               success?: boolean;
@@ -880,6 +929,58 @@ export default function HomeScreen() {
     });
   };
 
+  const handleRejectJobPress = (job: JobRequest) => {
+    setPendingRejectedJob(job);
+  };
+
+  const handleConfirmRejectJob = async () => {
+    if (!pendingRejectedJob?.deliveryId || isRejectingJob) {
+      return;
+    }
+
+    setIsRejectingJob(true);
+
+    try {
+      const [storedUid] = await Promise.all([AsyncStorage.getItem('firebaseUid')]);
+      const uid = auth.currentUser?.uid || storedUid;
+
+      if (!uid) {
+        showAlert('Login required', 'Please login again before rejecting this trip.');
+        return;
+      }
+
+      const response = await fetch(
+        `${getApiBaseUrl()}/api/deliveries/${encodeURIComponent(pendingRejectedJob.deliveryId)}/reject`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ driverId: uid }),
+        }
+      );
+      const body = (await response.json().catch(() => null)) as {
+        success?: boolean;
+        error?: string;
+      } | null;
+
+      if (!response.ok || body?.success === false) {
+        throw new Error(body?.error || 'Unable to reject this trip');
+      }
+
+      const rejectedDeliveryId = pendingRejectedJob.deliveryId;
+      setJobRequestList((currentJobs) =>
+        currentJobs.filter((job) => job.deliveryId !== rejectedDeliveryId)
+      );
+      setPendingRejectedJob(null);
+    } catch (error) {
+      console.error('Error rejecting job:', error);
+      showAlert('Reject failed', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setIsRejectingJob(false);
+    }
+  };
+
   React.useEffect(() => {
     if (driverStatus !== 'online' || driverStatusChangedAtMs <= 0) {
       return;
@@ -941,7 +1042,7 @@ export default function HomeScreen() {
         style={styles.contentScroll}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: 85 + insets.bottom + 24 },
+         
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -962,6 +1063,7 @@ export default function HomeScreen() {
                     key={job.id}
                     job={job}
                     onAccept={handleAcceptJob}
+                    onReject={handleRejectJobPress}
                     canAcceptNewJobs
                   />
                 ))}
@@ -979,6 +1081,7 @@ export default function HomeScreen() {
                     key={job.id}
                     job={job}
                     onAccept={handleAcceptJob}
+                    onReject={handleRejectJobPress}
                     canAcceptNewJobs={driverStatus === 'online'}
                   />
                 ))
@@ -997,6 +1100,16 @@ export default function HomeScreen() {
         visible={pendingStatus !== null}
         onCancel={() => setPendingStatus(null)}
         onConfirm={handleConfirmStatus}
+      />
+      <RejectJobModal
+        job={pendingRejectedJob}
+        isSubmitting={isRejectingJob}
+        onCancel={() => {
+          if (!isRejectingJob) {
+            setPendingRejectedJob(null);
+          }
+        }}
+        onConfirm={handleConfirmRejectJob}
       />
       {alertModal}
     </SafeAreaView>
@@ -1159,7 +1272,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: rs(16),
     paddingTop: vs(24),
-    paddingBottom: 120,
+    paddingBottom: 50,
     gap: vs(24),
   },
   sectionHeader: {
@@ -1454,6 +1567,13 @@ const styles = StyleSheet.create({
     width: rs(60),
     height: rs(60),
   },
+  rejectModalIcon: {
+    color: '#ffffff',
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 36,
+    lineHeight: 44,
+    textAlign: 'center',
+  },
   confirmTextGroup: {
     width: '100%',
     gap: vs(4),
@@ -1508,6 +1628,9 @@ const styles = StyleSheet.create({
     paddingVertical: vs(12),
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  confirmButtonDisabled: {
+    opacity: 0.72,
   },
   confirmYesOnline: {
     backgroundColor: '#05c',

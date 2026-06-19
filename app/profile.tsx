@@ -473,7 +473,7 @@ export default function ProfileScreen() {
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: 85 + insets.bottom + 24 },
+        
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -563,7 +563,7 @@ export default function ProfileScreen() {
       <SupportModal visible={isSupportVisible} onClose={() => setIsSupportVisible(false)} />
       <LogoutModal
         visible={isLogoutVisible}
-        onClose={() => setIsLogoutVisible(false)}
+        onClose={() => setIsLogoutVisible(false)} 
         onLogout={handleConfirmLogout}
       />
       {alertModal}
@@ -583,7 +583,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 720,
     alignSelf: 'center',
-    paddingBottom: 120,
+    paddingBottom: 30,
   },
   header: {
     backgroundColor: '#dbe6f7',

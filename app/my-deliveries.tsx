@@ -543,7 +543,7 @@ export default function MyDeliveriesScreen() {
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: 85 + insets.bottom + 24 },
+        
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -687,7 +687,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: rs(412, 320, 430),
     alignSelf: 'center',
-    paddingBottom: 120,
+    paddingBottom: 50  ,
   },
   chartSection: {
     width: '100%',
