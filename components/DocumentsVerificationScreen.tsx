@@ -12,6 +12,7 @@ import {
 import { MaterialIcons, Octicons } from '@expo/vector-icons';
 import { getVerificationStatus } from '@/lib/firestoreOnboardingService';
 import { useAppAlert } from './AppAlertModal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const verifiedImage = require('@/assets/images/verified.png');
 const backImage = require('@/assets/images/profile/back.png');
@@ -43,6 +44,7 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
   onRetryUpload,
   onSuspended,
 }) => {
+  const insets = useSafeAreaInsets();
   const [verificationData, setVerificationData] = useState<VerificationData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showSupportModal, setShowSupportModal] = useState(false);
@@ -137,7 +139,10 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
       ) : (
         <View style={styles.screenBody}>
           <ScrollView
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: 80 + insets.bottom + 24 },
+            ]}
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.reviewCard}>
@@ -163,7 +168,7 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
             <Text style={styles.infoText}>Complete all document uploads to access the app</Text>
           </ScrollView>
 
-          <View style={styles.bottomArea}>
+          <View style={[styles.bottomArea, { paddingBottom: insets.bottom + 16 }]}>
             <Pressable
               style={[
                 styles.continueButton,
@@ -201,7 +206,10 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
         onRequestClose={() => setShowSupportModal(false)}
       >
         <Pressable style={styles.modalOverlay} onPress={() => setShowSupportModal(false)}>
-          <Pressable style={styles.supportSheet} onPress={(event) => event.stopPropagation()}>
+          <Pressable
+            style={[styles.supportSheet, { paddingBottom: insets.bottom + 16 }]}
+            onPress={(event) => event.stopPropagation()}
+          >
             <View style={styles.supportSheetHeader}>
               <View style={styles.supportDragHandle} />
             </View>
@@ -219,8 +227,8 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
                   <Image source={supportCallImage} style={styles.supportIconImage} resizeMode="contain" />
                 </View>
                 <View style={styles.supportTextGroup}>
-                  <Text style={styles.supportLabel}>Call us (24x7)</Text>
-                  <Text style={styles.supportValue}>022276110864</Text>
+                  <Text style={styles.supportLabel} numberOfLines={1}>Call us (24x7)</Text>
+                  <Text style={styles.supportValue} numberOfLines={1}>022276110864</Text>
                 </View>
               </View>
 
@@ -229,8 +237,8 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
                   <MaterialIcons name="email" size={22} color="#05c" />
                 </View>
                 <View style={styles.supportTextGroup}>
-                  <Text style={styles.supportLabel}>Email us</Text>
-                  <Text style={styles.supportValue}>machrush@support.com</Text>
+                  <Text style={styles.supportLabel} numberOfLines={1}>Email us</Text>
+                  <Text style={styles.supportValue} numberOfLines={1}>machrush@support.com</Text>
                 </View>
               </View>
             </View>
@@ -252,7 +260,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   topNav: {
-    height: 64,
+    minHeight: 64,
     backgroundColor: '#ffffff',
     flexDirection: 'row',
     alignItems: 'center',
@@ -272,6 +280,7 @@ const styles = StyleSheet.create({
   },
   navTitle: {
     flex: 1,
+    minWidth: 0,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 20,
@@ -283,11 +292,12 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     width: '100%',
+    maxWidth: 412,
     alignSelf: 'center',
     flexGrow: 1,
     paddingHorizontal: 16,
     paddingTop: 24,
-    paddingBottom: 24,
+    paddingBottom: 120,
   },
   loadingContainer: {
     flex: 1,
@@ -334,7 +344,7 @@ const styles = StyleSheet.create({
     lineHeight: 27,
   },
   actionRequiredBox: {
-    height: 140,
+    minHeight: 140,
     width: '100%',
     backgroundColor: '#ffffff',
     borderWidth: 1,
@@ -352,6 +362,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   actionTitle: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
@@ -379,11 +391,12 @@ const styles = StyleSheet.create({
     maxWidth: 720,
     alignSelf: 'center',
     paddingHorizontal: 16,
-    paddingBottom: 24,
+    paddingTop: 8,
+    paddingBottom: 16,
   },
   continueButton: {
     width: '100%',
-    height: 56,
+    minHeight: 56,
     backgroundColor: '#a4a4a4',
     borderRadius: 8,
     paddingHorizontal: 24,
@@ -399,6 +412,7 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   continueButtonText: {
+    flexShrink: 1,
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
@@ -421,7 +435,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingHorizontal: 16,
-    paddingBottom: 40,
+    paddingBottom: 16,
     gap: 24,
     overflow: 'hidden',
   },
@@ -488,10 +502,14 @@ const styles = StyleSheet.create({
   },
   supportTextGroup: {
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
     justifyContent: 'center',
     gap: 4,
   },
   supportLabel: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#606060',
     fontFamily: 'Poppins_400Regular',
     fontSize: 16,
@@ -499,6 +517,8 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   supportValue: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,

@@ -13,6 +13,7 @@ import {
   Modal
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { auth } from '@/lib/firebase';
 import { submitDriverReport } from '@/lib/firestoreOnboardingService';
@@ -201,6 +202,7 @@ function ImageSlot({
 
 export default function ReportProblemScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const {
     deliveryId,
     deliveryTitle,
@@ -418,7 +420,10 @@ export default function ReportProblemScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: 72 + insets.bottom + 24 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.formContent}>
@@ -503,7 +508,7 @@ export default function ReportProblemScreen() {
         </View>
       </ScrollView>
 
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
         <Pressable
           accessibilityRole="button"
           disabled={isSubmitting}
@@ -539,7 +544,7 @@ const styles = StyleSheet.create({
     height: vs(52),
   },
   topNav: {
-    height: vs(64),
+    minHeight: vs(64),
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: rs(4),
@@ -570,7 +575,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: rs(16),
     paddingTop: vs(16),
-    paddingBottom: vs(104),
+    paddingBottom: 120,
     gap: vs(32),
   },
   formContent: {
@@ -583,14 +588,14 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(24, 20, 26),
+    fontSize: 24,
     lineHeight: fs(28),
     letterSpacing: -1,
     color: '#1c1c1c',
   },
   subtitle: {
     fontFamily: 'Poppins_400Regular',
-    fontSize: fs(16, 14, 17),
+    fontSize: 16,
     lineHeight: fs(24),
     color: '#606060',
   },
@@ -601,7 +606,7 @@ const styles = StyleSheet.create({
   label: {
     width: '100%',
     fontFamily: 'Poppins',
-    fontSize: fs(16, 14, 17),
+    fontSize: 16,
     lineHeight: fs(24),
     // color: '#606060',
     fontWeight : 500
@@ -623,7 +628,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     fontFamily: '',
-    fontSize: fs(16, 14, 17),
+    fontSize: 16,
     lineHeight: fs(24),
     fontWeight  : 600
   },
@@ -647,7 +652,7 @@ const styles = StyleSheet.create({
   },
   dropdownOptionText: {
     fontFamily: 'Poppins_400Regular',
-    fontSize: fs(16, 14, 17),
+    fontSize: 16,
     lineHeight: fs(24),
     color: '#606060',
   },
@@ -684,7 +689,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     padding: rs(8),
     fontFamily: 'Poppins',
-    fontSize: fs(16, 14, 17),
+    fontSize: 16,
     lineHeight: fs(24),
     color: '#1C1C1C',
     //  fontWeight  : 600
@@ -743,7 +748,7 @@ const styles = StyleSheet.create({
   reviewText: {
     width: '100%',
     fontFamily: 'Poppins_400Regular',
-    fontSize: fs(16, 14, 17),
+    fontSize: 16,
     lineHeight: fs(24),
     color: '#606060',
   },
@@ -777,6 +782,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
     flex: 1,
     minWidth: 0,
+    flexShrink: 1,
     fontSize: fs(13, 11, 14),
     color: '#cc7700',
   },
@@ -785,7 +791,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    padding : rs(10),
+    paddingTop: rs(10),
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#ffffff',
@@ -809,8 +815,9 @@ const styles = StyleSheet.create({
     opacity: 0.72,
   },
   submitText: {
+    flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(16, 14, 17),
+    fontSize: 16,
     lineHeight: fs(18),
     letterSpacing: -0.5,
     color: '#ffffff',

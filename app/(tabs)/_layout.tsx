@@ -36,13 +36,14 @@ export default function TabLayout() {
       styles.tabBar,
       {
         height: 85 + insets.bottom,
-        paddingBottom: 12 + insets.bottom,
+        paddingBottom: insets.bottom + 16,
       },
     ],
 
     tabBarLabelStyle: {
       fontSize: 12,
       fontWeight: '500',
+      maxFontSizeMultiplier: 1,
     },
   }}
 >

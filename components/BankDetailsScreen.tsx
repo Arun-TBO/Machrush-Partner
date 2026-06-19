@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 4,
     paddingVertical: 8,
-    height: 64,
+    minHeight: 64,
     backgroundColor: '#ffffff',
   },
   backButton: {
@@ -259,6 +259,8 @@ const styles = StyleSheet.create({
     height: 24,
   },
   navTitle: {
+    flex: 1,
+    minWidth: 0,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 20,
@@ -272,6 +274,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     width: '100%',
+    maxWidth: 412,
     alignSelf: 'center',
     paddingHorizontal: 16,
     paddingTop: 24,
@@ -321,7 +324,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 24,
-    height: 56,
+    minHeight: 56,
   },
 
   // Dropdown
@@ -332,7 +335,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    height: 56,
+    minHeight: 56,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -343,6 +346,8 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     lineHeight: 24,
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
   },
   dropdownIcon: {
     fontSize: 12,
@@ -363,7 +368,7 @@ const styles = StyleSheet.create({
   continueButton: {
     backgroundColor: Colors.primary,
     borderRadius: Radius.md,
-    height: 56,
+    minHeight: 56,
     paddingVertical: 16,
     paddingHorizontal: 24,
     alignItems: 'center',
@@ -373,6 +378,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
+    flexShrink: 1,
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,

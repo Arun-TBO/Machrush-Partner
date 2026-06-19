@@ -7,7 +7,7 @@ const guidelineHeight = 844;
 const shortestSide = Math.min(width, height); 
 const longestSide = Math.max(width, height);
 
-export const isCompactPhone = shortestSide < 360;
+export const isCompactPhone = shortestSide < 340;
 
 export const clamp = (value: number, min: number, max: number) => {
   return Math.min(Math.max(value, min), max);

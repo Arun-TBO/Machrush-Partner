@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signOutUser } from '@/lib/firebaseAuthService';
 import { auth } from '@/lib/firebase';
 import { getDriverProfile, updateDriverProfilePhoto } from '@/lib/firestoreOnboardingService';
@@ -128,7 +129,7 @@ function MenuRow({
   return (
     <Pressable style={styles.menuRow} accessibilityRole="button" onPress={onPress}>
       <Image source={icon} style={{ width: iconSize, height: iconSize }} resizeMode="contain" />
-      <Text style={styles.menuLabel}>{label}</Text>
+      <Text style={styles.menuLabel} numberOfLines={1}>{label}</Text>
       <Image source={chevronImage} style={styles.chevronIcon} resizeMode="contain" />
     </Pressable>
   );
@@ -147,8 +148,8 @@ function SupportOption({
     <View style={styles.supportOption}>
       <Image source={icon} style={styles.supportOptionIcon} resizeMode="contain" />
       <View style={styles.supportOptionText}>
-        <Text style={styles.supportOptionLabel}>{label}</Text>
-        <Text style={styles.supportOptionValue}>{value}</Text>
+        <Text style={styles.supportOptionLabel} numberOfLines={1}>{label}</Text>
+        <Text style={styles.supportOptionValue} numberOfLines={1}>{value}</Text>
       </View>
     </View>
   );
@@ -161,10 +162,15 @@ function SupportModal({
   visible: boolean;
   onClose: () => void;
 }) {
+  const insets = useSafeAreaInsets();
+
   return (
     <Modal visible={visible} transparent statusBarTranslucent  onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable style={styles.supportSheet} onPress={(event) => event.stopPropagation()}>
+        <Pressable
+          style={[styles.supportSheet, { paddingBottom: insets.bottom + 16 }]}
+          onPress={(event) => event.stopPropagation()}
+        >
           <View style={styles.sheetHeader}>
             <View style={styles.dragHandle} />
           </View>
@@ -195,10 +201,15 @@ function LogoutModal({
   onClose: () => void;
   onLogout: () => void;
 }) {
+  const insets = useSafeAreaInsets();
+
   return (
     <Modal visible={visible} transparent  statusBarTranslucent onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable style={styles.logoutSheet} onPress={(event) => event.stopPropagation()}>
+        <Pressable
+          style={[styles.logoutSheet, { paddingBottom: insets.bottom + 16 }]}
+          onPress={(event) => event.stopPropagation()}
+        >
           <View style={styles.logoutDialog}>
             <View style={styles.sheetHeader}>
               <View style={styles.dragHandle} />
@@ -236,6 +247,7 @@ function LogoutModal({
 }
 
 export default function ProfileScreen() {
+  const insets = useSafeAreaInsets();
   const [isSupportVisible, setIsSupportVisible] = React.useState(false);
   const [isLogoutVisible, setIsLogoutVisible] = React.useState(false);
   const [profilePhotoUrl, setProfilePhotoUrl] = React.useState<string | null>(null);
@@ -326,9 +338,11 @@ export default function ProfileScreen() {
     };
 
     loadProfilePhoto();
+    const interval = setInterval(loadProfilePhoto, 5000);
 
     return () => {
       isMounted = false;
+      clearInterval(interval);
     };
   }, [getCurrentProfileSession]);
 
@@ -378,17 +392,15 @@ export default function ProfileScreen() {
           }
         } catch (error) {
           console.error('Error loading profile stats:', error);
-          if (isActive) {
-            setCompletedDeliveryCount(0);
-            setAverageRating('0.0');
-          }
         }
       };
 
       loadProfileStats();
+      const interval = setInterval(loadProfileStats, 5000);
 
       return () => {
         isActive = false;
+        clearInterval(interval);
       };
     }, [getCurrentProfileSession])
   );
@@ -459,7 +471,10 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: 85 + insets.bottom + 24 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
@@ -473,7 +488,7 @@ export default function ProfileScreen() {
                 <View style={styles.nameRow}>
                  
                   <Image source={verifiedBadgeImage} style={styles.verifiedBadge} resizeMode="contain" />
-                  <Text style={styles.verified}>Verified</Text>
+                  <Text style={styles.verified} numberOfLines={1}>Verified</Text>
                 </View>
          
               </View>
@@ -504,7 +519,7 @@ export default function ProfileScreen() {
             <View style={styles.statsRow}>
               <StatCard title="Review">
                 <View style={styles.reviewValueRow}>
-                  <Text style={styles.statValue}>{averageRating}</Text>
+                  <Text style={styles.statValue} numberOfLines={1}>{averageRating}</Text>
                   <Image source={starImage} style={styles.starIcon} resizeMode="contain" />
                 </View>
               </StatCard>
@@ -512,8 +527,8 @@ export default function ProfileScreen() {
               <StatCard title="Delivery's">
                
                 <View style={styles.deliveryValueRow}>
-                  <Text style={styles.statValue}>{completedDeliveryCount}</Text>
-                  <Text style={styles.completedText}>Completed</Text>
+                  <Text style={styles.statValue} numberOfLines={1}>{completedDeliveryCount}</Text>
+                  <Text style={styles.completedText} numberOfLines={1}>Completed</Text>
                 </View>
               </StatCard>
             </View>
@@ -538,7 +553,7 @@ export default function ProfileScreen() {
             onPress={() => setIsLogoutVisible(true)}
           >
             <Image source={logoutImage} style={styles.logoutIcon} resizeMode="contain" />
-            <Text style={styles.logoutText}>Logout</Text>
+            <Text style={styles.logoutText} numberOfLines={1}>Logout</Text>
           </Pressable>
         </View>
 
@@ -566,8 +581,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     width: '100%',
+    maxWidth: 720,
     alignSelf: 'center',
-    paddingBottom: 30,
+    paddingBottom: 120,
   },
   header: {
     backgroundColor: '#dbe6f7',
@@ -579,7 +595,7 @@ const styles = StyleSheet.create({
     height: 52,
   },
   topNav: {
-    height: 64,
+    minHeight: 64,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 4,
@@ -596,6 +612,8 @@ const styles = StyleSheet.create({
     height: 24,
   },
   topNavTitle: {
+    flex: 1,
+    minWidth: 0,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 20,
@@ -634,6 +652,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   verified :{
+    minWidth: 0,
+    flexShrink: 1,
     fontFamily: 'Poppins',
     fontSize: 16,
     fontWeight: '500',
@@ -694,7 +714,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    height: 104,
+    minHeight: 104,
     borderRadius: 16,
     backgroundColor: '#ffffff',
     padding: 12,
@@ -705,8 +725,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minWidth: 0,
   },
   statTitle: {
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 14,
@@ -730,13 +754,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    minWidth: 0,
   },
   deliveryValueRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap:1
+    gap: 1,
+    minWidth: 0,
   },
   statValue: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 32,
@@ -748,6 +776,8 @@ const styles = StyleSheet.create({
     height: 24,
   },
   completedText: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#8e8e8e',
     fontFamily: 'Poppins_400Regular',
     fontSize: 12,
@@ -776,6 +806,8 @@ const styles = StyleSheet.create({
   },
   menuLabel: {
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
@@ -807,6 +839,9 @@ const styles = StyleSheet.create({
     height: 24,
   },
   logoutText: {
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
     color: '#d00416',
     fontFamily: 'Poppins_400Regular',
     fontSize: 16,
@@ -836,7 +871,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 40,
+    paddingBottom: 16,
     overflow: 'hidden',
   },
   sheetHeader: {
@@ -895,12 +930,15 @@ const styles = StyleSheet.create({
   },
   supportOptionText: {
     flex: 1,
+    flexShrink: 1,
     justifyContent: 'center',
     gap: 4,
     minHeight: 52,
     minWidth: 0,
   },
   supportOptionLabel: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#606060',
     fontFamily: 'Poppins_400Regular',
     fontSize: 16,
@@ -908,6 +946,8 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   supportOptionValue: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
@@ -922,7 +962,9 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     backgroundColor: '#ffffff',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
     overflow: 'hidden',
   },
   logoutDialog: {
@@ -960,19 +1002,21 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'flex-start',
-    justifyContent : 'space-around',
+    justifyContent: 'space-around',
     gap: 2,
   },
   goBackButton: {
-    width: 100,
+    flex: 1,
+    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#0055cc',
     borderRadius: 8,
-    height : 48
+    minHeight: 48
   },
   goBackButtonText: {
+    flexShrink: 1,
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
@@ -980,8 +1024,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   confirmLogoutButton: {
-    height : 48,
-    width : rs(248),
+    flex: 1.8,
+    minHeight: 48,
     minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
@@ -990,6 +1034,7 @@ const styles = StyleSheet.create({
 
   },
   confirmLogoutButtonText: {
+    flexShrink: 1,
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,

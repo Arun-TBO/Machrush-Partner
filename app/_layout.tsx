@@ -22,8 +22,12 @@ const DEFAULT_FONT_STYLE = { fontFamily: 'Poppins_400Regular' };
 SystemUI.setBackgroundColorAsync(APP_BACKGROUND);
 
 (Text as any).defaultProps = (Text as any).defaultProps || {};
+(Text as any).defaultProps.allowFontScaling = false;
+(Text as any).defaultProps.maxFontSizeMultiplier = 1;
 (Text as any).defaultProps.style = [DEFAULT_FONT_STYLE, (Text as any).defaultProps.style];
 (TextInput as any).defaultProps = (TextInput as any).defaultProps || {};
+(TextInput as any).defaultProps.allowFontScaling = false;
+(TextInput as any).defaultProps.maxFontSizeMultiplier = 1;
 (TextInput as any).defaultProps.style = [DEFAULT_FONT_STYLE, (TextInput as any).defaultProps.style];
 
 const appLightTheme = {
@@ -98,9 +102,11 @@ export default function RootLayout() {
     };
 
     checkSuspendedStatus();
+    const interval = setInterval(checkSuspendedStatus, 5000);
 
     return () => {
       isActive = false;
+      clearInterval(interval);
     };
   }, [isLoading, pathname, showWalkthrough]);
 

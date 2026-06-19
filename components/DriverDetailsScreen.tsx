@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   },
 
   header: {
-    height: 64,
+    minHeight: 64,
     paddingHorizontal: 4,
     paddingVertical: 8,
     flexDirection: 'row',
@@ -316,6 +316,8 @@ const styles = StyleSheet.create({
     height: 24,
   },
   headerTitle: {
+    flex: 1,
+    minWidth: 0,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 20,
@@ -334,6 +336,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     width: '100%',
+    maxWidth: 412,
     alignSelf: 'center',
     paddingHorizontal: 16,
     paddingTop: 24,
@@ -385,7 +388,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   nameInput: {
-    height: 56,
+    minHeight: 56,
     color: '#1c1c1c',
     fontFamily: 'Poppins_400Regular',
     fontSize: 16,
@@ -421,6 +424,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   documentTitle: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 18,
@@ -428,6 +433,8 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   documentDescription: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#606060',
     fontFamily: 'Poppins_400Regular',
     fontSize: 12,
@@ -447,6 +454,8 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   errorText: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#0055cc',
     fontFamily: 'Poppins_400Regular',
     fontSize: 12,
@@ -512,7 +521,7 @@ const styles = StyleSheet.create({
 
   // Continue Button
   continueButton: {
-    height: 56,
+    minHeight: 56,
     backgroundColor: '#05c',
     borderRadius: 8,
     justifyContent: 'center',
@@ -522,6 +531,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   continueButtonText: {
+    flexShrink: 1,
     color: 'white',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,

@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth } from '@/lib/firebase';
 import { getDriverProfile, OnboardingData } from '@/lib/firestoreOnboardingService';
 
@@ -38,8 +39,8 @@ function SupportOption({
     <View style={styles.supportOption}>
       <Image source={icon} style={styles.supportOptionIcon} resizeMode="contain" />
       <View style={styles.supportOptionText}>
-        <Text style={styles.supportOptionLabel}>{label}</Text>
-        <Text style={styles.supportOptionValue}>{value}</Text>
+        <Text style={styles.supportOptionLabel} numberOfLines={1}>{label}</Text>
+        <Text style={styles.supportOptionValue} numberOfLines={1}>{value}</Text>
       </View>
     </View>
   );
@@ -52,10 +53,15 @@ function SupportModal({
   visible: boolean;
   onClose: () => void;
 }) {
+  const insets = useSafeAreaInsets();
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable style={styles.supportSheet} onPress={(event) => event.stopPropagation()}>
+        <Pressable
+          style={[styles.supportSheet, { paddingBottom: insets.bottom + 16 }]}
+          onPress={(event) => event.stopPropagation()}
+        >
           <View style={styles.sheetHeader}>
             <View style={styles.dragHandle} />
           </View>
@@ -142,9 +148,11 @@ export default function BankDetailsProfileScreen() {
       };
 
       loadDriverProfile();
+      const interval = setInterval(loadDriverProfile, 5000);
 
       return () => {
         isActive = false;
+        clearInterval(interval);
       };
     }, [])
   );
@@ -183,8 +191,8 @@ export default function BankDetailsProfileScreen() {
           style={styles.supportRow}
           onPress={() => setIsSupportVisible(true)}
         >
-          <Text style={styles.supportText}>Need to change?</Text>
-          <Text style={styles.supportLink}>Contact support</Text>
+          <Text style={styles.supportText} numberOfLines={1}>Need to change?</Text>
+          <Text style={styles.supportLink} numberOfLines={1}>Contact support</Text>
         </Pressable>
       </ScrollView>
 
@@ -205,7 +213,7 @@ const styles = StyleSheet.create({
     height: 52,
   },
   topNav: {
-    height: 64,
+    minHeight: 64,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 4,
@@ -222,6 +230,8 @@ const styles = StyleSheet.create({
     height: 24,
   },
   navTitle: {
+    flex: 1,
+    minWidth: 0,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 20,
@@ -233,6 +243,7 @@ const styles = StyleSheet.create({
   },
   content: {
     width: '100%',
+    maxWidth: 412,
     alignSelf: 'center',
     flexGrow: 1,
     paddingHorizontal: 16,
@@ -277,7 +288,7 @@ const styles = StyleSheet.create({
   },
   valueBox: {
     width: '100%',
-    height: 56,
+    minHeight: 56,
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#a4a4a4',
@@ -288,6 +299,8 @@ const styles = StyleSheet.create({
   },
   valueText: {
     width: '100%',
+    minWidth: 0,
+    flexShrink: 1,
     color: '#a4a4a4',
     fontFamily: 'Poppins_400Regular',
     fontSize: 16,
@@ -303,7 +316,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   supportRow: {
-    height: 40,
+    minHeight: 40,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -312,12 +325,14 @@ const styles = StyleSheet.create({
     marginBottom : 20
   },
   supportText: {
+    flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
   },
   supportLink: {
+    flexShrink: 1,
     color: '#0055cc',
     fontFamily: 'Poppins_500Medium',
     fontSize: 18,
@@ -337,7 +352,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 40,
+    paddingBottom: 16,
     overflow: 'hidden',
   },
   sheetHeader: {
@@ -402,6 +417,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   supportOptionLabel: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#606060',
     fontFamily: 'Poppins_400Regular',
     fontSize: 16,
@@ -409,6 +426,8 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   supportOptionValue: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,

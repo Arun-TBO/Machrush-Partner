@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fs, hit, rs, vs } from '@/lib/responsive';
 
 const paymentThumbImage = require('@/assets/images/delivery/payment-detail-thumb.png');
@@ -176,14 +177,14 @@ function RoutePoint({
     <View style={styles.routePoint}>
     
       <View style={styles.routeText}>
-        <Text style={styles.routePointTitle}>
+        <Text style={styles.routePointTitle} numberOfLines={1}>
           {title}
         </Text>
-        <Text style={styles.routePrimary}>
+        <Text style={styles.routePrimary} numberOfLines={1}>
           {parts.primary}
         </Text>
         {parts.secondary ? (
-          <Text style={styles.routeSecondary}>
+          <Text style={styles.routeSecondary} numberOfLines={1}>
             {parts.secondary}
           </Text>
         ) : null}
@@ -206,19 +207,21 @@ function PaymentLine({
   return (
     <View style={styles.paymentLine}>
       <View style={styles.paymentLabelRow}>
-        <Text style={[styles.paymentLabel, strong ? styles.paymentLabelStrong : null]}>{label}</Text>
+        <Text style={[styles.paymentLabel, strong ? styles.paymentLabelStrong : null]} numberOfLines={1}>{label}</Text>
         {showInfo ? <Ionicons name="information-circle-outline" size={21} color="#8e8e8e" /> : null}
       </View>
-      <Text style={[styles.paymentValue, strong ? styles.paymentValueStrong : null]}>{value}</Text>
+      <Text style={[styles.paymentValue, strong ? styles.paymentValueStrong : null]} numberOfLines={1}>{value}</Text>
     </View>
   );
 }
 
 export default function PaymentPendingScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { deliveryId } = useLocalSearchParams<{ deliveryId?: string }>();
   const [delivery, setDelivery] = React.useState<DeliveryDetails | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
+  const hasLoadedDeliveryRef = React.useRef(false);
 
   React.useEffect(() => {
     let isActive = true;
@@ -230,6 +233,9 @@ export default function PaymentPendingScreen() {
       }
 
       try {
+        if (!hasLoadedDeliveryRef.current) {
+          setIsLoading(true);
+        }
         const response = await fetch(`${getApiBaseUrl()}/api/deliveries/${deliveryId}`);
         const body = (await response.json().catch(() => null)) as {
           success?: boolean;
@@ -246,20 +252,20 @@ export default function PaymentPendingScreen() {
         }
       } catch (error) {
         console.error('Error loading payment details:', error);
-        if (isActive) {
-          setDelivery(null);
-        }
       } finally {
         if (isActive) {
+          hasLoadedDeliveryRef.current = true;
           setIsLoading(false);
         }
       }
     };
 
     loadDelivery();
+    const interval = setInterval(loadDelivery, 5000);
 
     return () => {
       isActive = false;
+      clearInterval(interval);
     };
   }, [deliveryId]);
 
@@ -304,7 +310,10 @@ export default function PaymentPendingScreen() {
       ) : (
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: insets.bottom + 24 },
+          ]}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.summaryBlock}>
@@ -330,7 +339,7 @@ export default function PaymentPendingScreen() {
               <Text style={styles.earnedTitle}>{formatCurrency(earnedAmount)} earning</Text>
               <View style={styles.paymentCompleteRow}>
                 <Ionicons name="time" size={20} color="#e0ad00" />
-                <Text style={styles.paymentCompleteText}>Payment pending</Text>
+                <Text style={styles.paymentCompleteText} numberOfLines={1}>Payment pending</Text>
               </View>
             </View>
 
@@ -354,7 +363,7 @@ export default function PaymentPendingScreen() {
                   <View style={styles.routeSeparator} />
                
                 <RoutePoint title={distanceLabel} address={dropAddress} />
-                <Text style={styles.routeTotal}>
+                <Text style={styles.routeTotal} numberOfLines={1}>
                   Total {distance > 0 ? `${Math.round(distance)} kms` : 'distance unavailable'} {'\u2022'} {routeDuration}
                 </Text>
 
@@ -437,7 +446,7 @@ const styles = StyleSheet.create({
     height: vs(52),
   },
   topNav: {
-    height: vs(64),
+    minHeight: vs(64),
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: rs(4),
@@ -450,6 +459,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   navTitle: {
+    flex: 1,
+    minWidth: 0,
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(20, 17, 22),
     lineHeight: fs(32, 26, 34),
@@ -522,6 +533,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: rs(8),
+    minWidth: 0,
   },
   earnedTitle: {
     flex: 1,
@@ -531,6 +543,7 @@ const styles = StyleSheet.create({
     color: '#1c1c1c',
   },
   paymentCompleteRow: {
+    maxWidth: '48%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: rs(4),
@@ -540,8 +553,9 @@ const styles = StyleSheet.create({
     height: rs(24),
   },
   paymentCompleteText: {
+    flexShrink: 1,
     fontFamily: 'Poppins_400Regular',
-    fontSize: fs(16, 13, 17),
+    fontSize: 16,
     lineHeight: fs(24),
     color: '#000000',
   },
@@ -562,7 +576,7 @@ const styles = StyleSheet.create({
   },
   routeTitle: {
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(16, 14, 17),
+    fontSize: 16,
     lineHeight: fs(18),
     letterSpacing: -0.5,
     color: '#1c1c1c',
@@ -610,18 +624,19 @@ const styles = StyleSheet.create({
   routeText: {
     flex: 1,
     minWidth: 0,
+    flexShrink: 1,
     padding : rs(4),
   },
   routePointTitle: {
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(16, 14, 17),
+    fontSize: 16,
     lineHeight: fs(18),
     letterSpacing: -0.5,
     color: '#1c1c1c',
   },
   routePrimary: {
     fontFamily: 'Poppins_400Regular',
-    fontSize: fs(16, 13, 17),
+    fontSize: 16,
     lineHeight: fs(24),
     color: '#616161',
   },
@@ -648,6 +663,8 @@ const styles = StyleSheet.create({
     borderColor: '#0055cc',
   },
   routeTotal: {
+    minWidth: 0,
+    flexShrink: 1,
     marginLeft: rs(5),
     fontFamily: 'Poppins_400Regular',
     fontSize: fs(12, 11, 13),
@@ -682,8 +699,10 @@ const styles = StyleSheet.create({
   },
   paymentSummaryTitle: {
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(16, 14, 17),
+    fontSize: 16,
     lineHeight: fs(18),
     letterSpacing: -0.5,
     color: '#1c1c1c',
@@ -712,8 +731,10 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   paymentLabel: {
+    minWidth: 0,
+    flexShrink: 1,
     fontFamily: 'Poppins_400Regular',
-    fontSize: fs(16, 13, 17),
+    fontSize: 16,
     lineHeight: fs(24),
     color: '#8e8e8e',
   },
@@ -722,8 +743,9 @@ const styles = StyleSheet.create({
   },
   paymentValue: {
     fontFamily: 'Poppins_500Medium',
-    flexShrink: 0,
-    fontSize: fs(16, 13, 17),
+    maxWidth: '45%',
+    flexShrink: 1,
+    fontSize: 16,
     lineHeight: fs(18),
     color: '#606060',
     textAlign: 'right',
@@ -746,7 +768,7 @@ const styles = StyleSheet.create({
   },
   transactionTitle: {
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(16, 14, 17),
+    fontSize: 16,
     lineHeight: fs(18),
     letterSpacing: -0.5,
     color: '#8e8e8e',
@@ -765,6 +787,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   reportButtonText: {
+    flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     lineHeight: 16,

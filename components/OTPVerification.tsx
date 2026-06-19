@@ -10,12 +10,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
 import { useAppAlert } from './AppAlertModal';
+import { fs, hit, rs, vs } from '@/lib/responsive';
 
 import { verifyOTP, resendOTP } from '@/lib/firebaseAuthService'; // Real Firebase
 
 const RESEND_OTP_SECONDS = 40;
-
-import { fs, hit, rs, vs } from '@/lib/responsive';
 
 interface OTPVerificationProps {
   mobileNumber: string;
@@ -301,6 +300,7 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
     width: '100%',
+    maxWidth: 412,
     alignSelf: 'center',
     paddingHorizontal: 16,
     paddingTop: 40,
@@ -327,9 +327,11 @@ const styles = StyleSheet.create({
     width : '100%',
     flexDirection: 'row',
     alignItems: 'center',
+    minWidth: 0,
     
   },
   description: {
+    flexShrink: 1,
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(18),
@@ -337,6 +339,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   phoneNumberLink: {
+    flexShrink: 1,
     color: '#0055cc',
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(18),
@@ -382,11 +385,11 @@ const styles = StyleSheet.create({
   // Verify & Continue Button
   actionContainer: {
     width: '100%',
-    height: 148,
+    minHeight: 148,
     gap: 24,
   },
   verifyButton: {
-    height: 56,
+    minHeight: 56,
     backgroundColor: Colors.primary,
     borderRadius: Radius.md,
     justifyContent: 'center',
@@ -396,6 +399,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#A4A4A4',
   },
   verifyButtonText: {
+    flexShrink: 1,
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
@@ -407,7 +411,7 @@ const styles = StyleSheet.create({
   // Footer Container
   footerContainer: {
     width: '100%',
-    height: 40,
+    minHeight: 40,
     paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
@@ -420,6 +424,7 @@ const styles = StyleSheet.create({
 
   // Resend OTP Link
   resendOtpText: {
+    flexShrink: 1,
     color: '#0055cc',
     fontFamily: 'Poppins_600SemiBold',
     fontSize: 16,
@@ -433,6 +438,7 @@ const styles = StyleSheet.create({
 
   // Timer Text
   timerText: {
+    flexShrink: 1,
     color: '#0055cc',
     fontFamily: 'Poppins_600SemiBold',
     fontSize: 16,

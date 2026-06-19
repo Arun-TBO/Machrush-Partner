@@ -453,6 +453,7 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
     width: '100%',
+    maxWidth: 412,
     alignSelf: 'center',
     paddingHorizontal: 16,
     paddingTop: 40,
@@ -472,6 +473,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   description: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(18),
@@ -485,6 +488,7 @@ const styles = StyleSheet.create({
     justifyContent : 'space-around',
     gap: 8,
     alignItems: 'center',
+    minWidth: 0,
   },
 
   // Country Code Box
@@ -517,7 +521,8 @@ const styles = StyleSheet.create({
   // Mobile Number Input
   mobileNumberBox: {
     flex: 1,
-    height: rs(60),
+    minHeight: rs(60),
+    minWidth: 0,
     backgroundColor: 'white',
     borderRadius: Radius.md,
     paddingHorizontal: 16,
@@ -545,7 +550,7 @@ const styles = StyleSheet.create({
 
   // Verify & Continue Button
   verifyButton: {
-    height: 56,
+    minHeight: 56,
     backgroundColor: Colors.primary,
     borderRadius: Radius.md,
     justifyContent: 'center',
@@ -555,9 +560,10 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   verifyButtonText: {
+    flexShrink: 1,
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(16),
+    fontSize: 16,
     fontWeight: '500',
     lineHeight: 20,
     letterSpacing: -0.5,

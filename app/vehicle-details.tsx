@@ -106,9 +106,11 @@ export default function VehicleDetailsProfileScreen() {
       };
 
       loadDriverProfile();
+      const interval = setInterval(loadDriverProfile, 5000);
 
       return () => {
         isActive = false;
+        clearInterval(interval);
       };
     }, [])
   );
@@ -177,7 +179,7 @@ const styles = StyleSheet.create({
     height: 52,
   },
   topNav: {
-    height: 64,
+    minHeight: 64,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 4,
@@ -194,6 +196,8 @@ const styles = StyleSheet.create({
     height: 24,
   },
   navTitle: {
+    flex: 1,
+    minWidth: 0,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 20,
@@ -205,6 +209,7 @@ const styles = StyleSheet.create({
   },
   content: {
     width: '100%',
+    maxWidth: 412,
     alignSelf: 'center',
     paddingHorizontal: 16,
     paddingTop: 16,
@@ -248,7 +253,7 @@ const styles = StyleSheet.create({
   },
   valueBox: {
     width: '100%',
-    height: 56,
+    minHeight: 56,
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#a4a4a4',
@@ -259,6 +264,8 @@ const styles = StyleSheet.create({
   },
   valueText: {
     width: '100%',
+    minWidth: 0,
+    flexShrink: 1,
     color: '#a4a4a4',
     fontFamily: 'Poppins_400Regular',
     fontSize: 16,
@@ -270,8 +277,9 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   bodyTypesRow: {
-    width: 264,
-    height: 140,
+    width: '100%',
+    maxWidth: 264,
+    minHeight: 140,
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 16,
@@ -313,6 +321,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   bodyTypeLabel: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#2c2c2c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 14,

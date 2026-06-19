@@ -555,7 +555,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 4,
     paddingVertical: 8,
-    height: 64,
+    minHeight: 64,
     backgroundColor: '#ffffff',
   },
   backButton: {
@@ -569,6 +569,8 @@ const styles = StyleSheet.create({
     height: 24,
   },
   navTitle: {
+    flex: 1,
+    minWidth: 0,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 20,
@@ -583,6 +585,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     width: '100%',
+    maxWidth: 412,
     alignSelf: 'center',
     paddingHorizontal: 16,
     paddingTop: 24,
@@ -632,7 +635,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 24,
-    height: 56,
+    minHeight: 56,
   },
   readOnlyInput: {
     backgroundColor: '#f8f8f8',
@@ -647,7 +650,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    height: 56,
+    minHeight: 56,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -661,6 +664,8 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     lineHeight: 24,
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
   },
   dropdownIcon: {
     fontSize: 12,
@@ -674,7 +679,8 @@ const styles = StyleSheet.create({
   bodyTypeContainer: {
     flexDirection: 'row',
     gap: 16,
-    width: 264,
+    width: '100%',
+    maxWidth: 264,
   },
   bodyTypeCard: {
     flex: 1,
@@ -741,6 +747,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   documentTitle: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 18,
@@ -748,6 +756,8 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   documentSubtitle: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#606060',
     fontFamily: 'Poppins_400Regular',
     fontSize: 12,
@@ -767,6 +777,8 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   errorText: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#0055cc',
     fontFamily: 'Poppins_400Regular',
     fontSize: 12,
@@ -777,6 +789,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   uploadedFileName: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#05c',
     fontFamily: 'Poppins_400Regular',
     fontSize: 12,
@@ -804,7 +818,7 @@ const styles = StyleSheet.create({
   vehiclePhotoPanel: {
     flex: 1,
     minWidth: 0,
-    height: 86,
+    minHeight: 86,
     backgroundColor: '#ffffff',
     borderRadius: 8,
     borderWidth: 1,
@@ -835,7 +849,7 @@ const styles = StyleSheet.create({
   // Upload Button Small (inline)
   uploadButtonSmall: {
     width: 64,
-    height: 64,
+    minHeight: 64,
     backgroundColor: 'white',
     borderRadius: 12,
     borderWidth: 0.5,
@@ -889,12 +903,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    height: 56,
+    minHeight: 56,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
+    flexShrink: 1,
     color: 'white',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,

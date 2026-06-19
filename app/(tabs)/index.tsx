@@ -13,9 +13,10 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth } from '@/lib/firebase';
 import { useAppAlert } from '@/components/AppAlertModal';
-import { fs, hit, isCompactPhone, rs, vs } from '@/lib/responsive';
+import { fs, hit, rs, vs } from '@/lib/responsive';
 import {
   getDriverProfile,
   getLatestDriverAvailability,
@@ -327,7 +328,7 @@ function Header({
         <View style={styles.locationTextWrap}>
           <View style={styles.locationTitleRow}>
             <Image source={mapPinImage} style={styles.locationIcon} resizeMode="contain" />
-            <Text style={styles.locationTitle}>{currentLocation.area}</Text>
+          <Text style={styles.locationTitle} numberOfLines={1}>{currentLocation.area}</Text>
           </View>
           <Text style={styles.locationSubtitle}>{currentLocation.district}</Text>
         </View>
@@ -345,9 +346,9 @@ function Header({
       </View>
 
       <View style={styles.earningRow}>
-        <View>
-          <Text style={styles.totalEarning}>{todayEarnings}</Text>
-          <Text style={styles.totalLabel}>Today total earning</Text>
+        <View style={styles.earningCopy}>
+          <Text style={styles.totalEarning} numberOfLines={1}>{todayEarnings}</Text>
+          <Text style={styles.totalLabel} numberOfLines={1}>Today total earning</Text>
         </View>
         <OnlineToggle status={driverStatus} onPress={onTogglePress} />
       </View>
@@ -374,7 +375,7 @@ function RoutePoint({
           <Text style={styles.routeTitle}>{title}</Text>
           <Text style={styles.routeTime}>{time}</Text>
         </View>
-        <Text style={styles.routeAddress}>
+        <Text style={styles.routeAddress} numberOfLines={1}>
           {address}
         </Text>
       </View>
@@ -394,15 +395,15 @@ function JobCard({
   const cardContent = (
     <>
       <View style={styles.jobTopRow}>
-        <View>
-          <Text style={styles.estimateLabel}>Estimated earnings</Text>
-          <Text style={styles.cardEarning}>{job.earnings}</Text>
+        <View style={styles.jobEarningBlock}>
+          <Text style={styles.estimateLabel} numberOfLines={1}>Estimated earnings</Text>
+          <Text style={styles.cardEarning} numberOfLines={1}>{job.earnings}</Text>
         </View>
         <View style={styles.jobMeta}>
           <View style={styles.pickupBadge}>
-            <Text style={styles.pickupBadgeText}>{job.pickupDistance}</Text>
+            <Text style={styles.pickupBadgeText} numberOfLines={1}>{job.pickupDistance}</Text>
           </View>
-          <Text style={styles.jobAge}>{job.age}</Text>
+          <Text style={styles.jobAge} numberOfLines={1}>{job.age}</Text>
         </View>
       </View>
 
@@ -410,7 +411,7 @@ function JobCard({
         
         <Image source={ pickAndDropIcon } style={styles.routeIcon}  />
        
-       <View >
+       <View style={styles.routeLineGroup}>
           <RoutePoint
           title={job.pickupTitle}
           time={job.pickupTime}
@@ -528,6 +529,7 @@ function StatusConfirmModal({
 
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [driverStatus, setDriverStatus] = useState<DriverStatus>('offline');
   const [driverStatusChangedAtMs, setDriverStatusChangedAtMs] = useState(0);
   const [pendingStatus, setPendingStatus] = useState<DriverStatus | null>(null);
@@ -542,6 +544,7 @@ export default function HomeScreen() {
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
   const [todayTotalEarnings, setTodayTotalEarnings] = useState(formatCurrency(0));
   const [hasTripInProgress, setHasTripInProgress] = useState(false);
+  const hasLoadedJobsRef = React.useRef(false);
   const { alertModal, showAlert } = useAppAlert();
 
   React.useEffect(() => {
@@ -608,7 +611,9 @@ export default function HomeScreen() {
 
       const loadOpenJobRequests = async () => {
         try {
-          setIsLoadingJobs(true);
+          if (!hasLoadedJobsRef.current) {
+            setIsLoadingJobs(true);
+          }
           const [storedUid, storedIdToken] = await Promise.all([
             AsyncStorage.getItem('firebaseUid'),
             AsyncStorage.getItem('firebaseIdToken'),
@@ -695,22 +700,20 @@ export default function HomeScreen() {
           }
         } catch (error) {
           console.error('Error loading job requests:', error);
-          if (isActive) {
-            setJobRequestList([]);
-            setTodayTotalEarnings(formatCurrency(0));
-            setHasTripInProgress(false);
-          }
         } finally {
           if (isActive) {
+            hasLoadedJobsRef.current = true;
             setIsLoadingJobs(false);
           }
         }
       };
 
       loadOpenJobRequests();
+      const interval = setInterval(loadOpenJobRequests, 5000);
 
       return () => {
         isActive = false;
+        clearInterval(interval);
       };
     }, [])
   );
@@ -805,9 +808,11 @@ export default function HomeScreen() {
       };
 
       loadDriverHomeState();
+      const interval = setInterval(loadDriverHomeState, 5000);
 
       return () => {
         isActive = false;
+        clearInterval(interval);
       };
     }, [])
   );
@@ -934,7 +939,10 @@ export default function HomeScreen() {
 
       <ScrollView
         style={styles.contentScroll}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: 85 + insets.bottom + 24 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {isLoadingJobs ? (
@@ -1051,10 +1059,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     flex: 1,
     minWidth: 0,
-    fontSize: fs(16),
+    fontSize: 16,
     fontWeight: '500',
   },
   locationSubtitle: {
+    minWidth: 0,
+    flexShrink: 1,
     marginTop: 1,
     color: '#5e5e58',
     fontFamily: 'Poppins_400Regular',
@@ -1074,8 +1084,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
+    gap: rs(12),
+  },
+  earningCopy: {
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
   },
   totalEarning: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(40, 32, 42),
@@ -1083,6 +1101,8 @@ const styles = StyleSheet.create({
     lineHeight: fs(48, 38, 50),
   },
   totalLabel: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#606060',
     fontFamily: 'Poppins_400Regular',
     fontSize: fs(14),
@@ -1135,10 +1155,11 @@ const styles = StyleSheet.create({
   },
   content: {
     width: '100%',
+    maxWidth: 720,
     alignSelf: 'center',
     paddingHorizontal: rs(16),
     paddingTop: vs(24),
-    paddingBottom: vs(110),
+    paddingBottom: 120,
     gap: vs(24),
   },
   sectionHeader: {
@@ -1149,7 +1170,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(24, 20, 26),
+    fontSize: 24,
     fontWeight: '500',
     letterSpacing: -1,
   },
@@ -1178,14 +1199,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: rs(10),
   },
+  jobEarningBlock: {
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
+  },
   estimateLabel: {
     color: '#5e5e58',
     fontFamily: 'Poppins_400Regular',
-    fontSize: fs(12),
+    fontSize: 12,
     fontWeight: '400',
     lineHeight: fs(18),
   },
   cardEarning: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(32, 26, 34),
@@ -1196,6 +1224,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'space-between',
     minHeight: vs(50),
+    flexShrink: 0,
+    maxWidth: '45%',
   },
   pickupBadge: {
     backgroundColor: '#ffdb43',
@@ -1206,14 +1236,14 @@ const styles = StyleSheet.create({
   pickupBadgeText: {
     color: '#000000',
     fontFamily: 'Poppins_400Regular',
-    fontSize: fs(14, 12, 15),
+    fontSize: 14,
     fontWeight: '400',
     lineHeight: fs(21),
   },
   jobAge: {
     color: '#606060',
     fontFamily: 'Poppins_400Regular',
-    fontSize: fs(12),
+    fontSize: 12,
     fontWeight: '400',
     lineHeight: fs(18),
   },
@@ -1226,14 +1256,19 @@ const styles = StyleSheet.create({
     padding : rs(2),
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     gap : rs(18)
+  },
+  routeLineGroup: {
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
   },
   routePoint: {
     marginBottom : vs(5),
     marginTop : vs(5),
     flexShrink: 1,
-    width : isCompactPhone ? '88%' : '92%',
+    width: '100%',
   },
   routeIcon: {
     width: rs(30, 24, 32),
@@ -1255,8 +1290,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: rs(10),
     flexWrap: 'wrap',
+    minWidth: 0,
   },
   routeTitle: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(12),
@@ -1265,6 +1303,8 @@ const styles = StyleSheet.create({
   },
   routeTime: {
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
     color: '#0055cc',
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(12),
@@ -1272,9 +1312,11 @@ const styles = StyleSheet.create({
     lineHeight: fs(14),
   },
   routeAddress: {
+    minWidth: 0,
+    flexShrink: 1,
     color: '#616161',
     fontFamily: 'Poppins_400Regular',
-    fontSize: fs(16),
+    fontSize: 16,
     fontWeight: '400',
   },
   routeSeparator: {
@@ -1282,7 +1324,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderStyle: 'dashed',
     borderColor: '#d6d6d6',
-     width : isCompactPhone ? '84%' : '90%',
+     width: '100%',
   },
   routeConnector: {
     position: 'absolute',
@@ -1326,9 +1368,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   rejectText: {
+    flexShrink: 1,
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(16, 13, 17),
+    fontSize: 16,
     fontWeight: '500',
     lineHeight: fs(18),
     letterSpacing: -0.5,
@@ -1346,9 +1389,10 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   acceptText: {
+    flexShrink: 1,
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(16, 13, 17),
+    fontSize: 16,
     fontWeight: '500',
     lineHeight: fs(18),
     letterSpacing: -0.5,
@@ -1429,7 +1473,7 @@ const styles = StyleSheet.create({
     width: '100%',
     color: '#606060',
     fontFamily: 'Poppins_400Regular',
-    fontSize: fs(16, 14, 17),
+    fontSize: 16,
     fontWeight: '400',
     lineHeight: fs(24),
     textAlign: 'center',
@@ -1452,7 +1496,7 @@ const styles = StyleSheet.create({
   confirmNoText: {
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(16, 13, 17),
+    fontSize: 16,
     fontWeight: '500',
     lineHeight: fs(18),
     letterSpacing: -0.5,
@@ -1474,7 +1518,7 @@ const styles = StyleSheet.create({
   confirmYesText: {
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(16, 13, 17),
+    fontSize: 16,
     fontWeight: '500',
     lineHeight: fs(18),
     letterSpacing: -0.5,

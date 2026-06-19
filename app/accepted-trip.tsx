@@ -24,6 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type MapViewRef } from '@/components/NativeMap';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth } from '@/lib/firebase';
 import { getDriverProfile } from '@/lib/firestoreOnboardingService';
 import { useAppAlert } from '@/components/AppAlertModal';
@@ -845,6 +846,7 @@ function AcceptedPickupView({
   onCompleteDrop: () => void;
   onOpenDeliveryDetails: () => void;
 }) {
+  const insets = useSafeAreaInsets();
   const mapRef = React.useRef<MapViewRef>(null);
   const previousLocationRef = React.useRef<LatLng | null>(null);
   const driverLocationRef = React.useRef<LatLng | null>(null);
@@ -1457,7 +1459,8 @@ function AcceptedPickupView({
         style={[
           styles.pickupSheet,
           {
-            height: TRACKING_SHEET_HEIGHT ,
+            height: TRACKING_SHEET_HEIGHT + insets.bottom,
+            paddingBottom: insets.bottom + 16,
             transform: [{ translateY: sheetTranslateY }],
           },
           
@@ -1637,8 +1640,12 @@ function AcceptedPickupView({
 function FareLine({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <View style={styles.fareLine}>
-      <Text style={[styles.fareLabel, strong ? styles.fareTotalLabel : null]}>{label}</Text>
-      <Text style={[styles.fareValue, strong ? styles.fareTotalValue : null]}>{value}</Text>
+      <Text style={[styles.fareLabel, strong ? styles.fareTotalLabel : null]} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={[styles.fareValue, strong ? styles.fareTotalValue : null]} numberOfLines={1}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -1741,7 +1748,7 @@ function CompletedDropScreen({
         </View>
       </View>
 
-      <View style={styles.completedCtaBar}>
+      <View style={[styles.completedCtaBar, { paddingBottom: insets.bottom + 16 }]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Find new jobs"
@@ -1858,12 +1865,14 @@ function SlideAcceptButton({
 
 export default function AcceptedTripScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { deliveryId, view } = useLocalSearchParams<{ deliveryId?: string; view?: string }>();
   const [delivery, setDelivery] = React.useState<DeliveryDetails | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isAccepting, setIsAccepting] = React.useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = React.useState(false);
   const [isCancelModalVisible, setIsCancelModalVisible] = React.useState(false);
+  const hasLoadedDeliveryRef = React.useRef(false);
   const { alertModal, showAlert } = useAppAlert();
 
   React.useEffect(() => {
@@ -1876,6 +1885,9 @@ export default function AcceptedTripScreen() {
       }
 
       try {
+        if (!hasLoadedDeliveryRef.current) {
+          setIsLoading(true);
+        }
         const response = await fetch(`${getApiBaseUrl()}/api/deliveries/${deliveryId}`);
         const body = (await response.json().catch(() => null)) as {
           success?: boolean;
@@ -1892,20 +1904,20 @@ export default function AcceptedTripScreen() {
         }
       } catch (error) {
         console.error('Error loading accepted trip:', error);
-        if (isActive) {
-          setDelivery(null);
-        }
       } finally {
         if (isActive) {
+          hasLoadedDeliveryRef.current = true;
           setIsLoading(false);
         }
       }
     };
 
     loadDelivery();
+    const interval = setInterval(loadDelivery, 5000);
 
     return () => {
       isActive = false;
+      clearInterval(interval);
     };
   }, [deliveryId]);
 
@@ -2232,7 +2244,10 @@ export default function AcceptedTripScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: 88 + insets.bottom + 24 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.earningBlock}>
@@ -2291,7 +2306,7 @@ export default function AcceptedTripScreen() {
         </View>
       </ScrollView>
 
-      <View style={styles.ctaBar}>
+      <View style={[styles.ctaBar, { paddingBottom: insets.bottom + 16 }]}>
         {isCompletedDelivery ? (
           <Pressable style={styles.reportButton} onPress={handleReportIssue}>
             <Text style={styles.reportButtonText}>Report issue</Text>
@@ -2350,7 +2365,7 @@ const styles = StyleSheet.create({
     height: 52,
   },
   completedTopNav: {
-    height: 64,
+    minHeight: 64,
     width: '100%',
     maxWidth: 720,
     alignSelf: 'center',
@@ -2392,6 +2407,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   completedSuccessRow: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2402,6 +2418,7 @@ const styles = StyleSheet.create({
     height: 24,
   },
   completedSuccessText: {
+    flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     lineHeight: 16,
@@ -2430,11 +2447,12 @@ const styles = StyleSheet.create({
   },
   completedCtaBar: {
     alignItems: 'center',
-    paddingBottom: 24,
+    paddingTop: 8,
+    paddingBottom: 16,
     paddingHorizontal: 16,
   },
   completedHomeButton: {
-    height: 60,
+    minHeight: 60,
     width: '100%',
     maxWidth: 361,
     borderRadius: 12,
@@ -2980,7 +2998,7 @@ otpBox: {
     height: 52,
   },
   topNav: {
-    height: 64,
+    minHeight: 64,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ffffff',
@@ -2995,6 +3013,7 @@ otpBox: {
   },
   navTitle: {
     flex: 1,
+    minWidth: 0,
     fontFamily: 'Poppins_500Medium',
     fontSize: 20,
     lineHeight: 32,
@@ -3078,7 +3097,8 @@ otpBox: {
   routeRow: {
     minHeight: 64,
     justifyContent: 'center',
-    width : "92%"
+    width: '100%',
+    flexShrink: 1,
   },
   routeMarkerWrap: {
     width: 20,
@@ -3123,6 +3143,7 @@ otpBox: {
     minWidth: 0,
   },
   routeTitle: {
+    minWidth: 0,
     flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
@@ -3130,6 +3151,7 @@ otpBox: {
     letterSpacing: -0.5,
   },
   routeTime: {
+    flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
     fontSize: 12,
     color: '#05c',
@@ -3168,12 +3190,17 @@ otpBox: {
     gap: 16,
   },
   fareLabel: {
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
     fontFamily: 'Poppins_400Regular',
     fontSize: 14,
     color: '#8e8e8e',
     lineHeight: 21,
   },
   fareValue: {
+    maxWidth: '45%',
+    flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
     fontSize: 14,
     color: '#606060',
@@ -3200,7 +3227,7 @@ otpBox: {
     paddingBottom: 16,
   },
   acceptButton: {
-    height: 52,
+    minHeight: 52,
     width: '100%',
     maxWidth: 720,
     backgroundColor: '#1fc16b',
@@ -3238,6 +3265,8 @@ otpBox: {
   },
   acceptText: {
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     color: '#ffffff',
@@ -3259,6 +3288,7 @@ otpBox: {
     paddingVertical: 12,
   },
   reportButtonText: {
+    flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     letterSpacing: -0.5,
@@ -3277,6 +3307,7 @@ otpBox: {
     paddingVertical: 12,
   },
   cancelDeliveryButtonText: {
+    flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     lineHeight: 16,

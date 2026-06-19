@@ -5,12 +5,12 @@ import {
   Image,
   ImageSourcePropType,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { auth } from '@/lib/firebase';
@@ -25,7 +25,7 @@ type DeliveryTimestamp =
   | {
       seconds?: number;
       _seconds?: number;
-      toDate?: () => Date;
+      toDate?: () => Date; 
     };
 
 type DeliveryRecord = {
@@ -383,7 +383,10 @@ function DeliveryRow({
         </Text>
       </View>
       <View style={[styles.statusBadge, isPaid ? styles.paidBadge : styles.pendingBadge]}>
-        <Text style={[styles.statusBadgeText, isPaid ? styles.paidBadgeText : styles.pendingBadgeText]}>
+        <Text
+          style={[styles.statusBadgeText, isPaid ? styles.paidBadgeText : styles.pendingBadgeText]}
+          numberOfLines={1}
+        >
           {isPaid ? 'Paid' : 'Pending'}
         </Text>
       </View>
@@ -404,10 +407,12 @@ function EmptyList({ filter }: { filter: PaymentFilter }) {
 
 export default function MyDeliveriesScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [filter, setFilter] = React.useState<PaymentFilter>('paid');
   const [deliveries, setDeliveries] = React.useState<DeliveryRecord[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [weekOffset, setWeekOffset] = React.useState(0);
+  const hasLoadedDeliveriesRef = React.useRef(false);
   const currentWeekDays = React.useMemo(getWeekDays, []);
   const weekDays = React.useMemo(() => {
     return currentWeekDays.map((date) => {
@@ -426,7 +431,9 @@ export default function MyDeliveriesScreen() {
 
       const loadDriverDeliveries = async () => {
         try {
-          setIsLoading(true);
+          if (!hasLoadedDeliveriesRef.current) {
+            setIsLoading(true);
+          }
           const storedUid = await AsyncStorage.getItem('firebaseUid');
           const uid = auth.currentUser?.uid || storedUid;
 
@@ -462,20 +469,20 @@ export default function MyDeliveriesScreen() {
           }
         } catch (error) {
           console.error('Error loading my deliveries:', error);
-          if (isActive) {
-            setDeliveries([]);
-          }
         } finally {
           if (isActive) {
+            hasLoadedDeliveriesRef.current = true;
             setIsLoading(false);
           }
         }
       };
 
       loadDriverDeliveries();
+      const interval = setInterval(loadDriverDeliveries, 5000);
 
       return () => {
         isActive = false;
+        clearInterval(interval);
       };
     }, [])
   );
@@ -534,7 +541,10 @@ export default function MyDeliveriesScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: 85 + insets.bottom + 24 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <WeeklyChart
@@ -606,13 +616,15 @@ const styles = StyleSheet.create({
     height: vs(52),
   },
   topNav: {
-    height: vs(64),
+    minHeight: vs(64),
     justifyContent: 'center',
     paddingLeft: rs(16),
     paddingRight: rs(4),
     paddingVertical: vs(8),
   },
   navTitle: {
+    minWidth: 0,
+    flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(20, 17, 22),
     lineHeight: fs(32, 26, 34),
@@ -629,7 +641,7 @@ const styles = StyleSheet.create({
   weekLabel: {
     width: '100%',
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(16, 14, 17),
+    fontSize: 16,
     letterSpacing: -0.5,
     color: '#1c1c1c',
     textAlign: 'center',
@@ -652,6 +664,8 @@ const styles = StyleSheet.create({
   },
   weekAmount: {
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(40, 30, 42),
     lineHeight: fs(48, 36, 50),
@@ -661,7 +675,7 @@ const styles = StyleSheet.create({
   weekCaption: {
     width: '100%',
     fontFamily: 'Poppins_400Regular',
-    fontSize: fs(16, 14, 17),
+    fontSize: 16,
     lineHeight: fs(24),
     color: '#606060',
     textAlign: 'center',
@@ -673,7 +687,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: rs(412, 320, 430),
     alignSelf: 'center',
-    paddingBottom: 30,
+    paddingBottom: 120,
   },
   chartSection: {
     width: '100%',
@@ -685,7 +699,7 @@ const styles = StyleSheet.create({
   peakAmount: {
     width: '100%',
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(16, 14, 17),
+    fontSize: 16,
     letterSpacing: -0.5,
     color: '#1c1c1c',
     textAlign: 'center',
@@ -879,11 +893,12 @@ const styles = StyleSheet.create({
   deliveryCopy: {
     flex: 1,
     minWidth: 0,
+    flexShrink: 1,
     gap: vs(4),
   },
   deliveryTitle: {
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(16, 14, 17),
+    fontSize: 16,
     lineHeight: fs(18),
     letterSpacing: -0.5,
     color: '#1c1c1c',
@@ -895,6 +910,8 @@ const styles = StyleSheet.create({
     color: '#606060',
   },
   statusBadge: {
+    maxWidth: '28%',
+    flexShrink: 0,
     minHeight: hit(24),
     borderRadius: rs(4),
     alignItems: 'center',
@@ -909,6 +926,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffdb43',
   },
   statusBadgeText: {
+    maxWidth: '100%',
     fontFamily: 'Poppins_400Regular',
     fontSize: fs(12, 11, 13),
     lineHeight: fs(18),
