@@ -1,22 +1,18 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Image, type ImageSource } from 'expo-image';
+import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 
-import { Animated, Dimensions, PanResponder, Pressable, StyleSheet, Text, View ,SafeAreaView } from 'react-native';
+import { Animated, PanResponder, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 
 import IMAGES from '../constants/walkthroughImg/images';
 
-import { fs, hit, rs, vs } from '@/lib/responsive';
-
-
-const { height: screenHeight  , width} = Dimensions.get('window');
+import { fs } from '@/lib/responsive';
+import { MobileNumberVerification } from './MobileNumberVerification';
 
 const SHEET_HEIGHT = 374;
-const imageHeight = Math.max(screenHeight - SHEET_HEIGHT + 24, 543);
-
-import { MobileNumberVerification } from './MobileNumberVerification';
 
 
 const steps: WalkthroughContent[] = [
@@ -63,9 +59,13 @@ export const WalkthroughScreen: React.FC<WalkthroughScreenProps> = ({
   onSkip,
 }) => {
   // const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { height: screenHeight, width } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
   const activeStep = steps[activeIndex];
   const isFinalStep = Boolean(activeStep.isLogoScreen);
+  const sheetHeight = SHEET_HEIGHT + insets.bottom;
+  const imageHeight = Math.max(screenHeight - sheetHeight + 24, 543);
   
  const scaleAnim = useRef(new Animated.Value(0.95)).current;
  const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -146,7 +146,7 @@ Animated.parallel([
   ]),
 ]).start();
     }
-  }, [activeIndex, scaleAnim, fadeAnim, logoPositionAnim, isFinalStep]);
+  }, [activeIndex, scaleAnim, fadeAnim, logoPositionAnim, isFinalStep, screenHeight, width]);
   
   const panResponder = useRef(
   PanResponder.create({
@@ -222,7 +222,7 @@ Animated.parallel([
        
       
 
-      <View style={[styles.visualArea, isFinalStep && styles.finalVisualArea]}>
+      <View style={[styles.visualArea, { height: imageHeight }, isFinalStep && styles.finalVisualArea]}>
         {
           activeIndex <= 1 &&  <Image source={IMAGES.machrushMark} style={styles.appLogo}/>
         }
@@ -254,7 +254,7 @@ Animated.parallel([
         )}
       </View>
 
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, { height: sheetHeight }]}>
         <View style={styles.sheetHandleWrap}>
           <View style={styles.sheetHandle} />
         </View>
@@ -280,7 +280,7 @@ Animated.parallel([
         </View>
           
        
-        <View style={styles.footer}>
+        <View style={[styles.footer, { bottom: insets.bottom + 16 }]}>
         
 
           <View style={styles.actions}>
@@ -325,7 +325,6 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   visualArea: {
-    height: imageHeight,
     overflow: 'hidden',
     backgroundColor: '#dce5f1',
   },
@@ -352,6 +351,7 @@ const styles = StyleSheet.create({
   },
   machrushText: {
     fontSize: 40,
+    lineHeight: 52,
     fontWeight: '600',
     color: '#0055CC',
     letterSpacing: 1,
@@ -363,9 +363,8 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
-    height: SHEET_HEIGHT,
     paddingHorizontal: 16,
-    paddingBottom: 0,
+    paddingBottom: 16,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     backgroundColor: '#ffffff',
@@ -404,6 +403,7 @@ const styles = StyleSheet.create({
     color: '#4a4a4a',
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(24),
+    lineHeight: fs(32),
     textAlign : 'center',
     letterSpacing : -1
   },
@@ -411,10 +411,13 @@ const styles = StyleSheet.create({
     color: '#777777',
     fontFamily: 'Poppins_400Regular',
     fontSize: fs(18),
+    lineHeight: fs(27),
     textAlign : 'center',
   },
   footer: {
-    marginTop: 'auto',
+    position: 'absolute',
+    left: 16,
+    right: 16,
     gap: 24,
   },
   dotsContainer : {
@@ -440,9 +443,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    position : 'absolute',
-    bottom : 0,
-
+    width: '100%',
   },
   textButton: {
     width: 120,
@@ -459,7 +460,7 @@ const styles = StyleSheet.create({
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(16),
-    lineHeight : 16,
+    lineHeight : fs(22),
     letterSpacing: -0.5,
     width : '100%',
     textAlign : 'center'
@@ -477,7 +478,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(16),
-    lineHeight: 16,
+    lineHeight: fs(22),
     letterSpacing: -0.5,
     width : '100%', 
     textAlign : 'center'

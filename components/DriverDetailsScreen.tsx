@@ -15,6 +15,7 @@ import { Colors } from '@/lib/theme';
 
 const backImage = require('@/assets/images/profile/back.png');
 const uploadIcon = require('@/assets/images/uploadIcon.png');
+const CloseButton = require('@/assets/images/Close button.png');
 import { fs, hit, rs, vs } from '@/lib/responsive';
 
 interface DriverDetailsScreenProps {
@@ -149,8 +150,9 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
       setIsLoading(false);
     }
   };
+  
 
-  return (
+  return ( 
     <SafeAreaView style={styles.container}>
       <View style={styles.statusSpacer} />
 
@@ -297,7 +299,7 @@ const DocumentUploadItem: React.FC<DocumentUploadItemProps> = ({
               onPress={onRemove}
               disabled={isLoading}
             >
-              <Text style={styles.removeButtonIcon}>✕</Text>
+              <Image source={CloseButton} style={styles.removeButtonIcon}/>
             </Pressable>
           </View>
         ) : (
@@ -530,20 +532,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -1,
     right: -5,
-    width: 25,
-    height: 25,
-    borderRadius: 50,
-    backgroundColor: '#d00416',
-    justifyContent: 'center',
-    alignItems: 'center',
     zIndex: 10,
       elevation: 5, // Android
   },
   removeButtonIcon: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'white',
-    fontFamily: 'Poppins',
+    height : 20,
+    width : 20
   },
 
   // Continue Button
@@ -564,7 +558,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    lineHeight: 16,
+    lineHeight: 20,
     letterSpacing: -0.5,
   },
 });

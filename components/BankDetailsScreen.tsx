@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState  , useRef} from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,10 @@ import {
   Image,
   ScrollView,
   Modal,
-  FlatList,
+  Animated, 
+  PanResponder
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
 
 const backImage = require('@/assets/images/profile/back.png');
@@ -47,11 +49,13 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
   initialData,
   onDraftChange,
 }) => {
+  const insets = useSafeAreaInsets();
   const [bankName, setBankName] = useState(initialData?.bankName || '');
   const [accountNumber, setAccountNumber] = useState(initialData?.accountNumber || '');
   const [ifscCode, setIfscCode] = useState(initialData?.ifscCode || '');
   const [upiId, setUpiId] = useState(initialData?.upiId || '');
   const [showBankModal, setShowBankModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     onDraftChange?.({
@@ -69,7 +73,11 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
 
   const isFormValid = bankName && accountNumber && ifscCode;
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
+    if (isSubmitting) {
+      return;
+    }
+
     if (!isFormValid) {
       alert('Please fill in all required fields');
       return;
@@ -88,14 +96,82 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
     }
 
     if (onContinue) {
-      onContinue({
-        bankName,
-        accountNumber,
-        ifscCode: ifscCode.toUpperCase(),
-        upiId,
-      });
+      setIsSubmitting(true);
+      try {
+        await onContinue({
+          bankName,
+          accountNumber,
+          ifscCode: ifscCode.toUpperCase(),
+          upiId,
+        });
+      } catch (error) {
+        setIsSubmitting(false);
+        throw error;
+      }
     }
   };
+  
+
+  // Drag Modal 
+
+    const translateY = useRef(
+    new Animated.Value(500)
+  ).current;
+
+  useEffect(() => {
+    if (showBankModal) {
+      translateY.setValue(500);
+
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [showBankModal]);
+
+  const handleClose = () => {
+    Animated.timing(translateY, {
+      toValue: 500,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowBankModal(false)
+    });
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+
+      onMoveShouldSetPanResponder: (
+        _,
+        gestureState
+      ) => Math.abs(gestureState.dy) > 5,
+
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          translateY.setValue(
+            gestureState.dy
+          );
+        }
+      },
+
+      onPanResponderRelease: (
+        _,
+        gestureState
+      ) => {
+        if (gestureState.dy > 120) {
+          handleClose();
+        } else {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+    })
+  ).current;
 
   return (
     <View style={styles.container}>
@@ -189,16 +265,17 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
 
         {/* Continue Button */}
         <Pressable
-          style={[styles.continueButton, !isFormValid && styles.buttonDisabled]}
+          style={[styles.continueButton, (!isFormValid || isSubmitting) && styles.buttonDisabled]}
           onPress={handleContinue}
-          disabled={!isFormValid}
+          disabled={!isFormValid || isSubmitting}
         >
-          <Text style={styles.buttonText}>Continue</Text>
+          <Text style={styles.buttonText}>{isSubmitting ? 'Processing...' : 'Continue'}</Text>
         </Pressable>
 
       </ScrollView>
 
       
+
 
       {/* Bank Selection Modal */}
       <Modal
@@ -209,30 +286,51 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
       >
         <Pressable
           style={styles.modalOverlay}
-          onPress={() => setShowBankModal(false)}
+          onPress={handleClose}
         >
-          <View style={styles.modalContent}>
+
+
+           <Animated.View
+          {...panResponder.panHandlers}
+          style={[
+            styles.modalContent,
+            {
+              transform: [
+                { translateY },
+              ],
+            },
+          ]}
+        >
+
+
+          {/* <Pressable
+            style={[styles.modalContent, { paddingBottom: Math.max(insets.bottom + 16, 32) }]}
+            onPress={(event) => event.stopPropagation()}
+          > */}
+            <View style={styles.sheetHeader}>
+              <View style={styles.dragHandle} />
+            </View>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Bank</Text>
-              <Pressable onPress={() => setShowBankModal(false)}>
-                <Text style={styles.closeIcon}>✕</Text>
-              </Pressable>
+            
             </View>
 
-            <FlatList
-              data={BANK_LIST}
-              keyExtractor={(item) => item}
-              scrollEnabled={false}
-              renderItem={({ item }) => (
+            <ScrollView
+              style={styles.bankOptionsScroll}
+              contentContainerStyle={styles.bankOptionsContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {BANK_LIST.map((item) => (
                 <Pressable
+                  key={item}
                   style={styles.modalOption}
                   onPress={() => handleBankSelect(item)}
                 >
                   <Text style={styles.modalOptionText}>{item}</Text>
                 </Pressable>
-              )}
-            />
-          </View>
+              ))}
+            </ScrollView>
+         </Animated.View>
         </Pressable>
       </Modal>
     </View>
@@ -394,7 +492,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    lineHeight: 16,
+    lineHeight: 20,
     letterSpacing: -0.5,
   },
   navigation: {
@@ -412,7 +510,7 @@ const styles = StyleSheet.create({
   // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.28)',
     justifyContent: 'flex-end',
   },
   modalContent: {
@@ -420,17 +518,28 @@ const styles = StyleSheet.create({
     maxWidth: 720,
     alignSelf: 'center',
     backgroundColor: Colors.neutral100,
-    borderTopLeftRadius: Radius.lg,
-    borderTopRightRadius: Radius.lg,
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.lg,
-    maxHeight: '70%',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    maxHeight: '72%',
+  },
+  sheetHeader: {
+    width: '100%',
+    alignItems: 'center',
+    padding: 16,
+  },
+  dragHandle: {
+    width: 32,
+    height: 4,
+    borderRadius: 100,
+    backgroundColor: '#79747e',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: Spacing.md,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.neutral300,
   },
@@ -443,6 +552,12 @@ const styles = StyleSheet.create({
   closeIcon: {
     fontSize: 24,
     color: Colors.neutral800,
+  },
+  bankOptionsScroll: {
+    width: '100%',
+  },
+  bankOptionsContent: {
+    paddingTop: 8,
   },
   modalOption: {
     paddingVertical: Spacing.md,
@@ -459,3 +574,4 @@ const styles = StyleSheet.create({
 });
 
 export default BankDetailsScreen;
+

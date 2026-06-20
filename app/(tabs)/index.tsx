@@ -52,6 +52,34 @@ type LatLng = {
 const DRIVER_ONLINE_MAX_DURATION_MS = 12 * 60 * 60 * 1000;
 const AVERAGE_CITY_SPEED_KMPH = 30;
 
+const getHomeAuthContext = async () => {
+  const [storedUid, storedIdToken] = await Promise.all([
+    AsyncStorage.getItem('firebaseUid'),
+    AsyncStorage.getItem('firebaseIdToken'),
+  ]);
+  const currentUser = auth.currentUser;
+  const uid = currentUser?.uid || storedUid;
+  let idToken = storedIdToken;
+
+  if (currentUser) {
+    const refreshedToken = await currentUser.getIdToken().catch(() => null);
+    if (refreshedToken) {
+      idToken = refreshedToken;
+      await AsyncStorage.multiSet([
+        ['firebaseUid', currentUser.uid],
+        ['firebaseIdToken', refreshedToken],
+      ]);
+    }
+  }
+
+  return { uid, idToken };
+};
+
+const getDeliveryHeaders = (idToken?: string | null, includeJson = false) => ({
+  ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+  ...(includeJson ? { 'Content-Type': 'application/json' } : {}),
+});
+
 const jobRequests = [
   {
     id: 'job-1',
@@ -779,17 +807,22 @@ export default function HomeScreen() {
           if (!hasLoadedJobsRef.current) {
             setIsLoadingJobs(true);
           }
-          const [storedUid, storedIdToken] = await Promise.all([
-            AsyncStorage.getItem('firebaseUid'),
-            AsyncStorage.getItem('firebaseIdToken'),
-          ]);
-          const uid = auth.currentUser?.uid || storedUid;
+          const { uid, idToken } = await getHomeAuthContext();
           let driverVehicleType = '';
           let openDeliveries: OpenDelivery[] = [];
           let driverDeliveries: OpenDelivery[] = [];
 
+          if (!uid) {
+            if (isActive) {
+              setJobRequestList([]);
+              setTodayTotalEarnings(formatCurrency(0));
+              setHasTripInProgress(false);
+            }
+            return;
+          }
+
           if (uid) {
-            const driverProfile = await getDriverProfile(uid, storedIdToken).catch((error) => {
+            const driverProfile = await getDriverProfile(uid, idToken).catch((error) => {
               console.error('Error loading driver vehicle type:', error);
               return null;
             });
@@ -798,7 +831,10 @@ export default function HomeScreen() {
 
           if (uid) {
             const driverResponse = await fetch(
-              `${getApiBaseUrl()}/api/deliveries/driver/${encodeURIComponent(uid)}?type=all`
+              `${getApiBaseUrl()}/api/deliveries/driver/${encodeURIComponent(uid)}?type=all`,
+              {
+                headers: getDeliveryHeaders(idToken),
+              }
             );
             const driverBody = (await driverResponse.json().catch(() => null)) as {
               success?: boolean;
@@ -815,7 +851,10 @@ export default function HomeScreen() {
 
           if (driverVehicleType) {
             const openResponse = await fetch(
-              `${getApiBaseUrl()}/api/deliveries/open?vehicleType=${encodeURIComponent(driverVehicleType)}&driverId=${encodeURIComponent(uid || '')}`
+              `${getApiBaseUrl()}/api/deliveries/open?vehicleType=${encodeURIComponent(driverVehicleType)}&driverId=${encodeURIComponent(uid)}`,
+              {
+                headers: getDeliveryHeaders(idToken),
+              }
             );
             const openBody = (await openResponse.json().catch(() => null)) as {
               success?: boolean;
@@ -1069,8 +1108,7 @@ export default function HomeScreen() {
     setIsRejectingJob(true);
 
     try {
-      const [storedUid] = await Promise.all([AsyncStorage.getItem('firebaseUid')]);
-      const uid = auth.currentUser?.uid || storedUid;
+      const { uid, idToken } = await getHomeAuthContext();
 
       if (!uid) {
         showAlert('Login required', 'Please login again before rejecting this trip.');
@@ -1081,9 +1119,7 @@ export default function HomeScreen() {
         `${getApiBaseUrl()}/api/deliveries/${encodeURIComponent(pendingRejectedJob.deliveryId)}/reject`,
         {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: getDeliveryHeaders(idToken, true),
           body: JSON.stringify({ driverId: uid }),
         }
       );
@@ -1377,7 +1413,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(14, 12, 15),
     fontWeight: '500',
-    lineHeight: fs(21),
     textAlign: 'center',
   },
   statusKnob: {
@@ -1618,7 +1653,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    lineHeight: fs(18),
+    lineHeight: 22,
     letterSpacing: -0.5,
   },
   acceptButton: {
@@ -1718,7 +1753,7 @@ const styles = StyleSheet.create({
     fontSize: fs(24, 20, 26),
     fontWeight: '500',
     textAlign: 'center',
-    lineHeight: fs(26),
+    // lineHeight: fs(26),
     letterSpacing: -1,
   },
   confirmDescription: {
@@ -1750,7 +1785,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    lineHeight: fs(18),
+    lineHeight: 22,
     letterSpacing: -0.5,
   },
   confirmYesButton: {
@@ -1775,7 +1810,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    lineHeight: fs(18),
+    lineHeight: 22,
     letterSpacing: -0.5,
   },
 });

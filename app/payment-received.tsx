@@ -812,7 +812,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    lineHeight: 16,
+    lineHeight: 20,
     letterSpacing: -0.5,
     color: '#d00416',
     textAlign: 'center',

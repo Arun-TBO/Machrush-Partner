@@ -4,7 +4,7 @@
     "slug": "macrush-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/DriverAppIcon.png",
     "backgroundColor": "#eff2f6",
     "scheme": "macrushmobile",
     "userInterfaceStyle": "automatic",
@@ -17,7 +17,7 @@
       "backgroundColor": "#eff2f6",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "foregroundImage": "./assets/images/DriverAppIcon.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },

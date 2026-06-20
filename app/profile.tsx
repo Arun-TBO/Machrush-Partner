@@ -1,4 +1,4 @@
-import React , {useEffect , useRef} from 'react';
+import React , {useEffect , useState , useRef} from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Image,
@@ -10,8 +10,8 @@ import {
   StyleSheet,
   Text,
   View,
-  PanResponder,
-  Animated
+  Animated,
+  PanResponder
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -51,7 +51,7 @@ const menuRows = [
   { id: 'report', label: 'Report a problem', icon: reportImage, iconSize: 24 },
   { id: 'help', label: 'Get Help', icon: helpImage, iconSize: 24 },
   { id: 'terms', label: 'Terms & conditions', icon: termsImage, iconSize: 24 },
-  { id: 'Payment policy', label: 'Payment policy', icon: Paymentpolicy, iconSize: 21 },
+  { id: 'Payment policy', label: 'Payment policy', icon: Paymentpolicy, iconSize: 24 },
 ];
 
 type DeliveryRecord = {
@@ -92,12 +92,14 @@ function TopNav() {
 function StatCard({
   title,
   children,
+  onPress,
 }: {
   title: string;
   children: React.ReactNode;
+  onPress?: () => void;
 }) {
   return (
-    <Pressable style={styles.statCard} accessibilityRole="button">
+    <Pressable style={styles.statCard} accessibilityRole="button" onPress={onPress}>
       <View style={styles.statHeader}>
         <Text style={styles.statTitle}>{title}</Text>
          {
@@ -162,88 +164,86 @@ function SupportModal({
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const sheetBottomPadding = Math.max(insets.bottom + 16, 32);
-    
-  const translateY = useRef(
-    new Animated.Value(500)
-  ).current;
-
-  useEffect(() => {
-    if (visible) {
-      translateY.setValue(500);
-
+   // Drag Modal 
+  
+      const translateY = useRef(
+      new Animated.Value(500)
+    ).current;
+  
+    useEffect(() => {
+      if (visible) {
+        translateY.setValue(500);
+  
+        Animated.timing(translateY, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      }
+    }, [visible]);
+  
+    const handleClose = () => {
       Animated.timing(translateY, {
-        toValue: 0,
-        duration: 300,
+        toValue: 500,
+        duration: 250,
         useNativeDriver: true,
-      }).start();
-    }
-  }, [visible]);
-
-  const handleClose = () => {
-    Animated.timing(translateY, {
-      toValue: 500,
-      duration: 250,
-      useNativeDriver: true,
-    }).start(() => {
-      onClose();
-    });
-  };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-
-      onMoveShouldSetPanResponder: (
-        _,
-        gestureState
-      ) => Math.abs(gestureState.dy) > 5,
-
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          translateY.setValue(
-            gestureState.dy
-          );
-        }
-      },
-
-      onPanResponderRelease: (
-        _,
-        gestureState
-      ) => {
-        if (gestureState.dy > 120) {
-          handleClose();
-        } else {
-          Animated.spring(translateY, {
-            toValue: 0,
-            useNativeDriver: true,
-          }).start();
-        }
-      },
-    })
-  ).current;
-
+      }).start(() => {
+       onClose()
+      });
+    };
+  
+    const panResponder = useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+  
+        onMoveShouldSetPanResponder: (
+          _,
+          gestureState
+        ) => Math.abs(gestureState.dy) > 5,
+  
+        onPanResponderMove: (_, gestureState) => {
+          if (gestureState.dy > 0) {
+            translateY.setValue(
+              gestureState.dy
+            );
+          }
+        },
+  
+        onPanResponderRelease: (
+          _,
+          gestureState
+        ) => {
+          if (gestureState.dy > 120) {
+            handleClose();
+          } else {
+            Animated.spring(translateY, {
+              toValue: 0,
+              useNativeDriver: true,
+            }).start();
+          }
+        },
+      })
+    ).current;
+  
 
   return (
     <Modal visible={visible} transparent statusBarTranslucent  onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={handleClose}>
         
-         
-         <Animated.View
-          {...panResponder.panHandlers}
-          style={[
-            styles.supportSheet,
-            {
-              paddingBottom: sheetBottomPadding,
-              transform: [
-                { translateY },
-              ],
-            },
-          ]}
-          
-        >
+          <Animated.View
+                  {...panResponder.panHandlers}
+                  style={[
+                    styles.supportSheet,
+                    {
+                      transform: [
+                        { translateY },
+                      ],
+                    },
+                  ]}
+                >
         
-        
+
+
         {/* <Pressable
           style={[styles.supportSheet, { paddingBottom: insets.bottom + 16 }]}
           onPress={(event) => event.stopPropagation()}
@@ -279,87 +279,85 @@ function LogoutModal({
   onLogout: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const sheetBottomPadding = Math.max(insets.bottom + 16, 32);
+   // Drag Modal 
   
-  const translateY = useRef(
-    new Animated.Value(500)
-  ).current;
-
-  useEffect(() => {
-    if (visible) {
-      translateY.setValue(500);
-
+      const translateY = useRef(
+      new Animated.Value(500)
+    ).current;
+  
+    useEffect(() => {
+      if (visible) {
+        translateY.setValue(500);
+  
+        Animated.timing(translateY, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      }
+    }, [visible]);
+  
+    const handleClose = () => {
       Animated.timing(translateY, {
-        toValue: 0,
-        duration: 300,
+        toValue: 500,
+        duration: 250,
         useNativeDriver: true,
-      }).start();
-    }
-  }, [visible]);
-
-  const handleClose = () => {
-    Animated.timing(translateY, {
-      toValue: 500,
-      duration: 250,
-      useNativeDriver: true,
-    }).start(() => {
-      onClose();
-    });
-  };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-
-      onMoveShouldSetPanResponder: (
-        _,
-        gestureState
-      ) => Math.abs(gestureState.dy) > 5,
-
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          translateY.setValue(
-            gestureState.dy
-          );
-        }
-      },
-
-      onPanResponderRelease: (
-        _,
-        gestureState
-      ) => {
-        if (gestureState.dy > 120) {
-          handleClose();
-        } else {
-          Animated.spring(translateY, {
-            toValue: 0,
-            useNativeDriver: true,
-          }).start();
-        }
-      },
-    })
-  ).current;
-
-
+      }).start(() => {
+        onClose()
+      });
+    };
+  
+    const panResponder = useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+  
+        onMoveShouldSetPanResponder: (
+          _,
+          gestureState
+        ) => Math.abs(gestureState.dy) > 5,
+  
+        onPanResponderMove: (_, gestureState) => {
+          if (gestureState.dy > 0) {
+            translateY.setValue(
+              gestureState.dy
+            );
+          }
+        },
+  
+        onPanResponderRelease: (
+          _,
+          gestureState
+        ) => {
+          if (gestureState.dy > 120) {
+            handleClose();
+          } else {
+            Animated.spring(translateY, {
+              toValue: 0,
+              useNativeDriver: true,
+            }).start();
+          }
+        },
+      })
+    ).current;
+  
 
   return (
     <Modal visible={visible} transparent  statusBarTranslucent onRequestClose={onClose}>
-      <Pressable style={styles.modalBackdrop}  onPress={handleClose}>
-        
-          <Animated.View
-          {...panResponder.panHandlers}
-          style={[
-            styles.logoutSheet,
-            {
-              paddingBottom: sheetBottomPadding,
-              transform: [
-                { translateY },
-              ],
-            },
-          ]}
-          
-        >
-{/*         
+      <Pressable style={styles.modalBackdrop} onPress={handleClose}>
+
+         <Animated.View
+                  {...panResponder.panHandlers}
+                  style={[
+                    styles.logoutSheet,
+                    {
+                      transform: [
+                        { translateY },
+                      ],
+                    },
+                  ]}
+                >
+
+{/* 
         <Pressable
           style={[styles.logoutSheet, { paddingBottom: insets.bottom + 16 }]}
           onPress={(event) => event.stopPropagation()}
@@ -401,7 +399,6 @@ function LogoutModal({
 }
 
 export default function ProfileScreen() {
-  const insets = useSafeAreaInsets();
   const [isSupportVisible, setIsSupportVisible] = React.useState(false);
   const [isLogoutVisible, setIsLogoutVisible] = React.useState(false);
   const [profilePhotoUrl, setProfilePhotoUrl] = React.useState<string | null>(null);
@@ -567,6 +564,8 @@ export default function ProfileScreen() {
     setIsLogoutVisible(false);
     router.replace('/phone-number');
   };
+ 
+ 
 
   return (
     <SafeAreaView style={styles.container}>
@@ -611,7 +610,7 @@ export default function ProfileScreen() {
                 </View>
               </StatCard>
 
-              <StatCard title="Delivery's">
+              <StatCard title="Delivery's" onPress={() => router.push('/my-deliveries')}>
                
                 <View style={styles.deliveryValueRow}>
                   <Text style={styles.statValue} numberOfLines={1}>{completedDeliveryCount}</Text>
@@ -643,10 +642,11 @@ export default function ProfileScreen() {
             <Text style={styles.logoutText} numberOfLines={1}>Logout</Text>
           </Pressable>
         </View>
-
+         
+         
         <Text style={styles.poweredText}>Powered by thebrandopedia</Text>
       </ScrollView>
-
+ 
       <SupportModal visible={isSupportVisible} onClose={() => setIsSupportVisible(false)} />
       <LogoutModal
         visible={isLogoutVisible}
@@ -670,71 +670,71 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 720,
     alignSelf: 'center',
-    paddingBottom: 30,
+    paddingBottom: vs(30),
   },
   header: {
     backgroundColor: '#dbe6f7',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    borderBottomLeftRadius: rs(24),
+    borderBottomRightRadius: rs(24),
     overflow: 'hidden',
   },
   statusSpacer: {
-    height: 52,
+    height: vs(40),
   },
   topNav: {
-    minHeight: 64,
+    minHeight: vs(64),
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 4,
-    paddingVertical: 8,
+    paddingHorizontal: rs(4),
+    paddingVertical: vs(8),
   },
   backButton: {
-    width: 48,
-    height: 48,
+    width: hit(48),
+    height: hit(48),
     alignItems: 'center',
     justifyContent: 'center',
   },
   backIcon: {
-    width: 24,
-    height: 24,
+    width: rs(24),
+    height: rs(24),
   },
   topNavTitle: {
     flex: 1,
     minWidth: 0,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 20,
+    fontSize: fs(20),
     fontWeight: '500',
-    lineHeight: 32,
+    lineHeight: fs(32),
   },
   profileBlock: {
-    gap: 16,
-    paddingTop: 16,
-    paddingBottom: 22,
+    gap: vs(16),
+    paddingTop: vs(16),
+    paddingBottom: vs(22),
   },
   profileRow: {
     position: 'relative',
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingHorizontal: 16,
-    gap: 16,
+    paddingHorizontal: rs(16),
+    gap: rs(16),
   },
   identity: {
     flex: 1,
-    gap: 4,
+    gap: vs(4),
     minWidth: 0,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: rs(4),
   },
   driverName: {
     color: '#000000',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 24,
+    fontSize: fs(24),
     fontWeight: '500',
-    lineHeight: 32,
+    lineHeight: fs(32),
     letterSpacing: -1,
     flexShrink: 1,
   },
@@ -742,46 +742,46 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flexShrink: 1,
     fontFamily: 'Poppins',
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '500',
     color: '#1FC16B',
 
   },
   verifiedBadge: {
-    width: 24,
-    height: 24,
+    width: rs(24),
+    height: rs(24),
   },
   viewProfile: {
     color: '#0055cc',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '400',
-    lineHeight: 24,
+    lineHeight: fs(24),
   },
   avatarWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: rs(72),
+    height: rs(72),
+    borderRadius: rs(36),
     overflow: 'hidden',
     backgroundColor: '#ffffff',
   },
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: rs(72),
+    height: rs(72),
+    borderRadius: rs(36),
   },
   statsRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingHorizontal: 16,
-    gap: 4,
+    paddingHorizontal: rs(16),
+    gap: rs(4),
   },
   statCard: {
     flex: 1,
-    minHeight: 104,
-    borderRadius: 16,
+    minHeight: vs(104),
+    borderRadius: rs(16),
     backgroundColor: '#ffffff',
-    padding: 12,
+    padding: rs(12),
     justifyContent: 'space-between',
     overflow: 'hidden',
   },
@@ -797,33 +797,34 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 14,
+    fontSize: fs(14),
     fontWeight: '500',
-    lineHeight: 21,
+    lineHeight: fs(21),
   },
   statArrowCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: rs(23),
+    height: rs(23),
+    borderRadius: rs(11.5),
     borderWidth: 0.5,
-    borderColor: '#bbbbbb',
+    borderColor: '#c6c6c6',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#ffffff',
   },
   statArrowIcon: {
-    width: 20,
-    height: 20,
+    width: rs(14),
+    height: rs(14),
   },
   reviewValueRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: rs(4),
     minWidth: 0,
   },
   deliveryValueRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 1,
+    gap: rs(1),
     minWidth: 0,
   },
   statValue: {
@@ -831,40 +832,40 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 32,
+    fontSize: fs(32),
     fontWeight: '500',
-    lineHeight: 32,
+    lineHeight: fs(32),
   },
   starIcon: {
-    width: 24,
-    height: 24,
+    width: rs(24),
+    height: rs(24),
   },
   completedText: {
     minWidth: 0,
     flexShrink: 1,
     color: '#8e8e8e',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 12,
+    fontSize: fs(12),
     fontWeight: '400',
-    lineHeight: 18,
-    marginBottom: 1,
+    lineHeight: fs(18),
+    marginBottom: vs(1),
   },
   menuSection: {
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 24,
+    gap: vs(8),
+    paddingHorizontal: rs(16),
+    paddingTop: vs(16),
+    paddingBottom: vs(24),
    
   },
   menuRow: {
-    minHeight: 67,
+    minHeight: vs(67),
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-    borderRadius: 12,
+    gap: rs(16),
+    borderRadius: rs(12),
     backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingVertical: 21,
+    paddingHorizontal: rs(16),
+    paddingVertical: vs(21),
     overflow: 'hidden',
   
   },
@@ -874,33 +875,33 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '500',
-    lineHeight: 16,
+    lineHeight: fs(20),
     letterSpacing: -0.5,
   },
   chevronIcon: {
-    width: 24,
-    height: 24,
+    width: rs(24),
+    height: rs(24),
   
   },
   logoutRow: {
-    minHeight: 67,
+    minHeight: vs(67),
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    borderRadius: 12,
+    gap: rs(10),
+    borderRadius: rs(12),
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: '#e8e8e8',
     backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingVertical: 21,
+    paddingHorizontal: rs(16),
+    paddingVertical: vs(21),
     overflow: 'hidden',
   },
   logoutIcon: {
-    width: 24,
-    height: 24,
+    width: rs(24),
+    height: rs(24),
   },
   logoutText: {
     flex: 1,
@@ -908,15 +909,15 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: '#d00416',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '400',
-    lineHeight: 24,
+    lineHeight: fs(24),
   },
   poweredText: {
-    marginTop: 0,
+    marginTop: vs(0),
     color: '#8e8e8e',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '400',
 
     textAlign: 'center',
@@ -929,38 +930,38 @@ const styles = StyleSheet.create({
   supportSheet: {
     width: '100%',
     alignSelf: 'center',
-    gap: 24,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    gap: vs(24),
+    borderTopLeftRadius: rs(28),
+    borderTopRightRadius: rs(28),
     backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 16,
+    paddingHorizontal: rs(16),
+    paddingTop: vs(16),
+    paddingBottom: vs(16),
     overflow: 'hidden',
   },
   sheetHeader: {
     width: '100%',
     alignItems: 'center',
-    padding: 16,
+    padding: rs(16),
   },
   dragHandle: {
-    width: 32,
-    height: 4,
-    borderRadius: 100,
+    width: rs(32),
+    height: vs(4),
+    borderRadius: rs(100),
     backgroundColor: '#79747e',
   },
   supportIntro: {
     width: '100%',
     alignItems: 'center',
-    gap: 8,
+    gap: vs(8),
   },
   supportTitle: {
     width: '100%',
     color: '#29292b',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 24,
+    fontSize: fs(24),
     fontWeight: '500',
-    lineHeight: 24,
+    lineHeight: fs(24),
     letterSpacing: -1,
     textAlign: 'center',
   },
@@ -968,36 +969,36 @@ const styles = StyleSheet.create({
     width: '100%',
     color: '#606060',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 14,
+    fontSize: fs(14),
     fontWeight: '400',
-    lineHeight: 21,
+    lineHeight: fs(21),
     textAlign: 'center',
   },
   supportOptions: {
     width: '100%',
-    gap: 8,
+    gap: vs(8),
   },
   supportOption: {
     width: '100%',
-    minHeight: 76,
+    minHeight: vs(76),
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
-    borderRadius: 8,
+    gap: rs(10),
+    borderRadius: rs(8),
     backgroundColor: 'rgba(27, 124, 255, 0.1)',
-    padding: 12,
+    padding: rs(12),
     overflow: 'hidden',
   },
   supportOptionIcon: {
-    width: 52,
-    height: 52,
+    width: rs(52),
+    height: rs(52),
   },
   supportOptionText: {
     flex: 1,
     flexShrink: 1,
     justifyContent: 'center',
-    gap: 4,
-    minHeight: 52,
+    gap: vs(4),
+    minHeight: vs(52),
     minWidth: 0,
   },
   supportOptionLabel: {
@@ -1005,31 +1006,31 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: '#606060',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '400',
-    lineHeight: 24,
+    lineHeight: fs(24),
   },
   supportOptionValue: {
     minWidth: 0,
     flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '500',
-    lineHeight: 16,
+    lineHeight: fs(20),
     letterSpacing: -0.5,
   },
   logoutSheet: {
     width: '100%',
     alignSelf: 'center',
-    gap: 12,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    gap: vs(32),
+    borderTopLeftRadius: rs(28),
+    borderTopRightRadius: rs(28),
     backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 16,
-    
+    paddingHorizontal: rs(16),
+    paddingTop: vs(16),
+    paddingBottom: vs(16),
+    overflow: 'hidden',
   },
   logoutDialog: {
     width: '100%',
@@ -1037,20 +1038,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#e8e8e8',
-    borderRadius: 16,
-    paddingHorizontal: 8,
-    paddingTop: 4,
-    paddingBottom: 8,
+    borderRadius: rs(16),
+    paddingHorizontal: rs(8),
+    paddingTop: vs(4),
+    paddingBottom: vs(8),
   },
   logoutHeader: {
     width: '100%',
     alignItems: 'center',
-    gap: 4,
+    gap: vs(4),
   },
   logoutTitle: {
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 24,
+    fontSize: fs(24),
     letterSpacing: -1,
     textAlign: 'center',
   },
@@ -1058,52 +1059,50 @@ const styles = StyleSheet.create({
     width: '100%',
     color: 'rgba(0, 0, 0, 0.75)',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: fs(16),
+    lineHeight: fs(24),
     textAlign: 'center',
   },
   logoutActions: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
+    justifyContent: 'space-around',
+    gap: rs(2),
   },
   goBackButton: {
-    width: 120,
-    minHeight: 48,
+    flex: 1,
+    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
     borderWidth: 1,
     borderColor: '#0055cc',
-    borderRadius: 8,
+    borderRadius: rs(8),
+    minHeight: hit(48)
   },
   goBackButtonText: {
-    width : 120,
+    flexShrink: 1,
     color: '#606060',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
-    lineHeight: 20,
-    letterSpacing: -0.5,  
-    textAlign: 'center',
+    fontSize: fs(16),
+    lineHeight: fs(19),
+    letterSpacing: -0.5,
   },
   confirmLogoutButton: {
-    flex: 1,
-    minHeight: 48,
+    flex: 1.8,
+    minHeight: hit(48),
+    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: rs(8),
     backgroundColor: '#d00416',
+
   },
   confirmLogoutButtonText: {
+    flexShrink: 1,
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
-    lineHeight: 20,
-    letterSpacing: -0.5,
+    fontSize: fs(16),
     textAlign: 'center',
   },
 });

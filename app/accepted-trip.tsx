@@ -655,7 +655,7 @@ function TopNav({
           style={styles.helpButton}
           onPress={onHelp}
         >
-          {/* <Image source={helpImage} style={styles.helpIcon} resizeMode="contain" /> */}
+          <Image source={helpImage} style={styles.helpIcon} resizeMode="contain" />
         </Pressable>
       </View>
     </View>
@@ -2421,7 +2421,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    lineHeight: 16,
+    lineHeight: 20,
     color: '#007f3c',
     letterSpacing: -0.5,
   },
@@ -2463,7 +2463,7 @@ const styles = StyleSheet.create({
   completedHomeText: {
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    lineHeight: 16,
+    lineHeight: 20,
     color: '#ffffff',
     letterSpacing: -0.5,
   },
@@ -2943,7 +2943,7 @@ otpBox: {
   cancelModalNoText: {
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    lineHeight: 16,
+    lineHeight: 20,
     letterSpacing: -0.5,
     color: '#606060',
     textAlign: 'center',
@@ -2961,7 +2961,7 @@ otpBox: {
   cancelModalSendText: {
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    lineHeight: 16,
+    lineHeight: 20,
     letterSpacing: -0.5,
     color: '#ffffff',
     textAlign: 'center',
@@ -3310,7 +3310,7 @@ otpBox: {
     flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    lineHeight: 16,
+    lineHeight: 20,
     letterSpacing: -0.5,
     color: '#d00416',
     textAlign: 'center',

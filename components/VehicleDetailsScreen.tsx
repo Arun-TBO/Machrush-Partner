@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState , useRef } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,10 @@ import {
   ScrollView,
   Image,
   Modal,
-  FlatList,
+  Animated,
+  PanResponder
 } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
@@ -21,6 +23,7 @@ const openedBodyImage = require('@/assets/images/vehicle-details/opened-body.png
 const chevrondown = require('@/assets/images/chevron-down.png');
 const opennonactivetrack = require('@/assets/images/open-non-active-track.png');
 const bodynonactivetrak = require('@/assets/images/body-non-active-trak.png');
+const CloseButton = require('@/assets/images/Close button.png');
 
 interface VehicleDetailsScreenProps {
   onContinue?: (vehicleData: VehicleDetailsData) => void;
@@ -86,6 +89,10 @@ const getVehicleCapacity = (vehicle: Record<string, any>) => {
   return capacity ? capacity.toString() : '';
 };
 
+const isPdfFile = (uri: string | null) => {
+  return Boolean(uri && /\.pdf($|\?)/i.test(uri));
+};
+
 export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   onContinue,
   onBack,
@@ -93,7 +100,9 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   onDraftChange,
 }) => {
   const insets = useSafeAreaInsets();
-  const [vehicleNumber, setVehicleNumber] = useState(initialData?.vehicleNumber || '');
+  const [vehicleNumber, setVehicleNumber] = useState(
+    (initialData?.vehicleNumber || '').toUpperCase()
+  );
   const [vehicleType, setVehicleType] = useState(initialData?.vehicleType || '');
   const [vehicleCapacity, setVehicleCapacity] = useState(initialData?.vehicleCapacity || '');
   const [selectedBodyType, setSelectedBodyType] = useState(initialData?.bodyType || '');
@@ -189,23 +198,19 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
     return true;
   };
 
-  // Pick single file for RC book or Insurance
+  // Pick a photo or PDF for RC book or Insurance
   const pickSingleFile = async (type: 'rc' | 'insurance') => {
-    const hasPermission = await requestMediaPermissions();
-    if (!hasPermission) return;
-
     try {
       setIsLoading(true);
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images', 'videos'],
-        allowsEditing: false,
-        quality: 0.8,
-        aspect: [1, 1],
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/*', 'application/pdf'],
+        multiple: false,
+        copyToCacheDirectory: true,
       });
 
-      if (!result.canceled) {
+      if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
-        const fileName = asset.uri.split('/').pop() || 'file';
+        const fileName = asset.name || asset.uri.split('/').pop() || 'file';
         
         if (type === 'rc') {
           setRcBookUri(asset.uri);
@@ -216,7 +221,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
         }
       }
     } catch (error) {
-      showAlert('Error', 'Failed to pick file');
+      showAlert('Error', 'Failed to pick photo or PDF');
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -304,6 +309,67 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
     }
   };
 
+  // Drag Modal 
+
+  const translateY = useRef(
+      new Animated.Value(500)
+    ).current;
+  
+    useEffect(() => {
+      if (showVehicleTypeModal) {
+        translateY.setValue(500);
+  
+        Animated.timing(translateY, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      }
+    }, [showVehicleTypeModal]);
+  
+    const handleClose = () => {
+      Animated.timing(translateY, {
+        toValue: 500,
+        duration: 250,
+        useNativeDriver: true,
+      }).start(() => {
+        setShowVehicleTypeModal(false)
+      });
+    };
+  
+    const panResponder = useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+  
+        onMoveShouldSetPanResponder: (
+          _,
+          gestureState
+        ) => Math.abs(gestureState.dy) > 5,
+  
+        onPanResponderMove: (_, gestureState) => {
+          if (gestureState.dy > 0) {
+            translateY.setValue(
+              gestureState.dy
+            );
+          }
+        },
+  
+        onPanResponderRelease: (
+          _,
+          gestureState
+        ) => {
+          if (gestureState.dy > 120) {
+            handleClose();
+          } else {
+            Animated.spring(translateY, {
+              toValue: 0,
+              useNativeDriver: true,
+            }).start();
+          }
+        },
+      })
+    ).current;
+
   return (
     <View style={styles.container}>
       <View style={styles.statusSpacer} />
@@ -344,7 +410,8 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
             placeholder="e.g. TN 01 AB 1234"
             placeholderTextColor={Colors.neutral800}
             value={vehicleNumber}
-            onChangeText={setVehicleNumber}
+            onChangeText={(value) => setVehicleNumber(value.toUpperCase())}
+            autoCapitalize="characters"
           />
         </View>
 
@@ -443,13 +510,19 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
               </Pressable>
             ) : (
               <View style={styles.uploadedImageContainer}>
-                          <Image source={{ uri: rcBookUri }} style={styles.uploadedImage} />
+                          {isPdfFile(rcBookUri) ? (
+                            <View style={styles.pdfPreview}>
+                              <Text style={styles.pdfPreviewText}>PDF</Text>
+                            </View>
+                          ) : (
+                            <Image source={{ uri: rcBookUri }} style={styles.uploadedImage} />
+                          )}
                           <Pressable
                             style={styles.removeButton}
                             onPress={removeRcBook}
                             disabled={isLoading}
                           >
-                            <Text style={styles.removeButtonIcon}>✕</Text>
+                            <Image source={CloseButton} style={styles.removeButtonIcon} />
                           </Pressable>
                         </View>
             )}
@@ -478,13 +551,19 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
               </Pressable>
             ) : (
               <View style={styles.uploadedImageContainer}>
-                          <Image source={{ uri: insuranceUri }} style={styles.uploadedImage} />
+                          {isPdfFile(insuranceUri) ? (
+                            <View style={styles.pdfPreview}>
+                              <Text style={styles.pdfPreviewText}>PDF</Text>
+                            </View>
+                          ) : (
+                            <Image source={{ uri: insuranceUri }} style={styles.uploadedImage} />
+                          )}
                           <Pressable
                             style={styles.removeButton}
                             onPress={removeInsurance}
                             disabled={isLoading}
                           >
-                            <Text style={styles.removeButtonIcon}>✕</Text>
+                            <Image source={CloseButton} style={styles.removeButtonIcon} />
                           </Pressable>
                         </View>
             )}
@@ -508,7 +587,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                       onPress={() => removeVehiclePhoto(slotIndex)}
                       disabled={isLoading}
                     >
-                      <Text style={styles.removePhotoIcon}>x</Text>
+                      <Image source={CloseButton} style={styles.removePhotoIcon} />
                     </Pressable>
                   </View>
                 ) : (
@@ -550,12 +629,27 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
           style={styles.modalOverlay}
           onPress={() => setShowVehicleTypeModal(false)}
         >
-          <View style={styles.modalContent}>
+
+          <Animated.View
+                   {...panResponder.panHandlers}
+                  style={[
+                    styles.modalContent,
+                    {
+                        paddingBottom: Math.max(insets.bottom + 16, 32),
+                        transform: [
+                          { translateY },
+                        ],
+                     },
+                   ]}
+                 >
+         
+
+            <View style={styles.sheetHeader}>
+              <View style={styles.dragHandle} />
+            </View>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Vehicle Type</Text>
-              <Pressable onPress={() => setShowVehicleTypeModal(false)}>
-                <Text style={styles.closeIcon}>x</Text>
-              </Pressable>
+           
             </View>
 
             {isLoadingVehicles ? (
@@ -563,12 +657,14 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
             ) : vehicleOptions.length === 0 ? (
               <Text style={styles.modalEmptyText}>No vehicle types found</Text>
             ) : (
-              <FlatList
-                data={vehicleOptions}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-                renderItem={({ item }) => (
+              <ScrollView
+                style={styles.modalOptionsScroll}
+                contentContainerStyle={styles.modalOptionsContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {vehicleOptions.map((item) => (
                   <Pressable
+                    key={item.id}
                     style={styles.modalOption}
                     onPress={() => handleVehicleTypeSelect(item)}
                   >
@@ -579,10 +675,10 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                       ) : null}
                     </View>
                   </Pressable>
-                )}
-              />
+                ))}
+              </ScrollView>
             )}
-          </View>
+         </Animated.View>
         </Pressable>
       </Modal>
       {alertModal}
@@ -867,12 +963,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   uploadedImageContainer: {
-    width : 80,
-    position: 'relative',
-    alignSelf: 'flex-start',
-    overflow: 'visible',
+    width: 64,
+    height: 64,
+   position: 'relative',
+  alignSelf: 'flex-start',
+  overflow: 'visible',
     borderRadius: 12,
-    height: 86,
   },
   vehiclePhotoPanel: {
     flex: 1,
@@ -932,23 +1028,15 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins',
   },
   removePhotoButton: {
-   position: 'absolute',
+    position: 'absolute',
     top: -2,
     right: -5,
-    width: 25,
-    height: 25,
-    borderRadius: 50,
-    backgroundColor: '#d00416',
-    justifyContent: 'center',
-    alignItems: 'center',
     zIndex: 10,
     elevation: 5, // Android
   },
   removePhotoIcon: {
-    fontSize: 16,
-    fontWeight: '400',
-    color: 'white',
-    fontFamily: 'Poppins',
+    width: 20,
+    height: 20,
   },
 
   // Continue Button
@@ -970,14 +1058,14 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    lineHeight: 16,
+    lineHeight: 20,
     letterSpacing: -0.5,
   },
 
   // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.28)',
     justifyContent: 'flex-end',
   },
   modalContent: {
@@ -985,17 +1073,28 @@ const styles = StyleSheet.create({
     maxWidth: 720,
     alignSelf: 'center',
     backgroundColor: Colors.neutral100,
-    borderTopLeftRadius: Radius.lg,
-    borderTopRightRadius: Radius.lg,
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.lg,
-    maxHeight: '70%',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    maxHeight: '72%',
+  },
+  sheetHeader: {
+    width: '100%',
+    alignItems: 'center',
+    padding: 16,
+  },
+  dragHandle: {
+    width: 32,
+    height: 4,
+    borderRadius: 100,
+    backgroundColor: '#79747e',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: Spacing.md,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.neutral300,
   },
@@ -1008,6 +1107,12 @@ const styles = StyleSheet.create({
   closeIcon: {
     fontSize: 24,
     color: Colors.neutral800,
+  },
+  modalOptionsScroll: {
+    width: '100%',
+  },
+  modalOptionsContent: {
+    paddingTop: 8,
   },
   modalOption: {
     paddingVertical: Spacing.md,
@@ -1045,24 +1150,32 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 12,
   },
+  pdfPreview: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d2d2d2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pdfPreviewText: {
+    color: '#0055cc',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 12,
+    fontWeight: '500',
+  },
   removeButton: {
     position: 'absolute',
     top: -1,
     right: -5,
-    width: 25,
-    height: 25,
-    borderRadius: 50,
-    backgroundColor: '#d00416',
-    justifyContent: 'center',
-    alignItems: 'center',
     zIndex: 10,
-      elevation: 5, // Android
+    elevation: 5, // Android
   },
   removeButtonIcon: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'white',
-    fontFamily: 'Poppins',
+    width: 20,
+    height: 20,
   },
     vehicleImagePlaceholder: {
     width: '100%',
@@ -1073,3 +1186,4 @@ const styles = StyleSheet.create({
 });
 
 export default VehicleDetailsScreen;
+

@@ -7,6 +7,7 @@ import 'react-native-reanimated';
 import { useEffect, useState } from 'react';
 import { Text, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { WalkthroughScreen } from '@/components/WalkthroughScreen';
@@ -17,7 +18,7 @@ import { getVerificationStatus } from '@/lib/firestoreOnboardingService';
 import '@/lib/firebase';
 
 const APP_BACKGROUND = '#eff2f6';
-const DEFAULT_FONT_STYLE = { fontFamily: 'Poppins_400Regular' };
+const DEFAULT_FONT_STYLE = { fontFamily: 'Poppins_400Regular', includeFontPadding: true };
 
 SystemUI.setBackgroundColorAsync(APP_BACKGROUND);
 
@@ -156,35 +157,43 @@ export default function RootLayout() {
   }
 
   if (isAccountSuspended) {
-    return <SuspendedScreen />;
+    return (
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <SuspendedScreen />
+      </SafeAreaProvider>
+    );
   }
 
   if (showWalkthrough) {
     return (
-      <WalkthroughScreen
-        onComplete={handleWalkthroughComplete}
-        onSkip={handleWalkthroughSkip}
-      />
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <WalkthroughScreen
+          onComplete={handleWalkthroughComplete}
+          onSkip={handleWalkthroughSkip}
+        />
+      </SafeAreaProvider>
     );
   }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? appDarkTheme : appLightTheme}>
-      <Stack screenOptions={{ contentStyle: { backgroundColor: APP_BACKGROUND } }}>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="profile" options={{ headerShown: false }} />
-        <Stack.Screen name="documents" options={{ headerShown: false }} />
-        <Stack.Screen name="bank-details" options={{ headerShown: false }} />
-        <Stack.Screen name="vehicle-details" options={{ headerShown: false }} />
-        <Stack.Screen name="my-deliveries" options={{ headerShown: false }} />
-        <Stack.Screen name="accepted-trip" options={{ headerShown: false }} />
-        <Stack.Screen name="payment-received" options={{ headerShown: false }} />
-        <Stack.Screen name="payment-pending" options={{ headerShown: false }} />
-        <Stack.Screen name="report-problem" options={{ headerShown: false }} />
-        <Stack.Screen name="phone-number" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+      <ThemeProvider value={colorScheme === 'dark' ? appDarkTheme : appLightTheme}>
+        <Stack screenOptions={{ contentStyle: { backgroundColor: APP_BACKGROUND } }}>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="profile" options={{ headerShown: false }} />
+          <Stack.Screen name="documents" options={{ headerShown: false }} />
+          <Stack.Screen name="bank-details" options={{ headerShown: false }} />
+          <Stack.Screen name="vehicle-details" options={{ headerShown: false }} />
+          <Stack.Screen name="my-deliveries" options={{ headerShown: false }} />
+          <Stack.Screen name="accepted-trip" options={{ headerShown: false }} />
+          <Stack.Screen name="payment-received" options={{ headerShown: false }} />
+          <Stack.Screen name="payment-pending" options={{ headerShown: false }} />
+          <Stack.Screen name="report-problem" options={{ headerShown: false }} />
+          <Stack.Screen name="phone-number" options={{ headerShown: false }} />
+          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        </Stack>
+        <StatusBar style="auto" />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

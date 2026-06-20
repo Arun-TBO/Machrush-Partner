@@ -935,7 +935,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    lineHeight: 16,
+    lineHeight: 20,
     letterSpacing: -0.5,
     textAlign: 'center',
   },

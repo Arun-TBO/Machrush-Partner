@@ -70,6 +70,33 @@ const getApiBaseUrl = () => {
   return (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
 };
 
+const getDriverAuthContext = async () => {
+  const [storedUid, storedIdToken] = await Promise.all([
+    AsyncStorage.getItem('firebaseUid'),
+    AsyncStorage.getItem('firebaseIdToken'),
+  ]);
+  const currentUser = auth.currentUser;
+  const uid = currentUser?.uid || storedUid;
+  let idToken = storedIdToken;
+
+  if (currentUser) {
+    const refreshedToken = await currentUser.getIdToken().catch(() => null);
+    if (refreshedToken) {
+      idToken = refreshedToken;
+      await AsyncStorage.multiSet([
+        ['firebaseUid', currentUser.uid],
+        ['firebaseIdToken', refreshedToken],
+      ]);
+    }
+  }
+
+  return { uid, idToken };
+};
+
+const getDeliveryHeaders = (idToken?: string | null) => ({
+  ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+});
+
 const formatCurrency = (value: unknown) => {
   const amount = Number(value);
 
@@ -433,8 +460,7 @@ export default function MyDeliveriesScreen() {
           if (!hasLoadedDeliveriesRef.current) {
             setIsLoading(true);
           }
-          const storedUid = await AsyncStorage.getItem('firebaseUid');
-          const uid = auth.currentUser?.uid || storedUid;
+          const { uid, idToken } = await getDriverAuthContext();
 
           if (!uid) {
             if (isActive) {
@@ -444,7 +470,10 @@ export default function MyDeliveriesScreen() {
           }
 
           const response = await fetch(
-            `${getApiBaseUrl()}/api/deliveries/driver/${encodeURIComponent(uid)}?type=all`
+            `${getApiBaseUrl()}/api/deliveries/driver/${encodeURIComponent(uid)}?type=all`,
+            {
+              headers: getDeliveryHeaders(idToken),
+            }
           );
           const body = (await response.json().catch(() => null)) as {
             success?: boolean;
@@ -753,7 +782,7 @@ const styles = StyleSheet.create({
   dayLabel: {
     flex: 1,
     fontFamily: 'Poppins_400Regular',
-    fontSize: fs(14, 11, 15),
+    fontSize: fs(13),
     lineHeight: fs(21, 17, 22),
     color: '#606060',
     textAlign: 'center',

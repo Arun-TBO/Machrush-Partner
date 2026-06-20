@@ -429,7 +429,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
     fontSize: 16,
     fontWeight: '600',
-    lineHeight: 16,
+    lineHeight: 20,
     textAlign: 'center',
   },
   resendOtpTextDisabled: {
@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
     fontSize: 16,
     fontWeight: '600',
-    lineHeight: 16,
+    lineHeight: 20,
   },
   homeIndicator: {
     position: 'absolute',

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState , useRef } from 'react';
 import {
   Image,
   Modal,
@@ -8,6 +8,8 @@ import {
   StyleSheet,
   Text,
   View,
+  Animated,
+  PanResponder
 } from 'react-native';
 import { MaterialIcons, Octicons } from '@expo/vector-icons';
 import { getVerificationStatus } from '@/lib/firestoreOnboardingService';
@@ -108,6 +110,68 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
     verificationData?.rejectionReason ||
     'Your driving license photo is blurry. Please upload a clear photo showing all details.';
   const buttonLabel = isRejected ? 'Re-upload Documents' : 'Go to app';
+   
+
+  // drag Modal
+
+   const translateY = useRef(
+      new Animated.Value(500)
+    ).current;
+  
+    useEffect(() => {
+      if (showSupportModal) {
+        translateY.setValue(500);
+  
+        Animated.timing(translateY, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      }
+    }, [showSupportModal]);
+  
+    const handleClose = () => {
+      Animated.timing(translateY, {
+        toValue: 500,
+        duration: 250,
+        useNativeDriver: true,
+      }).start(() => {
+       setShowSupportModal(false)
+      });
+    };
+  
+    const panResponder = useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+  
+        onMoveShouldSetPanResponder: (
+          _,
+          gestureState
+        ) => Math.abs(gestureState.dy) > 5,
+  
+        onPanResponderMove: (_, gestureState) => {
+          if (gestureState.dy > 0) {
+            translateY.setValue(
+              gestureState.dy
+            );
+          }
+        },
+  
+        onPanResponderRelease: (
+          _,
+          gestureState
+        ) => {
+          if (gestureState.dy > 120) {
+            handleClose();
+          } else {
+            Animated.spring(translateY, {
+              toValue: 0,
+              useNativeDriver: true,
+            }).start();
+          }
+        },
+      })
+    ).current;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -205,11 +269,27 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
         animationType="slide"
         onRequestClose={() => setShowSupportModal(false)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setShowSupportModal(false)}>
+        <Pressable style={styles.modalOverlay} onPress={handleClose}>
+          
+          
+                     <Animated.View
+                    {...panResponder.panHandlers}
+                    style={[
+                      styles.supportSheet,
+                      {
+                        transform: [
+                          { translateY },
+                        ],
+                      },
+                    ]}
+                  >
+          
+          
+{/*           
           <Pressable
             style={[styles.supportSheet, { paddingBottom: insets.bottom + 16 }]}
             onPress={(event) => event.stopPropagation()}
-          >
+          > */}
             <View style={styles.supportSheetHeader}>
               <View style={styles.supportDragHandle} />
             </View>
@@ -242,7 +322,7 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
                 </View>
               </View>
             </View>
-          </Pressable>
+         </Animated.View>
         </Pressable>
       </Modal>
       {alertModal}
@@ -368,7 +448,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    lineHeight: 16,
+    lineHeight: 20,
     letterSpacing: -0.5,
   },
   actionMessage: {
@@ -418,7 +498,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    lineHeight: 16,
+    lineHeight: 20,
     letterSpacing: -0.5,
   },
   continueButtonTextActive: {
@@ -524,7 +604,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     fontWeight: '500',
-    lineHeight: 16,
+    lineHeight: 20,
     letterSpacing: -0.5,
   },
 });
