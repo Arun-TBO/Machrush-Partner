@@ -128,14 +128,12 @@ const styles = StyleSheet.create({
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
     fontSize: 24,
-    lineHeight: 32,
     textAlign: 'center',
   },
   message: {
     color: '#606060',
     fontFamily: 'Poppins_400Regular',
     fontSize: 16,
-    lineHeight: 24,
     textAlign: 'center',
   },
   actions: {
@@ -160,7 +158,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    lineHeight: 20,
     textAlign: 'center',
   },
   destructiveText: {
