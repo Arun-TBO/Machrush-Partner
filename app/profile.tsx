@@ -342,7 +342,7 @@ function LogoutModal({
   
 
   return (
-    <Modal visible={visible} transparent  statusBarTranslucent onRequestClose={onClose}>
+    <Modal visible={visible} transparent   onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={handleClose}>
 
          <Animated.View

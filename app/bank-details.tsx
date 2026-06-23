@@ -1,4 +1,4 @@
-import React from 'react';
+import React , {useEffect ,  useRef} from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Image,
@@ -10,6 +10,8 @@ import {
   StyleSheet,
   Text,
   View,
+  Animated,
+  PanResponder
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -54,14 +56,88 @@ function SupportModal({
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
-
+  
+   // Drag Modal 
+    
+        const translateY = useRef(
+        new Animated.Value(500)
+      ).current;
+    
+      useEffect(() => {
+        if (visible) {
+          translateY.setValue(500);
+    
+          Animated.timing(translateY, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+          }).start();
+        }
+      }, [visible]);
+    
+      const handleClose = () => {
+        Animated.timing(translateY, {
+          toValue: 500,
+          duration: 250,
+          useNativeDriver: true,
+        }).start(() => {
+          onClose()
+        });
+      };
+    
+      const panResponder = useRef(
+        PanResponder.create({
+          onStartShouldSetPanResponder: () => true,
+    
+          onMoveShouldSetPanResponder: (
+            _,
+            gestureState
+          ) => Math.abs(gestureState.dy) > 5,
+    
+          onPanResponderMove: (_, gestureState) => {
+            if (gestureState.dy > 0) {
+              translateY.setValue(
+                gestureState.dy
+              );
+            }
+          },
+    
+          onPanResponderRelease: (
+            _,
+            gestureState
+          ) => {
+            if (gestureState.dy > 120) {
+              handleClose();
+            } else {
+              Animated.spring(translateY, {
+                toValue: 0,
+                useNativeDriver: true,
+              }).start();
+            }
+          },
+        })
+      ).current;
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+      <Pressable style={styles.modalBackdrop} onPress={handleClose}>
+         
+        <Animated.View
+          {...panResponder.panHandlers}
+          style={[
+            styles.supportSheet,
+            {
+              transform: [
+                { translateY },
+              ],
+            },
+          ]}
+        >
+         
+{/*         
         <Pressable
           style={[styles.supportSheet, { paddingBottom: insets.bottom + 16 }]}
           onPress={(event) => event.stopPropagation()}
-        >
+        > */}
           <View style={styles.sheetHeader}>
             <View style={styles.dragHandle} />
           </View>
@@ -77,7 +153,7 @@ function SupportModal({
             <SupportOption icon={supportCallImage} label="Call us (24x7)" value="022276110864" />
             <SupportOption icon={supportEmailImage} label="Email us" value="machrush@support.com" />
           </View>
-        </Pressable>
+       </Animated.View>
       </Pressable>
     </Modal>
   );
