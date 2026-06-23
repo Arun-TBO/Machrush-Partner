@@ -404,14 +404,14 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '500',
   },
   supportLink: {
     flexShrink: 1,
     color: '#0055cc',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '500',
   },
   modalBackdrop: {

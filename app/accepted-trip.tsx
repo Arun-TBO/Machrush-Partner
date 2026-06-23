@@ -754,7 +754,7 @@ function TopNav({
 
   return (
     <View style={styles.navShell}>
-      <View style={styles.statusSpacer} />
+      {/* <View style={styles.statusSpacer} /> */}
       <View style={styles.topNav}>
         <Pressable
           accessibilityRole="button"
@@ -1575,7 +1575,7 @@ function AcceptedPickupView({
         style={[
           styles.pickupSheet,
           {
-            height: TRACKING_SHEET_HEIGHT + 80,
+            height: TRACKING_SHEET_HEIGHT + 85,
             paddingBottom: insets.bottom + 16,
             transform: [{ translateY: sheetTranslateY }],
           },
@@ -1825,7 +1825,7 @@ function CompletedDropScreen({
   return (
     <SafeAreaView style={styles.completedContainer}>
       <View style={styles.completedMain}>
-        <View style={styles.completedStatusSpacer} />
+        {/* <View style={styles.completedStatusSpacer} /> */}
         <View style={styles.completedTopNav}>
           <Pressable
             accessibilityRole="button"
@@ -2577,7 +2577,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 40,
+    gap: 10,
   },
   completedIllustration: {
     width: '100%',
@@ -2587,7 +2587,7 @@ const styles = StyleSheet.create({
   completedCopyBlock: {
     width: '100%',
     alignItems: 'center',
-    gap: 8,
+    gap: 5,
     paddingHorizontal: 16,
   },
   completedSuccessRow: {
