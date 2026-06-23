@@ -13,13 +13,15 @@ import {
   PanResponder,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import {
+  SafeAreaView,
+} from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type MapViewRef } from '@/components/NativeMap';
@@ -50,6 +52,9 @@ const TRACKING_SHEET_HEIGHT = Math.min(520, Math.max(480, Dimensions.get('window
 const TRACKING_SHEET_COLLAPSED_VISIBLE_HEIGHT = 149;
 const TRACKING_SHEET_COLLAPSED_OFFSET =
   TRACKING_SHEET_HEIGHT - TRACKING_SHEET_COLLAPSED_VISIBLE_HEIGHT;
+
+
+ import {fs} from '@/lib/responsive'
 
 type LatLng = {
   lat: number;
@@ -2339,7 +2344,7 @@ export default function AcceptedTripScreen() {
             <View style={styles.acceptIconGhost} />
           </Pressable>
         )}
-          <View style={styles.navigation}></View>
+         
       </View>
 
       <CancelDeliveryModal
@@ -3097,8 +3102,7 @@ otpBox: {
   routeRow: {
     minHeight: 64,
     justifyContent: 'center',
-    width: '100%',
-    flexShrink: 1,
+    width: '90%'
   },
   routeMarkerWrap: {
     width: 20,
@@ -3132,9 +3136,11 @@ otpBox: {
    
   },
   routeCopy: {
-    flex: 1,
+   
     minWidth: 0,
-    padding : 4
+    padding : 3,
+  
+
   },
   routeMeta: {
     flexDirection: 'row',
@@ -3158,9 +3164,10 @@ otpBox: {
   },
   routeAddress: {
     fontFamily: 'Poppins_400Regular',
-    fontSize: 16,
+    fontSize: fs(16),
     color: '#616161',
     lineHeight: 24,
+   
   },
   routeSubAddress: {
     fontFamily: 'Poppins_400Regular',
@@ -3173,6 +3180,7 @@ otpBox: {
     borderTopWidth: 1,
     borderStyle: 'dashed',
     borderColor: '#d6d6d6',
+    width : '95%'
   },
   fareSection: {
     paddingHorizontal: 8,
@@ -3217,7 +3225,8 @@ otpBox: {
     borderTopWidth: 1,
     borderStyle: 'dashed',
     borderColor: '#e8e8e8',
-    marginTop: 8,
+    marginTop: 5,
+    marginBottom : 5
   },
   ctaBar: {
     backgroundColor: '#eff2f6',
@@ -3239,6 +3248,7 @@ otpBox: {
     gap: 10,
     overflow: 'hidden',
     position: 'relative',
+  
   },
   acceptButtonDisabled: {
     opacity: 0.65,

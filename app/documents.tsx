@@ -339,7 +339,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 18,
     fontWeight: '500',
-    lineHeight: 18,
   },
   documentDescription: {
     minWidth: 0,
@@ -348,7 +347,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
     fontSize: 12,
     fontWeight: '400',
-    lineHeight: 18,
   },
   statusRow: {
     flexDirection: 'row',
