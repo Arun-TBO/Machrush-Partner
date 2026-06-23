@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Text,
   View,
+  
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -581,7 +582,7 @@ export default function MyDeliveriesScreen() {
           days={weekDays}
           activeIndex={activeDayIndex}
           peakAmount={peakAmount}
-        />
+        />  
         <StatsBlock
           completedCount={weeklyCompletedDeliveries.length}
           activeDuration={activeDuration}
@@ -713,8 +714,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: rs(412, 320, 430),
     alignSelf: 'center',
-    paddingBottom: 50  ,
-  
+    paddingBottom: 30 ,
   },
   chartSection: {
     width: '100%',
@@ -980,8 +980,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   routeSeparator: {
-    height: 1,
-   
+    height: 1, 
     borderTopWidth: 1,
     borderStyle: 'dashed',
     borderColor: '#d6d6d6',

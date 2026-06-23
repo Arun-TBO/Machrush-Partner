@@ -1523,7 +1523,7 @@ const styles = StyleSheet.create({
   jobAge: {
     color: '#606060',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 12,
+    fontSize: fs(12),
     fontWeight: '400',
     lineHeight: fs(18),
   },

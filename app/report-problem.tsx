@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { auth } from '@/lib/firebase';
 import { submitDriverReport } from '@/lib/firestoreOnboardingService';
 import { fs, hit, rs, vs } from '@/lib/responsive';
+const CloseButton = require('@/assets/images/Close button.png');
 // import { Color } from 'react-native/types_generated/Libraries/Animated/AnimatedExports';
 const chevronDown = require('@/assets/images/chevron-down.png');
 const down = require('@/assets/images/down.png');
@@ -174,27 +175,41 @@ function SelectField({
   );
 }
 
+
 function ImageSlot({
   imageUri,
   onPress,
+  onRemove
 }: {
   imageUri?: string;
   onPress: () => void;
+  onRemove : () => void
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={imageUri ? 'Change image' : 'Add image'}
-      style={styles.imageSlot}
+      // style={styles.imageSlot}
       onPress={onPress}
     >
       {imageUri ? (
-        <Image source={{ uri: imageUri }} style={styles.selectedImage} resizeMode="cover" />
+        <View style={styles.uploadedImageContainer}>
+              <Image source={{ uri: imageUri }} style={styles.selectedImage} resizeMode="cover" />
+              
+              <Pressable
+                            style={styles.removeButton}
+                            onPress={onRemove}
+                          
+                          >
+              <Image source={CloseButton} style={styles.removeButtonIcon}/>
+              </Pressable>
+        </View>
+       
       ) : (
-        <>
+        <View style={styles.imageSlot}>
           <Text style={styles.plusText}>+</Text>
           <Text style={styles.addImageText}>Add image</Text>
-        </>
+        </View>
       )}
     </Pressable>
   );
@@ -234,6 +249,14 @@ export default function ReportProblemScreen() {
     (category) => category.label === selectedCategory
   );
   const issueOptions = selectedCategoryConfig?.issues || [];
+
+    const removeImage = (index: number) => {
+  setSelectedImages(prev => {
+    const updated = [...prev];
+    updated[index] = null;
+    return updated;
+  });
+};
 
   const handleCategorySelect = (category: string) => {
     setSelectedCategory(category);
@@ -356,7 +379,10 @@ export default function ReportProblemScreen() {
       setIsSubmitting(false);
     }
   };
- 
+  
+
+
+
   function FiledErrorModal({
   visible,
   onClose,
@@ -492,7 +518,11 @@ export default function ReportProblemScreen() {
                   key={`${index}`}
                   imageUri={imageUri || undefined}
                   onPress={() => handlePickImage(index)}
+                   onRemove={() => removeImage(index)}
                 />
+        
+                
+
               ))}
             </View>
           </View>
@@ -728,9 +758,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   selectedImage: {
-    width: rs(86, 72, 92),
-    height: rs(86, 72, 92),
-    borderRadius: rs(8),
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
   },
   plusText: {
     fontFamily: 'Poppins_400Regular',
@@ -943,5 +973,24 @@ const styles = StyleSheet.create({
     height: 30,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+    removeButtonIcon: {
+    height : 20,
+    width : 20
+  },
+  uploadedImageContainer: {
+  width: 64,
+  height: 64,
+  position: 'relative',
+  alignSelf: 'flex-start',
+  overflow: 'visible',
+  borderRadius: 12,
+  },
+  removeButton: {
+  position: 'absolute',
+  top: -1,
+  right: -5,
+  zIndex: 10,
+  elevation: 5, // Android
   },
 });

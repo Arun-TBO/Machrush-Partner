@@ -191,11 +191,11 @@ function RoutePoint({
         <Text style={styles.routePointTitle} numberOfLines={1}>
           {title}
         </Text>
-        <Text style={styles.routePrimary} numberOfLines={1}>
+        <Text style={styles.routePrimary} numberOfLines={2}>
           {parts.primary}
         </Text>
         {parts.secondary ? (
-          <Text style={styles.routeSecondary} numberOfLines={1}>
+          <Text style={styles.routeSecondary} numberOfLines={2}>
             {parts.secondary}
           </Text>
         ) : null}
@@ -621,7 +621,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     marginTop : vs(5),
-    marginBottom : vs(5)
+    marginBottom : vs(5),
+    width : '90%',
   },
   routeIconWrap: {
     width: rs(20),
