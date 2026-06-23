@@ -374,6 +374,117 @@ const formatDurationSeconds = (duration: string | undefined) => {
   return remainingMinutes ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`;
 };
 
+type RouteSummary = {
+  distanceText: string | null;
+  durationText: string | null;
+};
+
+const formatApproxDuration = (value: string | null | undefined) => {
+  if (!value) {
+    return '';
+  }
+
+  return value.toLowerCase().startsWith('approx') ? value : `Approx. ${value}`;
+};
+
+const getFallbackRouteSummary = (origin: LatLng | null, destination: LatLng | null): RouteSummary => {
+  if (!origin || !destination) {
+    return { distanceText: null, durationText: null };
+  }
+
+  const distanceMeters = getDistanceMeters(origin, destination);
+  const estimatedMinutes = Math.max(1, Math.round((distanceMeters / 1000 / 30) * 60));
+
+  return {
+    distanceText: formatDistanceMeters(distanceMeters),
+    durationText: estimatedMinutes < 60
+      ? `${estimatedMinutes} min`
+      : `${Math.floor(estimatedMinutes / 60)} hr ${estimatedMinutes % 60} min`,
+  };
+};
+
+const fetchDrivingRouteSummary = async (
+  origin: LatLng | null,
+  destination: LatLng | null
+): Promise<RouteSummary> => {
+  if (!origin || !destination) {
+    return { distanceText: null, durationText: null };
+  }
+
+  const fallback = getFallbackRouteSummary(origin, destination);
+
+  if (!GOOGLE_MAPS_API_KEY) {
+    return fallback;
+  }
+
+  try {
+    const routesResponse = await fetch(
+      'https://routes.googleapis.com/directions/v2:computeRoutes',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
+          'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters',
+        },
+        body: JSON.stringify({
+          origin: {
+            location: {
+              latLng: {
+                latitude: origin.lat,
+                longitude: origin.lng,
+              },
+            },
+          },
+          destination: {
+            location: {
+              latLng: {
+                latitude: destination.lat,
+                longitude: destination.lng,
+              },
+            },
+          },
+          travelMode: 'DRIVE',
+          routingPreference: 'TRAFFIC_AWARE_OPTIMAL',
+        }),
+      }
+    );
+
+    if (routesResponse.ok) {
+      const routesBody = (await routesResponse.json().catch(() => null)) as RoutesApiResponse | null;
+      const route = routesBody?.routes?.[0];
+
+      if (route?.distanceMeters) {
+        return {
+          distanceText: formatDistanceMeters(route.distanceMeters),
+          durationText: formatDurationSeconds(route.duration) || fallback.durationText,
+        };
+      }
+    }
+
+    const originParam = `${origin.lat},${origin.lng}`;
+    const destinationParam = `${destination.lat},${destination.lng}`;
+    const response = await fetch(
+      'https://maps.googleapis.com/maps/api/directions/json' +
+        `?origin=${originParam}` +
+        `&destination=${destinationParam}` +
+        '&mode=driving' +
+        '&departure_time=now' +
+        `&key=${GOOGLE_MAPS_API_KEY}`
+    );
+    const body = (await response.json().catch(() => null)) as GoogleDirectionsResponse | null;
+    const leg = body?.routes?.[0]?.legs?.[0];
+
+    return {
+      distanceText: leg?.distance?.text || fallback.distanceText,
+      durationText: leg?.duration?.text || fallback.durationText,
+    };
+  } catch (error) {
+    console.error('Error loading detail route summary:', error);
+    return fallback;
+  }
+};
+
 const getTrafficColor = (speed: RouteSegmentSpeed | undefined) => {
   if (speed === 'TRAFFIC_JAM') return '#d93025';
   if (speed === 'SLOW') return '#fbbc04';
@@ -1872,6 +1983,9 @@ export default function AcceptedTripScreen() {
   const [isAccepting, setIsAccepting] = React.useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = React.useState(false);
   const [isCancelModalVisible, setIsCancelModalVisible] = React.useState(false);
+  const [pickupRouteSummary, setPickupRouteSummary] = React.useState<RouteSummary | null>(null);
+  const [dropRouteSummary, setDropRouteSummary] = React.useState<RouteSummary | null>(null);
+  const [isLoadingDetailRoutes, setIsLoadingDetailRoutes] = React.useState(false);
   const hasLoadedDeliveryRef = React.useRef(false);
   const { alertModal, showAlert } = useAppAlert();
 
@@ -1944,7 +2058,6 @@ export default function AcceptedTripScreen() {
   const dropLocation = isValidCoord(delivery?.locations?.dropoff?.coords)
     ? delivery.locations.dropoff.coords
     : null;
-  const dropTime = delivery?.dropoffTime || 'Approx. 50 mins';
   const isCompletedDelivery =
     delivery?.status === 'delivered' || delivery?.status === 'completed';
   const isAccepted =
@@ -1954,6 +2067,76 @@ export default function AcceptedTripScreen() {
     (!isCompletedDelivery && Boolean(delivery?.driver));
   const isDetailsView = view === 'details';
   const showTrackingView = isAccepted && !isCompletedDelivery && !isDetailsView;
+  const pickupDetailTitle = pickupRouteSummary?.distanceText
+    ? `To Pickup ${pickupRouteSummary.distanceText}`
+    : 'To Pickup';
+  const pickupDetailTime = pickupRouteSummary?.durationText
+    ? formatApproxDuration(pickupRouteSummary.durationText)
+    : isLoadingDetailRoutes
+    ? 'Calculating route...'
+    : 'Route unavailable';
+  const dropDetailTitle = dropRouteSummary?.distanceText
+    ? `Drop ${dropRouteSummary.distanceText}`
+    : 'Drop';
+  const dropDetailTime = dropRouteSummary?.durationText
+    ? formatApproxDuration(dropRouteSummary.durationText)
+    : isLoadingDetailRoutes
+    ? 'Calculating route...'
+    : 'Route unavailable';
+
+  React.useEffect(() => {
+    let isActive = true;
+
+    const loadDetailRouteSummaries = async () => {
+      if (!isDetailsView || !pickupLocation || !dropLocation) {
+        setPickupRouteSummary(null);
+        setDropRouteSummary(null);
+        setIsLoadingDetailRoutes(false);
+        return;
+      }
+
+      try {
+        setIsLoadingDetailRoutes(true);
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        let currentLocation: LatLng | null = null;
+
+        if (status === Location.PermissionStatus.GRANTED) {
+          const position = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          currentLocation = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          };
+        }
+
+        const [pickupSummary, dropSummary] = await Promise.all([
+          fetchDrivingRouteSummary(currentLocation, pickupLocation),
+          fetchDrivingRouteSummary(pickupLocation, dropLocation),
+        ]);
+
+        if (isActive) {
+          setPickupRouteSummary(pickupSummary);
+          setDropRouteSummary(dropSummary);
+          setIsLoadingDetailRoutes(false);
+        }
+      } catch (error) {
+        console.error('Error loading delivery detail route summaries:', error);
+
+        if (isActive) {
+          setPickupRouteSummary(getFallbackRouteSummary(null, pickupLocation));
+          setDropRouteSummary(getFallbackRouteSummary(pickupLocation, dropLocation));
+          setIsLoadingDetailRoutes(false);
+        }
+      }
+    };
+
+    loadDetailRouteSummaries();
+
+    return () => {
+      isActive = false;
+    };
+  }, [dropLocation, isDetailsView, pickupLocation]);
 
   const handleReportIssue = () => {
     if (!deliveryId) {
@@ -2273,19 +2456,15 @@ export default function AcceptedTripScreen() {
                 
               <RouteRow
               variant="pickup"
-              title={
-                Number.isFinite(pickupDistanceKm) && pickupDistanceKm > 0
-                  ? `To Pickup ${Math.round(pickupDistanceKm)}Km`
-                  : 'To Pickup 3Km'
-              }
-              time=""
+              title={pickupDetailTitle}
+              time={pickupDetailTime}
               address={pickupAddress}
             />
             <View style={styles.routeSeparator} />
             <RouteRow
               variant="drop"
-              title={distanceKm ? `Drop ${distanceKm}km` : 'Drop 35km'}
-              time={dropTime}
+              title={dropDetailTitle}
+              time={dropDetailTime}
               address={dropAddress}
             />
 
