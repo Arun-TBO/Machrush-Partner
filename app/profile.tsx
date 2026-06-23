@@ -227,7 +227,7 @@ function SupportModal({
   
 
   return (
-    <Modal visible={visible} transparent statusBarTranslucent  onRequestClose={onClose}>
+    <Modal visible={visible} transparent onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={handleClose}>
         
           <Animated.View
@@ -342,7 +342,7 @@ function LogoutModal({
   
 
   return (
-    <Modal visible={visible} transparent  statusBarTranslucent onRequestClose={onClose}>
+    <Modal visible={visible} transparent   onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={handleClose}>
 
          <Animated.View
@@ -568,7 +568,8 @@ export default function ProfileScreen() {
  
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} >
+         
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[

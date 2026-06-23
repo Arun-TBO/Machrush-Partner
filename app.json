@@ -5,7 +5,6 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/DriverAppIcon.png",
-    "backgroundColor": "#eff2f6",
     "scheme": "macrushmobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -15,12 +14,10 @@
     "android": {
       "package": "com.machrush01",
       "backgroundColor": "#eff2f6",
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/DriverAppIcon.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
+     "adaptiveIcon": {
+      "foregroundImage": "./assets/images/DriverAppIcon.png",
+          "backgroundColor": "#1157C8"
+    },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
@@ -40,7 +37,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/DriverAppIcon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",

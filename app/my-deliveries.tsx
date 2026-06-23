@@ -714,6 +714,7 @@ const styles = StyleSheet.create({
     maxWidth: rs(412, 320, 430),
     alignSelf: 'center',
     paddingBottom: 50  ,
+  
   },
   chartSection: {
     width: '100%',

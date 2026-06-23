@@ -14,6 +14,8 @@ import { WalkthroughScreen } from '@/components/WalkthroughScreen';
 import { SuspendedScreen } from '@/components/SuspendedScreen';
 import { getVerificationStatus } from '@/lib/firestoreOnboardingService';
 
+
+
 // Initialize Firebase
 import '@/lib/firebase';
 
