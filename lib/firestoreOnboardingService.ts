@@ -45,6 +45,7 @@ export interface OnboardingData {
   rejectedDocuments?: string[];
   verificationNotes?: string;
   profilePhotoUrl?: string;
+  activeStatus?: boolean;
 
   // Metadata
   createdAt: Timestamp;
@@ -736,6 +737,43 @@ const setDriverAvailabilityStateViaRest = async (
   }
 };
 
+const updateDriverActiveStatusViaRest = async (
+  uid: string,
+  isActive: boolean,
+  idToken: string,
+  updatedAt: Timestamp
+) => {
+  const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID;
+
+  if (!projectId) {
+    throw new Error('Firebase project ID is not configured');
+  }
+
+  const fields = {
+    activeStatus: toFirestoreRestValue(isActive),
+    updatedAt: toFirestoreRestValue(updatedAt),
+  };
+
+  const response = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/drivers/${encodeURIComponent(uid)}?updateMask.fieldPaths=activeStatus&updateMask.fieldPaths=updatedAt`,
+    {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fields }),
+    }
+  );
+
+  const responseBody = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    console.error('Firestore REST driver active status update failed:', responseBody);
+    throw new Error(responseBody?.error?.message || 'Failed to update driver active status');
+  }
+};
+
 const getDriverAvailabilityStateViaRest = async (
   uid: string,
   idToken: string
@@ -1003,6 +1041,7 @@ export const storeOnboardingData = async (
     const dataToStore: OnboardingData = {
       ...uploadedOnboardingData,
       phoneNumber,
+      activeStatus: false,
       createdAt: now,
       updatedAt: now,
       submittedAt: now,
@@ -1165,6 +1204,7 @@ export const updateDriverAvailability = async (
     }
 
     const now = Timestamp.now();
+    const activeStatus = status === 'online';
     const logId = `${uid}_${now.toMillis()}_${status}`;
     const availabilityLog = {
       uid,
@@ -1184,12 +1224,21 @@ export const updateDriverAvailability = async (
         changedAt: now,
         updatedAt: now,
       });
+      await setDoc(
+        doc(db, 'drivers', uid),
+        {
+          activeStatus,
+          updatedAt: now,
+        },
+        { merge: true }
+      );
       return { success: true };
     }
 
     if (idToken) {
       await createDriverAvailabilityLogViaRest(uid, status, idToken);
       await setDriverAvailabilityStateViaRest(uid, status, idToken, now);
+      await updateDriverActiveStatusViaRest(uid, activeStatus, idToken, now);
       return { success: true };
     }
 

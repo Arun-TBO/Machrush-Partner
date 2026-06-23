@@ -11,8 +11,8 @@ import {
   Animated, 
   PanResponder
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
+import { fs, rs, vs } from '@/lib/responsive';
 
 const backImage = require('@/assets/images/profile/back.png');
 const chevrondown = require('@/assets/images/chevron-down.png');
@@ -49,7 +49,6 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
   initialData,
   onDraftChange,
 }) => {
-  const insets = useSafeAreaInsets();
   const [bankName, setBankName] = useState(initialData?.bankName || '');
   const [accountNumber, setAccountNumber] = useState(initialData?.accountNumber || '');
   const [ifscCode, setIfscCode] = useState(initialData?.ifscCode || '');
@@ -217,7 +216,7 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
             >
               {bankName || 'Select Bank'}
             </Text>
-             <Image source={chevrondown} style={{height : 15 , width : 15}}/>
+             <Image source={chevrondown} style={styles.dropdownChevronIcon}/>
           </Pressable>
         </View>
 
@@ -343,7 +342,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#eff2f6',
   },
   statusSpacer: {
-    height: 52,
+    height: vs(52),
     backgroundColor: '#ffffff',
   },
 
@@ -351,29 +350,29 @@ const styles = StyleSheet.create({
   topNav: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 4,
-    paddingVertical: 8,
-    minHeight: 64,
+    paddingHorizontal: rs(4),
+    paddingVertical: vs(8),
+    minHeight: vs(64),
     backgroundColor: '#ffffff',
   },
   backButton: {
-    width: 48,
-    height: 48,
+    width: rs(48),
+    height: rs(48),
     justifyContent: 'center',
     alignItems: 'center',
   },
   backIcon: {
-    width: 24,
-    height: 24,
+    width: rs(24),
+    height: rs(24),
   },
   navTitle: {
     flex: 1,
     minWidth: 0,
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 20,
+    fontSize: fs(20, 17, 22),
     fontWeight: '500',
-    lineHeight: 32,
+    lineHeight: fs(32, 26, 34),
   },
 
   // Scroll View
@@ -382,57 +381,57 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     width: '100%',
-    maxWidth: 412,
+    maxWidth: rs(412, 320, 430),
     alignSelf: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 24,
-    paddingBottom: 24,
-    gap: 40,
+    paddingHorizontal: rs(16),
+    paddingTop: vs(24),
+    paddingBottom: vs(24),
+    gap: vs(40),
   },
 
   // Header Section
   headerSection: {
-    gap: 12,
+    gap: vs(12),
   },
   title: {
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 40,
+    fontSize: fs(40, 30, 42),
     fontWeight: '500',
-    lineHeight: 48,
+    lineHeight: fs(48, 36, 50),
   },
   subtitle: {
     color: '#1c1c1c',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '400',
-    lineHeight: 24,
+    lineHeight: fs(24),
   },
 
   // Input Section
   inputSection: {
-    gap: 16,
+    gap: vs(16),
   },
   inputLabel: {
     color: '#606060',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '400',
-    lineHeight: 24,
+    lineHeight: fs(24),
   },
   textInput: {
     backgroundColor: Colors.neutral100,
     borderWidth: 1,
     borderColor: Colors.neutral600,
     borderRadius: Radius.sm,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: rs(8),
+    paddingVertical: vs(4),
     color: '#1c1c1c',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '400',
-    lineHeight: 24,
-    minHeight: 56,
+    lineHeight: fs(24),
+    minHeight: vs(56),
   },
 
   // Dropdown
@@ -441,47 +440,51 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.neutral600,
     borderRadius: Radius.sm,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    minHeight: 56,
+    paddingHorizontal: rs(8),
+    paddingVertical: vs(4),
+    minHeight: vs(56),
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   dropdownText: {
     fontFamily: 'Poppins_400Regular',
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '400',
-    lineHeight: 24,
+    lineHeight: fs(24),
     flex: 1,
     minWidth: 0,
     flexShrink: 1,
   },
   dropdownIcon: {
-    fontSize: 12,
+    fontSize: fs(12),
     color: Colors.neutral800,
+  },
+  dropdownChevronIcon: {
+    width: rs(15),
+    height: rs(15),
   },
 
   // Helper Text
   helperText: {
     color: '#8e8e8e',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 12,
+    fontSize: fs(12),
     fontWeight: '400',
-    lineHeight: 18,
-    marginTop: 12,
+    lineHeight: fs(18),
+    marginTop: vs(12),
   },
 
   // Continue Button
   continueButton: {
     backgroundColor: Colors.primary,
     borderRadius: Radius.md,
-    minHeight: 56,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
+    minHeight: vs(56),
+    paddingVertical: vs(16),
+    paddingHorizontal: rs(24),
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom : 15
+    marginBottom : vs(15)
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -490,20 +493,20 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: '#ffffff',
     fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '500',
-    lineHeight: 20,
+    lineHeight: fs(20),
     letterSpacing: -0.5,
   },
   navigation: {
-    height: 24,
+    height: vs(24),
     alignItems: 'center',
     justifyContent: 'center',
   },
   homeIndicator: {
-    width: 108,
-    height: 4,
-    borderRadius: 12,
+    width: rs(108),
+    height: vs(4),
+    borderRadius: rs(12),
     backgroundColor: '#1d1b20',
   },
 
@@ -515,49 +518,49 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     width: '100%',
-    maxWidth: 720,
+    maxWidth: rs(720, 320, 720),
     alignSelf: 'center',
     backgroundColor: Colors.neutral100,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    borderTopLeftRadius: rs(28),
+    borderTopRightRadius: rs(28),
+    paddingHorizontal: rs(16),
+    paddingTop: vs(16),
     maxHeight: '72%',
   },
   sheetHeader: {
     width: '100%',
     alignItems: 'center',
-    padding: 16,
+    padding: rs(16),
   },
   dragHandle: {
-    width: 32,
-    height: 4,
-    borderRadius: 100,
+    width: rs(32),
+    height: vs(4),
+    borderRadius: rs(100),
     backgroundColor: '#79747e',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: 16,
+    paddingBottom: vs(16),
     borderBottomWidth: 1,
     borderBottomColor: Colors.neutral300,
   },
   modalTitle: {
     fontFamily: 'Poppins_500Medium',
-    fontSize: 18,
+    fontSize: fs(18),
     fontWeight: '500',
     color: Colors.neutral900,
   },
   closeIcon: {
-    fontSize: 24,
+    fontSize: fs(24),
     color: Colors.neutral800,
   },
   bankOptionsScroll: {
     width: '100%',
   },
   bankOptionsContent: {
-    paddingTop: 8,
+    paddingTop: vs(8),
   },
   modalOption: {
     paddingVertical: Spacing.md,
@@ -567,7 +570,7 @@ const styles = StyleSheet.create({
   },
   modalOptionText: {
     fontFamily: 'Poppins_400Regular',
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '400',
     color: Colors.neutral900,
   },
