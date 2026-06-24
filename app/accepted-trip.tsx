@@ -8,6 +8,7 @@ import {
   Image,
   InteractionManager,
   Keyboard,
+  KeyboardAvoidingView,
   Linking,
   Modal,
   PanResponder,
@@ -1574,7 +1575,7 @@ function AcceptedPickupView({
           styles.pickupSheet,
           {
             height: TRACKING_SHEET_HEIGHT + 85,
-            paddingBottom: insets.bottom + 16,
+            paddingBottom: Math.max(insets.bottom, vs(16)) + vs(16),
             transform: [{ translateY: sheetTranslateY }],
           },
           
@@ -1724,8 +1725,18 @@ function AcceptedPickupView({
         statusBarTranslucent
         onRequestClose={() => false}
       >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.otpKeyboardAvoidingView}
+        >
         <Pressable
-    style={styles.otpModalBackdrop}
+    style={[
+      styles.otpModalBackdrop,
+      {
+        paddingTop: insets.top + vs(24),
+        paddingBottom: Math.max(insets.bottom, vs(16)) + vs(24),
+      },
+    ]}
     onPress={() => setIsOtpModalVisible(false)}
   >
     <Pressable
@@ -1746,6 +1757,7 @@ function AcceptedPickupView({
         {/* </View> */}
         </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -3045,6 +3057,9 @@ otpBox: {
     justifyContent: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.32)',
     paddingHorizontal: rs(24),
+  },
+  otpKeyboardAvoidingView: {
+    flex: 1,
   },
   cancelModalBackdrop: {
     flex: 1,

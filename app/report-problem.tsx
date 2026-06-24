@@ -448,7 +448,7 @@ export default function ReportProblemScreen() {
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: 72 + insets.bottom + 24 },
+          { paddingBottom: Math.max(insets.bottom, vs(16)) + vs(96) },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -538,7 +538,12 @@ export default function ReportProblemScreen() {
         </View>
       </ScrollView>
 
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
+      <View
+        style={[
+          styles.bottomBar,
+          { paddingBottom: Math.max(insets.bottom, vs(16)) + vs(16) },
+        ]}
+      >
         <Pressable
           accessibilityRole="button"
           disabled={isSubmitting}
