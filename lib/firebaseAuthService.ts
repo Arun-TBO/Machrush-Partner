@@ -1,16 +1,105 @@
 import {
   signInWithPhoneNumber,
+  signInAnonymously,
   ConfirmationResult,
   RecaptchaVerifier,
   ApplicationVerifier,
-  signInWithCustomToken,
 } from 'firebase/auth';
+import { Platform } from 'react-native';
 import { auth } from './firebase';
 
 let confirmationResult: ConfirmationResult | null = null;
+let nativeConfirmationResult: any = null;
 let currentPhoneNumber: string | null = null;
 let recaptchaVerifier: RecaptchaVerifier | null = null;
 let sessionInfo: string | null = null; // For Firebase REST API fallback
+
+declare const require: any;
+declare const __DEV__: boolean;
+
+const EXPO_DEV_SESSION_INFO = 'expo-dev-otp-session';
+const EXPO_DEV_OTP = process.env.EXPO_PUBLIC_EXPO_DEV_OTP || '123456';
+
+const shouldUseNativePhoneAuth = () =>
+  Platform.OS !== 'web' && process.env.EXPO_PUBLIC_USE_NATIVE_FIREBASE_AUTH !== 'false';
+
+const shouldUseExpoDevOtp = () =>
+  Platform.OS !== 'web' &&
+  process.env.EXPO_PUBLIC_EXPO_GO_OTP_MODE !== 'false' &&
+  (__DEV__ || process.env.EXPO_PUBLIC_APP_ENV === 'development');
+
+const getNativePhoneAuth = () => {
+  if (!shouldUseNativePhoneAuth()) {
+    return null;
+  }
+
+  try {
+    const nativeAuthPackage = require('@react-native-firebase/auth');
+
+    if (nativeAuthPackage.getAuth && nativeAuthPackage.signInWithPhoneNumber) {
+      return {
+        authInstance: nativeAuthPackage.getAuth(),
+        signInWithPhoneNumber: nativeAuthPackage.signInWithPhoneNumber,
+      };
+    }
+
+    const authFactory = nativeAuthPackage.default || nativeAuthPackage;
+    const authInstance = typeof authFactory === 'function' ? authFactory() : null;
+
+    if (!authInstance?.signInWithPhoneNumber) {
+      return null;
+    }
+
+    return {
+      authInstance,
+      signInWithPhoneNumber: (_authInstance: any, phoneNumber: string) =>
+        authInstance.signInWithPhoneNumber(phoneNumber),
+    };
+  } catch (error) {
+    console.warn('Native Firebase Auth is not available, using web fallback:', error);
+    return null;
+  }
+};
+
+const getRestErrorMessage = (error: any): string | undefined => {
+  return error?.message || error?.errors?.[0]?.message;
+};
+
+const logRestError = (context: string, data: any) => {
+  const message = getRestErrorMessage(data?.error);
+  console.error(`${context}:`, message || data);
+};
+
+const sendOTPViaExpoDev = async (phoneNumber: string): Promise<void> => {
+  currentPhoneNumber = phoneNumber;
+  confirmationResult = null;
+  nativeConfirmationResult = null;
+  sessionInfo = EXPO_DEV_SESSION_INFO;
+  console.warn(
+    `Expo Go OTP mode is active. No SMS was sent. Use OTP ${EXPO_DEV_OTP} for ${phoneNumber}.`
+  );
+};
+
+const verifyOTPViaExpoDev = async (otp: string): Promise<any> => {
+  if (otp !== EXPO_DEV_OTP) {
+    throw new Error('Invalid OTP. Please check and try again.');
+  }
+
+  const credential = auth.currentUser
+    ? { user: auth.currentUser }
+    : await signInAnonymously(auth);
+  const user = credential.user;
+  const idToken = await user.getIdToken();
+
+  sessionInfo = null;
+
+  return {
+    uid: user.uid,
+    phoneNumber: currentPhoneNumber,
+    idToken,
+    user,
+  };
+};
 
 /**
  * Initialize or get the reCAPTCHA verifier
@@ -67,15 +156,18 @@ const sendOTPViaREST = async (phoneNumber: string): Promise<void> => {
     const data = await response.json();
 
     if (!response.ok) {
-      console.error('REST API Error:', data);
-      if (data.error?.code === 'INVALID_PHONE_NUMBER') {
+      const restErrorMessage = getRestErrorMessage(data.error);
+      logRestError('REST API Error', data);
+
+      if (restErrorMessage === 'INVALID_PHONE_NUMBER') {
         throw new Error('Invalid phone number format');
-      } else if (data.error?.code === 'MISSING_PHONE_NUMBER') {
+      } else if (restErrorMessage === 'MISSING_PHONE_NUMBER') {
         throw new Error('Phone number is required');
-      } else if (data.error?.code === 'TOO_MANY_ATTEMPTS_TRY_LATER') {
+      } else if (restErrorMessage === 'TOO_MANY_ATTEMPTS_TRY_LATER') {
         throw new Error('Too many attempts. Please try again later');
       }
-      throw new Error(data.error?.message || 'Failed to send OTP');
+
+      throw new Error(restErrorMessage || 'Failed to send OTP');
     }
 
     // Store session info for verification
@@ -110,6 +202,30 @@ export const sendOTP = async (phoneNumber: string): Promise<void> => {
     // Store the phone number for resend functionality
     currentPhoneNumber = phoneNumber;
 
+    const nativePhoneAuth = getNativePhoneAuth();
+    if (nativePhoneAuth) {
+      console.log('Using native Firebase phone auth...');
+      nativeConfirmationResult = await nativePhoneAuth.signInWithPhoneNumber(
+        nativePhoneAuth.authInstance,
+        phoneNumber
+      );
+      confirmationResult = null;
+      sessionInfo = null;
+      console.log('OTP sent successfully via native Firebase Auth');
+      return;
+    }
+
+    if (shouldUseExpoDevOtp()) {
+      await sendOTPViaExpoDev(phoneNumber);
+      return;
+    }
+
+    if (Platform.OS !== 'web') {
+      throw new Error(
+        'Native Firebase phone auth is not available in this build. Use an Android dev/release build for real SMS, or run Expo Go in development OTP mode.'
+      );
+    }
+
     // Try standard SDK method first
     try {
       const verifier = getRecaptchaVerifier();
@@ -124,13 +240,12 @@ export const sendOTP = async (phoneNumber: string): Promise<void> => {
       console.log('✅ OTP sent successfully via SDK');
       return;
     } catch (sdkError: any) {
-      console.warn('⚠️ SDK method failed, trying REST API...', sdkError.message);
+      console.warn('⚠️ SDK method failed:', sdkError.message);
       
       // Clear recaptcha for retry
       recaptchaVerifier = null;
 
-      // Fall back to REST API method
-      await sendOTPViaREST(phoneNumber);
+      throw sdkError;
     }
   } catch (error: any) {
     console.error('❌ Error sending OTP:', error);
@@ -165,6 +280,30 @@ export const verifyOTP = async (otp: string): Promise<any> => {
     }
 
     console.log('🔐 Verifying OTP...');
+
+    if (nativeConfirmationResult) {
+      const result = await nativeConfirmationResult.confirm(otp);
+      const user = result.user;
+      const idToken = await user.getIdToken();
+
+      console.log('OTP verified successfully via native Firebase Auth');
+      console.log('User UID:', user.uid);
+      console.log('Phone Number:', user.phoneNumber);
+
+      nativeConfirmationResult = null;
+
+      return {
+        uid: user.uid,
+        phoneNumber: user.phoneNumber || currentPhoneNumber,
+        idToken,
+        user,
+      };
+    }
+
+    // If using REST API
+    if (sessionInfo === EXPO_DEV_SESSION_INFO) {
+      return verifyOTPViaExpoDev(otp);
+    }
 
     // If using REST API
     if (sessionInfo && !confirmationResult) {
@@ -238,13 +377,16 @@ const verifyOTPViaREST = async (otp: string): Promise<any> => {
     const data = await response.json();
 
     if (!response.ok) {
-      console.error('REST API Verification Error:', data);
-      if (data.error?.code === 'INVALID_SESSION_ID') {
+      const restErrorMessage = getRestErrorMessage(data.error);
+      logRestError('REST API Verification Error', data);
+
+      if (restErrorMessage === 'INVALID_SESSION_ID') {
         throw new Error('OTP session expired. Please request a new OTP.');
-      } else if (data.error?.code === 'INVALID_CODE') {
+      } else if (restErrorMessage === 'INVALID_CODE') {
         throw new Error('Invalid OTP. Please check and try again.');
       }
-      throw new Error(data.error?.message || 'Failed to verify OTP');
+
+      throw new Error(restErrorMessage || 'Failed to verify OTP');
     }
 
     console.log('✅ OTP verified successfully via REST API');
@@ -279,6 +421,28 @@ export const resendOTP = async (): Promise<void> => {
     recaptchaVerifier = null;
     sessionInfo = null;
 
+    const nativePhoneAuth = getNativePhoneAuth();
+    if (nativePhoneAuth) {
+      nativeConfirmationResult = await nativePhoneAuth.signInWithPhoneNumber(
+        nativePhoneAuth.authInstance,
+        currentPhoneNumber
+      );
+      confirmationResult = null;
+      console.log('OTP resent successfully via native Firebase Auth');
+      return;
+    }
+
+    if (shouldUseExpoDevOtp()) {
+      await sendOTPViaExpoDev(currentPhoneNumber);
+      return;
+    }
+
+    if (Platform.OS !== 'web') {
+      throw new Error(
+        'Native Firebase phone auth is not available in this build. Use an Android dev/release build for real SMS, or run Expo Go in development OTP mode.'
+      );
+    }
+
     // Try standard SDK method first
     try {
       const verifier = getRecaptchaVerifier();
@@ -290,11 +454,10 @@ export const resendOTP = async (): Promise<void> => {
       console.log('✅ OTP resent successfully via SDK');
       return;
     } catch (sdkError: any) {
-      console.warn('⚠️ SDK resend failed, trying REST API...', sdkError.message);
+      console.warn('⚠️ SDK resend failed:', sdkError.message);
       recaptchaVerifier = null;
 
-      // Fall back to REST API
-      await sendOTPViaREST(currentPhoneNumber);
+      throw sdkError;
     }
   } catch (error: any) {
     console.error('❌ Error resending OTP:', error);
@@ -319,6 +482,7 @@ export const resendOTP = async (): Promise<void> => {
  */
 export const clearAuthState = (): void => {
   confirmationResult = null;
+  nativeConfirmationResult = null;
   currentPhoneNumber = null;
   recaptchaVerifier = null;
   sessionInfo = null;
@@ -330,6 +494,11 @@ export const clearAuthState = (): void => {
  */
 export const signOutUser = async (): Promise<void> => {
   try {
+    const nativePhoneAuth = getNativePhoneAuth();
+    if (nativePhoneAuth?.authInstance?.signOut) {
+      await nativePhoneAuth.authInstance.signOut();
+    }
+
     await auth.signOut();
     clearAuthState();
     console.log('✅ User signed out');

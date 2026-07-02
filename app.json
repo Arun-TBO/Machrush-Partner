@@ -12,7 +12,8 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.machrush01",
+      "package": "com.machrush.driver",
+      "googleServicesFile": "./google-services.json",
       "backgroundColor": "#eff2f6",
      "adaptiveIcon": {
       "foregroundImage": "./assets/images/DriverAppIcon.png",
@@ -28,6 +29,7 @@
     "plugins": [
       "expo-router",
       "expo-system-ui",
+      "@react-native-firebase/app",
       [
         "expo-location",
         {

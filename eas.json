@@ -9,6 +9,19 @@
       "distribution": "internal"
     },
     "preview": {
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://machrush-partner-server-698880636699.europe-west1.run.app",
+        "EXPO_PUBLIC_API_TIMEOUT": "30000",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "machrush-01",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "machrush-01.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDdiLRU5n5V1tmZLdebtCnQmWmmgqxkU5I",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:698880636699:android:c63af1a3ec36067c27c5be",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "698880636699",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDdiLRU5n5V1tmZLdebtCnQmWmmgqxkU5I",
+        "EXPO_PUBLIC_APP_ENV": "development",
+        "EXPO_PUBLIC_APP_VERSION": "1.0.0",
+        "EXPO_PUBLIC_ENABLE_DEBUG": "true"
+      },
       "android": {
         "buildType": "apk"
       },

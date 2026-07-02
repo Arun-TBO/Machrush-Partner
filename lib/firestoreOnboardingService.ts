@@ -218,6 +218,47 @@ const uploadOnboardingAssetsViaBackend = async (
   }>;
 };
 
+const getFileNameFromUri = (uri: string, fallback: string) => {
+  const cleanUri = uri.split('?')[0];
+  const fileName = cleanUri.split('/').pop();
+  return fileName || fallback;
+};
+
+const uploadOnboardingAssetViaBackend = async (
+  uid: string,
+  asset: OnboardingUploadAsset,
+  idToken: string
+) => {
+  const response = await fetch(asset.uri);
+  const blob = await response.blob();
+  const fileName = getFileNameFromUri(asset.uri, `${asset.type}-${Date.now()}.jpg`);
+
+  const uploadResponse = await fetch(`${getApiBaseUrl()}/api/uploads/driver-onboarding-asset`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      'Content-Type': blob.type || 'application/octet-stream',
+      'x-uid': uid,
+      'x-asset-type': asset.type,
+      'x-file-name': fileName,
+      ...(typeof asset.index === 'number' ? { 'x-asset-index': String(asset.index) } : {}),
+    },
+    body: blob,
+  });
+
+  const responseBody = await uploadResponse.json().catch(() => null);
+
+  if (!uploadResponse.ok || !responseBody?.success) {
+    throw new Error(getApiErrorMessage(responseBody, 'Failed to upload onboarding file'));
+  }
+
+  return responseBody.asset as {
+    type: string;
+    index?: number;
+    url: string;
+  };
+};
+
 const uploadProfilePhotoViaBackend = async (
   uid: string,
   imageData: string,
@@ -935,21 +976,51 @@ const uploadOnboardingAssets = async (
 ): Promise<Omit<OnboardingData, 'createdAt' | 'updatedAt' | 'submittedAt'>> => {
   const vehiclePhotoUris = onboardingData.vehiclePhotoUris || [];
 
-  if (idToken) {
-    const assets: OnboardingUploadAsset[] = [
-      { type: 'photoUri', uri: onboardingData.photoUri },
-      { type: 'drivingLicenseUri', uri: onboardingData.drivingLicenseUri },
-      { type: 'identityProofUri', uri: onboardingData.identityProofUri },
-      { type: 'rcBookUri', uri: onboardingData.rcBookUri },
-      { type: 'insuranceUri', uri: onboardingData.insuranceUri },
-      ...vehiclePhotoUris.map((uri, index) => ({
-        type: 'vehiclePhotoUris',
-        uri,
-        index,
-      })),
-    ].filter((asset) => asset.uri && !isRemoteUrl(asset.uri));
+  const assets: OnboardingUploadAsset[] = [
+    { type: 'photoUri', uri: onboardingData.photoUri },
+    { type: 'drivingLicenseUri', uri: onboardingData.drivingLicenseUri },
+    { type: 'identityProofUri', uri: onboardingData.identityProofUri },
+    { type: 'rcBookUri', uri: onboardingData.rcBookUri },
+    { type: 'insuranceUri', uri: onboardingData.insuranceUri },
+    ...vehiclePhotoUris.map((uri, index) => ({
+      type: 'vehiclePhotoUris',
+      uri,
+      index,
+    })),
+  ].filter((asset) => asset.uri && !isRemoteUrl(asset.uri));
 
-    if (assets.length > 0) {
+  if (idToken && assets.length > 0) {
+    if (Platform.OS !== 'web') {
+      const uploadedAssets = await Promise.all(
+        assets.map((asset) => uploadOnboardingAssetViaBackend(uid, asset, idToken))
+      );
+      const nextData = {
+        ...onboardingData,
+        vehiclePhotoUris: [...vehiclePhotoUris],
+      };
+
+      uploadedAssets.forEach((asset) => {
+        if (!asset.url) {
+          return;
+        }
+
+        if (asset.type === 'vehiclePhotoUris' && typeof asset.index === 'number') {
+          nextData.vehiclePhotoUris[asset.index] = asset.url;
+          return;
+        }
+
+        if (asset.type in nextData) {
+          (nextData as Record<string, any>)[asset.type] = asset.url;
+        }
+      });
+
+      return {
+        ...nextData,
+        profilePhotoUrl: nextData.profilePhotoUrl || nextData.photoUri,
+      };
+    }
+
+    if (auth.currentUser?.uid !== uid) {
       const uploadedAssets = await uploadOnboardingAssetsViaBackend(uid, assets, idToken);
       const nextData = {
         ...onboardingData,
