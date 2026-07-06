@@ -56,6 +56,12 @@ const menuRows = [
 
 type DeliveryRecord = {
   status?: string;
+  pricingStatus?: string | null;
+  paymentStatus?: string | null;
+  pricing?: {
+    pricingStatus?: string | null;
+    paymentStatus?: string | null;
+  };
   review?: {
     rating?: number | string | null;
     isSubmitted?: boolean;
@@ -66,9 +72,15 @@ const getApiBaseUrl = () => {
   return (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
 };
 
-const isCompletedDelivery = (status?: string) => {
-  const normalizedStatus = String(status || '').toLowerCase();
-  return normalizedStatus === 'delivered' || normalizedStatus === 'completed' || normalizedStatus === 'paid';
+const isCompletedDelivery = (delivery: DeliveryRecord) => {
+  const pricingStatus = String(
+    delivery.pricingStatus ||
+      delivery.pricing?.pricingStatus ||
+      delivery.paymentStatus ||
+      delivery.pricing?.paymentStatus ||
+      ''
+  ).toLowerCase();
+  return pricingStatus === 'completed' || pricingStatus === 'paid';
 };
 
 function TopNav() {
@@ -405,6 +417,9 @@ export default function ProfileScreen() {
   const [driverName, setDriverName] = React.useState('Driver');
   const [averageRating, setAverageRating] = React.useState('0.0');
   const [completedDeliveryCount, setCompletedDeliveryCount] = React.useState(0);
+  const [isLoadingProfile, setIsLoadingProfile] = React.useState(true);
+  const [isLoadingStats, setIsLoadingStats] = React.useState(true);
+  const hasLoadedProfileStatsRef = React.useRef(false);
   const router = useRouter();
   const { alertModal } = useAppAlert();
 
@@ -450,40 +465,48 @@ export default function ProfileScreen() {
     let isMounted = true;
 
     const loadProfilePhoto = async () => {
-      const { uid, idToken } = await getCurrentProfileSession();
+      try {
+        const { uid, idToken } = await getCurrentProfileSession();
 
-      if (!uid) {
-        return;
-      }
+        if (!uid) {
+          return;
+        }
 
-      const [cachedPhotoUrl, cachedDriverName] = await Promise.all([
-        getCachedProfilePhotoUrl(uid),
-        getCachedDriverName(uid),
-      ]);
+        const [cachedPhotoUrl, cachedDriverName] = await Promise.all([
+          getCachedProfilePhotoUrl(uid),
+          getCachedDriverName(uid),
+        ]);
 
-      if (isMounted && cachedPhotoUrl) {
-        setProfilePhotoUrl(cachedPhotoUrl);
-      }
-      if (isMounted && cachedDriverName) {
-        setDriverName(cachedDriverName);
-      }
+        if (isMounted && cachedPhotoUrl) {
+          setProfilePhotoUrl(cachedPhotoUrl);
+        }
+        if (isMounted && cachedDriverName) {
+          setDriverName(cachedDriverName);
+        }
 
-      const driverProfile = await getDriverProfile(uid, idToken);
-      const savedPhotoUrl =
-        driverProfile?.profilePhotoUrl ||
-        (driverProfile?.photoUri?.startsWith('http') ? driverProfile.photoUri : null);
-      const savedDriverName = driverProfile?.fullName?.trim();
+        const driverProfile = await getDriverProfile(uid, idToken);
+        const savedPhotoUrl =
+          driverProfile?.profilePhotoUrl ||
+          (driverProfile?.photoUri?.startsWith('http') ? driverProfile.photoUri : null);
+        const savedDriverName = driverProfile?.fullName?.trim();
 
-      if (savedPhotoUrl) {
-        await setCachedProfilePhotoUrl(uid, savedPhotoUrl);
-      }
-      if (savedDriverName) {
-        await setCachedDriverName(uid, savedDriverName);
-      }
+        if (savedPhotoUrl) {
+          await setCachedProfilePhotoUrl(uid, savedPhotoUrl);
+        }
+        if (savedDriverName) {
+          await setCachedDriverName(uid, savedDriverName);
+        }
 
-      if (isMounted) {
-        setProfilePhotoUrl(savedPhotoUrl || cachedPhotoUrl || null);
-        setDriverName(savedDriverName || cachedDriverName || 'Driver');
+        if (isMounted) {
+          setProfilePhotoUrl(savedPhotoUrl || cachedPhotoUrl || null);
+          setDriverName(savedDriverName || cachedDriverName || 'Driver');
+        }
+      } catch (error) {
+        console.error('Error loading profile photo:', error);
+      } finally {
+        if (isMounted) {
+          setIsLoadingProfile(false);
+        }
       }
     };
 
@@ -501,17 +524,21 @@ export default function ProfileScreen() {
       let isActive = true;
 
       const loadProfileStats = async () => {
-        const { uid } = await getCurrentProfileSession();
-
-        if (!uid) {
-          if (isActive) {
-            setAverageRating('0.0');
-            setCompletedDeliveryCount(0);
-          }
-          return;
+        if (isActive && !hasLoadedProfileStatsRef.current) {
+          setIsLoadingStats(true);
         }
 
         try {
+          const { uid } = await getCurrentProfileSession();
+
+          if (!uid) {
+            if (isActive) {
+              setAverageRating('0.0');
+              setCompletedDeliveryCount(0);
+            }
+            return;
+          }
+
           const response = await fetch(
             `${getApiBaseUrl()}/api/deliveries/driver/${encodeURIComponent(uid)}?type=all`
           );
@@ -526,9 +553,7 @@ export default function ProfileScreen() {
           }
 
           const deliveries = Array.isArray(body?.data) ? body.data : [];
-          const completedCount = deliveries.filter((delivery) =>
-            isCompletedDelivery(delivery.status)
-          ).length;
+          const completedCount = deliveries.filter(isCompletedDelivery).length;
           const ratings = deliveries
             .map((delivery) => Number(delivery.review?.rating))
             .filter((rating) => Number.isFinite(rating) && rating > 0);
@@ -542,6 +567,11 @@ export default function ProfileScreen() {
           }
         } catch (error) {
           console.error('Error loading profile stats:', error);
+        } finally {
+          if (isActive) {
+            hasLoadedProfileStatsRef.current = true;
+            setIsLoadingStats(false);
+          }
         }
       };
 
@@ -564,6 +594,9 @@ export default function ProfileScreen() {
     setIsLogoutVisible(false);
     router.replace('/phone-number');
   };
+  const displayedDriverName = isLoadingProfile ? 'Loading...' : driverName;
+  const displayedRating = isLoadingStats ? '...' : averageRating;
+  const displayedCompletedCount = isLoadingStats ? '...' : String(completedDeliveryCount);
  
  
 
@@ -585,7 +618,7 @@ export default function ProfileScreen() {
           <View style={styles.profileBlock}>
             <View style={styles.profileRow}>
               <View style={styles.identity}>
-                 <Text style={styles.driverName} numberOfLines={1} ellipsizeMode="tail">{driverName}</Text>
+                 <Text style={styles.driverName} numberOfLines={1} ellipsizeMode="tail">{displayedDriverName}</Text>
                 <View style={styles.nameRow}>
                  
                   <Image source={verifiedBadgeImage} style={styles.verifiedBadge} resizeMode="contain" />
@@ -595,18 +628,22 @@ export default function ProfileScreen() {
               </View>
 
               <View style={styles.avatarWrap}>
-                <Image
-                  source={profilePhotoUrl ? { uri: profilePhotoUrl } : profileAvatarImage}
-                  style={styles.avatar}
-                  resizeMode="cover"
-                />
+                {isLoadingProfile ? (
+                  <View style={styles.avatar} />
+                ) : (
+                  <Image
+                    source={profilePhotoUrl ? { uri: profilePhotoUrl } : profileAvatarImage}
+                    style={styles.avatar}
+                    resizeMode="cover"
+                  />
+                )}
               </View>
             </View>
 
             <View style={styles.statsRow}>
               <StatCard title="Review">
                 <View style={styles.reviewValueRow}>
-                  <Text style={styles.statValue} numberOfLines={1}>{averageRating}</Text>
+                  <Text style={styles.statValue} numberOfLines={1}>{displayedRating}</Text>
                   <Image source={starImage} style={styles.starIcon} resizeMode="contain" />
                 </View>
               </StatCard>
@@ -614,7 +651,7 @@ export default function ProfileScreen() {
               <StatCard title="Delivery's" onPress={() => router.push('/my-deliveries')}>
                
                 <View style={styles.deliveryValueRow}>
-                  <Text style={styles.statValue} numberOfLines={1}>{completedDeliveryCount}</Text>
+                  <Text style={styles.statValue} numberOfLines={1}>{displayedCompletedCount}</Text>
                   <Text style={styles.completedText} numberOfLines={1}>Completed</Text>
                 </View>
               </StatCard>

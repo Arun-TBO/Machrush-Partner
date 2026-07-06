@@ -32,6 +32,7 @@ interface DocumentsVerificationScreenProps {
 
 interface VerificationData {
   status: 'pending' | 'verified' | 'rejected' | 'suspended';
+  rejectionMessage?: string;
   rejectionReason?: string;
   rejectedDocuments?: string[];
   reviewedAt?: string;
@@ -80,6 +81,7 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
 
       setVerificationData({
         status: data.status,
+        rejectionMessage: data.rejectionMessage,
         rejectionReason: data.rejectionReason,
         rejectedDocuments: data.rejectedDocuments,
       });
@@ -107,8 +109,9 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
     ? 'All your documents have been approved. You can now access the app.'
     : 'Our team will verify your documents within 24 hours.  We will notify you once the review is complete.';
   const actionMessage =
+    verificationData?.rejectionMessage ||
     verificationData?.rejectionReason ||
-    'Your driving license photo is blurry. Please upload a clear photo showing all details.';
+    'Please check the admin message and re-upload your documents.';
   const buttonLabel = isRejected ? 'Re-upload Documents' : 'Go to app';
    
 
@@ -236,7 +239,7 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
             <Pressable
               style={[
                 styles.continueButton,
-                isVerified && styles.continueButtonActive,
+                canUseButton && styles.continueButtonActive,
                 !canUseButton && styles.continueButtonDisabled,
               ]}
               onPress={() => {
@@ -253,7 +256,7 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
               <Text
                 style={[
                   styles.continueButtonText,
-                  isVerified && styles.continueButtonTextActive,
+                  canUseButton && styles.continueButtonTextActive,
                 ]}
               >
                 {buttonLabel}

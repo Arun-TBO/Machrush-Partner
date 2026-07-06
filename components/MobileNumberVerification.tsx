@@ -192,11 +192,14 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
         return;
       }
 
-      console.log(
-        verificationStatus?.status === 'rejected'
-          ? 'Existing driver rejected, starting re-upload onboarding'
-          : 'New driver, starting onboarding'
-      );
+      if (verificationStatus?.status === 'rejected') {
+        console.log('Existing driver rejected, showing review screen with admin message');
+        setShowVerification(true);
+        setShowOTP(false);
+        return;
+      }
+
+      console.log('New driver, starting onboarding');
 
       setShowOTP(false);
       setShowDriverDetails(true);

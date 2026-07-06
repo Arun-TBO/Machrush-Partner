@@ -53,6 +53,8 @@ const BODY_TYPES = [
   { id: 'open', label: 'Opened Body', Activeimage: openedBodyImage , nonActiveImage: bodynonactivetrak},
 ];
 
+const REQUIRED_VEHICLE_PHOTOS = 4;
+
 
 
 // const BODY_TYPES = [
@@ -286,21 +288,34 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
     setShowVehicleTypeModal(false);
   };
 
+  const trimmedVehicleNumber = vehicleNumber.trim();
+  const trimmedVehicleType = vehicleType.trim();
+  const trimmedVehicleCapacity = vehicleCapacity.trim();
   const uploadedVehiclePhotos = vehiclePhotoUris.filter(Boolean);
 
-  const isFormValid = vehicleNumber && vehicleType && vehicleCapacity && selectedBodyType && rcBookUri && insuranceUri && uploadedVehiclePhotos.length > 0;
+  const hasAllVehiclePhotos = uploadedVehiclePhotos.length >= REQUIRED_VEHICLE_PHOTOS;
+
+  const isFormValid = Boolean(
+    trimmedVehicleNumber &&
+      trimmedVehicleType &&
+      trimmedVehicleCapacity &&
+      selectedBodyType &&
+      rcBookUri &&
+      insuranceUri &&
+      hasAllVehiclePhotos
+  );
 
   const handleContinue = () => {
     if (!isFormValid) {
-      showAlert('Incomplete Form', 'Please fill in all required fields and upload all documents');
+      showAlert('Incomplete Form', 'Please fill in all required fields and upload 4 vehicle photos');
       return;
     }
 
     if (onContinue) {
       onContinue({
-        vehicleNumber,
-        vehicleType,
-        vehicleCapacity,
+        vehicleNumber: trimmedVehicleNumber,
+        vehicleType: trimmedVehicleType,
+        vehicleCapacity: trimmedVehicleCapacity,
         bodyType: selectedBodyType,
         rcBook: rcBookUri,
         insurance: insuranceUri,
@@ -493,10 +508,16 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
               <Text style={styles.documentTitle}>RC book</Text>
               <Text style={styles.documentSubtitle}>Upload RC book photo or PDF</Text>
               {!rcBookUri && (
-                <View style={styles.errorContainer}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Upload RC book"
+                  style={styles.errorContainer}
+                  onPress={() => pickSingleFile('rc')}
+                  disabled={isLoading}
+                >
                    <Image source={uploadIcon} style={{height : 20 , width  : 20}}/>
                   <Text style={styles.errorText}>Upload</Text>
-                </View>
+                </Pressable>
               )}
               
             </View>
@@ -534,10 +555,16 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
               <Text style={styles.documentTitle}>Insurance</Text>
               <Text style={styles.documentSubtitle}>Upload insurance photo or PDF</Text>
               {!insuranceUri && (
-                <View style={styles.errorContainer}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Upload insurance"
+                  style={styles.errorContainer}
+                  onPress={() => pickSingleFile('insurance')}
+                  disabled={isLoading}
+                >
                   <Image source={uploadIcon} style={{height : 20 , width  : 20}}/>
                   <Text style={styles.errorText}>Upload</Text>
-                </View>
+                </Pressable>
               )}
               
             </View>
@@ -572,7 +599,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
           <View style={styles.vehiclePhotosBlock}>
             <View style={styles.vehiclePhotoTextBlock}>
               <Text style={styles.documentTitle}>Vehicle photos</Text>
-              <Text style={styles.documentSubtitle}>Front, back & side photos</Text>
+              <Text style={styles.documentSubtitle}>Upload 4 vehicle photos</Text>
             </View>
 
             <View style={styles.vehiclePhotosGrid}>

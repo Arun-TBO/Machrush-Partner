@@ -1,23 +1,24 @@
-import React from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { auth } from "@/lib/firebase";
+import { fs, hit, isCompactPhone, rs, vs } from "@/lib/responsive";
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect, useRouter } from "expo-router";
+import React from "react";
 import {
   ActivityIndicator,
   Image,
-  ImageSourcePropType,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  
-} from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { auth } from '@/lib/firebase';
-import { fs, hit, isCompactPhone, rs, vs } from '@/lib/responsive';
+} from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
-const deliveryThumbImage = require('@/assets/images/delivery/delivery-list-thumb.png');
+const deliveryThumbImage = require("@/assets/images/delivery/delivery-list-thumb.png");
 
 type DeliveryTimestamp =
   | string
@@ -26,12 +27,14 @@ type DeliveryTimestamp =
   | {
       seconds?: number;
       _seconds?: number;
-      toDate?: () => Date; 
+      toDate?: () => Date;
     };
 
 type DeliveryRecord = {
   id?: string;
+  senderId?: string | null;
   status?: string;
+  pricingStatus?: string | null;
   pickupTime?: string | null;
   dropoffTime?: string | null;
   locations?: {
@@ -45,7 +48,10 @@ type DeliveryRecord = {
   pricing?: {
     tripFare?: number | string;
     total?: number | string;
+    pricingStatus?: string | null;
+    paymentStatus?: string | null;
   };
+  paymentStatus?: string | null;
   timestamps?: {
     createdAt?: DeliveryTimestamp;
     assignedAt?: DeliveryTimestamp;
@@ -54,7 +60,7 @@ type DeliveryRecord = {
   };
 };
 
-type PaymentFilter = 'paid' | 'pending';
+type PaymentFilter = "paid" | "pending";
 
 type DeliveryListItem = {
   id: string;
@@ -62,19 +68,30 @@ type DeliveryListItem = {
   amount: number;
   date: string;
   status: PaymentFilter;
+  profileImageUri: string;
   source?: DeliveryRecord;
 };
 
-const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+type CustomerProfileResponse = {
+  success?: boolean;
+  data?: {
+    profilePhotoUrl?: string;
+    photoUri?: string;
+  } | null;
+};
+
+const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const getApiBaseUrl = () => {
-  return (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
+  return (
+    process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:5000"
+  ).replace(/\/$/, "");
 };
 
 const getDriverAuthContext = async () => {
   const [storedUid, storedIdToken] = await Promise.all([
-    AsyncStorage.getItem('firebaseUid'),
-    AsyncStorage.getItem('firebaseIdToken'),
+    AsyncStorage.getItem("firebaseUid"),
+    AsyncStorage.getItem("firebaseIdToken"),
   ]);
   const currentUser = auth.currentUser;
   const uid = currentUser?.uid || storedUid;
@@ -85,8 +102,8 @@ const getDriverAuthContext = async () => {
     if (refreshedToken) {
       idToken = refreshedToken;
       await AsyncStorage.multiSet([
-        ['firebaseUid', currentUser.uid],
-        ['firebaseIdToken', refreshedToken],
+        ["firebaseUid", currentUser.uid],
+        ["firebaseIdToken", refreshedToken],
       ]);
     }
   }
@@ -98,26 +115,48 @@ const getDeliveryHeaders = (idToken?: string | null) => ({
   ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
 });
 
+const getCustomerProfilePhotoUrl = async (
+  senderId: string,
+  idToken?: string | null,
+) => {
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/firestore/customers/${encodeURIComponent(senderId)}`,
+    {
+      headers: getDeliveryHeaders(idToken),
+    },
+  );
+  const body = (await response
+    .json()
+    .catch(() => null)) as CustomerProfileResponse | null;
+
+  if (!response.ok || body?.success === false) {
+    return "";
+  }
+
+  const photoUrl = body?.data?.profilePhotoUrl || body?.data?.photoUri || "";
+  return photoUrl.startsWith("http") ? photoUrl : "";
+};
+
 const formatCurrency = (value: unknown) => {
   const amount = Number(value);
 
   if (!Number.isFinite(amount)) {
-    return '\u20b90';
+    return "\u20b90";
   }
 
-  return `\u20b9${amount.toLocaleString('en-IN', {
+  return `\u20b9${amount.toLocaleString("en-IN", {
     maximumFractionDigits: 0,
   })}`;
 };
 
 const readTimestampMs = (value: DeliveryTimestamp | undefined) => {
   if (!value) return 0;
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string') return new Date(value).getTime() || 0;
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return new Date(value).getTime() || 0;
   if (value instanceof Date) return value.getTime();
-  if (typeof value.toDate === 'function') return value.toDate().getTime();
-  if (typeof value._seconds === 'number') return value._seconds * 1000;
-  if (typeof value.seconds === 'number') return value.seconds * 1000;
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  if (typeof value._seconds === "number") return value._seconds * 1000;
+  if (typeof value.seconds === "number") return value.seconds * 1000;
   return 0;
 };
 
@@ -160,9 +199,9 @@ const isWithinWeek = (timestampMs: number, weekDays: Date[]) => {
 };
 
 const formatShortDate = (value: Date) => {
-  return value.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
+  return value.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
   });
 };
 
@@ -170,15 +209,22 @@ const formatListDate = (value: DeliveryTimestamp | undefined) => {
   const timestamp = readTimestampMs(value);
   const date = timestamp ? new Date(timestamp) : new Date();
 
-  return date.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
   });
 };
 
-const isPaidDelivery = (status?: string) => {
-  return status === 'delivered' || status === 'completed' || status === 'paid';
+const isPaidDelivery = (delivery: DeliveryRecord) => {
+  const pricingStatus = String(
+    delivery.pricingStatus ||
+      delivery.pricing?.pricingStatus ||
+      delivery.paymentStatus ||
+      delivery.pricing?.paymentStatus ||
+      "",
+  ).toLowerCase();
+  return pricingStatus === "completed" || pricingStatus === "paid";
 };
 
 const toAmount = (delivery: DeliveryRecord) => {
@@ -187,7 +233,9 @@ const toAmount = (delivery: DeliveryRecord) => {
 };
 
 const getDeliveryCompletedMs = (delivery: DeliveryRecord) => {
-  return readTimestampMs(delivery.timestamps?.deliveredAt || delivery.timestamps?.createdAt);
+  return readTimestampMs(
+    delivery.timestamps?.deliveredAt || delivery.timestamps?.createdAt,
+  );
 };
 
 const getActiveDurationMs = (delivery: DeliveryRecord) => {
@@ -214,9 +262,10 @@ const formatDuration = (durationMs: number) => {
 };
 
 const getDeliveryTitle = (delivery: DeliveryRecord) => {
-  const address = delivery.locations?.pickup?.address || delivery.locations?.dropoff?.address;
-  const [primary, secondary] = (address || 'Delivery location unavailable')
-    .split(',')
+  const address =
+    delivery.locations?.pickup?.address || delivery.locations?.dropoff?.address;
+  const [primary, secondary] = (address || "Delivery location unavailable")
+    .split(",")
     .map((part) => part.trim())
     .filter(Boolean);
 
@@ -224,7 +273,7 @@ const getDeliveryTitle = (delivery: DeliveryRecord) => {
     return `${primary}, ${secondary}`;
   }
 
-  return primary || 'Delivery location unavailable';
+  return primary || "Delivery location unavailable";
 };
 
 function TopSummary({
@@ -261,7 +310,10 @@ function TopSummary({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Show next week"
-            style={[styles.weekNavButton, !canGoNext ? styles.weekNavButtonDisabled : null]}
+            style={[
+              styles.weekNavButton,
+              !canGoNext ? styles.weekNavButtonDisabled : null,
+            ]}
             disabled={!canGoNext}
             onPress={onNextWeek}
           >
@@ -290,10 +342,13 @@ function WeeklyChart({
   return (
     <View style={styles.chartSection}>
       <Text style={styles.peakAmount}>{peakAmount}</Text>
-       {/* <View style={styles.routeSeparator} /> */}
+      {/* <View style={styles.routeSeparator} /> */}
       <View style={styles.chartGrid}>
         {bars.map((height, index) => (
-          <View key={`${days[index].toISOString()}-${index}`} style={styles.chartColumn}>
+          <View
+            key={`${days[index].toISOString()}-${index}`}
+            style={styles.chartColumn}
+          >
             <Text
               style={[
                 styles.chartAmount,
@@ -316,10 +371,13 @@ function WeeklyChart({
         {days.map((date, index) => (
           <Text
             key={date.toISOString()}
-            style={[styles.dayLabel, index === activeIndex ? styles.dayLabelActive : null]}
+            style={[
+              styles.dayLabel,
+              index === activeIndex ? styles.dayLabelActive : null,
+            ]}
           >
             {date.getDate()}
-            {'\n'}
+            {"\n"}
             {weekdayLabels[index]}
           </Text>
         ))}
@@ -363,19 +421,32 @@ function SegmentedFilter({
     <View style={styles.segmentedControl}>
       <Pressable
         accessibilityRole="button"
-        style={[styles.segment, value === 'paid' ? styles.segmentActive : null]}
-        onPress={() => onChange('paid')}
+        style={[styles.segment, value === "paid" ? styles.segmentActive : null]}
+        onPress={() => onChange("paid")}
       >
-        <Text style={[styles.segmentText, value === 'paid' ? styles.segmentTextActive : null]}>
+        <Text
+          style={[
+            styles.segmentText,
+            value === "paid" ? styles.segmentTextActive : null,
+          ]}
+        >
           Paid
         </Text>
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        style={[styles.segment, value === 'pending' ? styles.segmentActive : null]}
-        onPress={() => onChange('pending')}
+        style={[
+          styles.segment,
+          value === "pending" ? styles.segmentActive : null,
+        ]}
+        onPress={() => onChange("pending")}
       >
-        <Text style={[styles.segmentText, value === 'pending' ? styles.segmentTextActive : null]}>
+        <Text
+          style={[
+            styles.segmentText,
+            value === "pending" ? styles.segmentTextActive : null,
+          ]}
+        >
           Pending
         </Text>
       </Pressable>
@@ -385,36 +456,49 @@ function SegmentedFilter({
 
 function DeliveryRow({
   item,
-  thumbnail,
   onPress,
 }: {
   item: DeliveryListItem;
-  thumbnail: ImageSourcePropType;
   onPress?: () => void;
 }) {
-  const isPaid = item.status === 'paid';
+  const isPaid = item.status === "paid";
+  const imageSource = item.profileImageUri
+    ? { uri: item.profileImageUri }
+    : deliveryThumbImage;
 
   return (
     <Pressable
-      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityRole={onPress ? "button" : undefined}
       style={styles.deliveryRow}
       onPress={onPress}
     >
-      <Image source={thumbnail} style={styles.deliveryThumb} resizeMode="cover" />
+      <Image
+        source={imageSource}
+        style={styles.deliveryThumb}
+        resizeMode="cover"
+      />
       <View style={styles.deliveryCopy}>
         <Text style={styles.deliveryTitle} numberOfLines={1}>
           {item.title}
         </Text>
         <Text style={styles.deliveryMeta} numberOfLines={1}>
-          {formatCurrency(item.amount)} earned  •  {item.date}
+          {formatCurrency(item.amount)} earned • {item.date}
         </Text>
       </View>
-      <View style={[styles.statusBadge, isPaid ? styles.paidBadge : styles.pendingBadge]}>
+      <View
+        style={[
+          styles.statusBadge,
+          isPaid ? styles.paidBadge : styles.pendingBadge,
+        ]}
+      >
         <Text
-          style={[styles.statusBadgeText, isPaid ? styles.paidBadgeText : styles.pendingBadgeText]}
+          style={[
+            styles.statusBadgeText,
+            isPaid ? styles.paidBadgeText : styles.pendingBadgeText,
+          ]}
           numberOfLines={1}
         >
-          {isPaid ? 'Paid' : 'Pending'}
+          {isPaid ? "Paid" : "Pending"}
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={24} color="#d2d2d2" />
@@ -426,7 +510,7 @@ function EmptyList({ filter }: { filter: PaymentFilter }) {
   return (
     <View style={styles.emptyRow}>
       <Text style={styles.emptyTitle}>
-        {filter === 'paid' ? 'No paid deliveries yet' : 'No pending deliveries'}
+        {filter === "paid" ? "No paid deliveries yet" : "No pending deliveries"}
       </Text>
     </View>
   );
@@ -435,8 +519,11 @@ function EmptyList({ filter }: { filter: PaymentFilter }) {
 export default function MyDeliveriesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [filter, setFilter] = React.useState<PaymentFilter>('paid');
+  const [filter, setFilter] = React.useState<PaymentFilter>("paid");
   const [deliveries, setDeliveries] = React.useState<DeliveryRecord[]>([]);
+  const [senderPhotoById, setSenderPhotoById] = React.useState<
+    Record<string, string>
+  >({});
   const [isLoading, setIsLoading] = React.useState(true);
   const [weekOffset, setWeekOffset] = React.useState(0);
   const hasLoadedDeliveriesRef = React.useRef(false);
@@ -448,7 +535,9 @@ export default function MyDeliveriesScreen() {
       return shiftedDate;
     });
   }, [currentWeekDays, weekOffset]);
-  const todayIndex = weekDays.findIndex((date) => isSameLocalDay(Date.now(), date));
+  const todayIndex = weekDays.findIndex((date) =>
+    isSameLocalDay(Date.now(), date),
+  );
   const activeDayIndex = todayIndex >= 0 ? todayIndex : null;
   const canGoNextWeek = weekOffset < 0;
 
@@ -466,6 +555,7 @@ export default function MyDeliveriesScreen() {
           if (!uid) {
             if (isActive) {
               setDeliveries([]);
+              setSenderPhotoById({});
             }
             return;
           }
@@ -474,7 +564,7 @@ export default function MyDeliveriesScreen() {
             `${getApiBaseUrl()}/api/deliveries/driver/${encodeURIComponent(uid)}?type=all`,
             {
               headers: getDeliveryHeaders(idToken),
-            }
+            },
           );
           const body = (await response.json().catch(() => null)) as {
             success?: boolean;
@@ -483,21 +573,45 @@ export default function MyDeliveriesScreen() {
           } | null;
 
           if (!response.ok || body?.success === false) {
-            throw new Error(body?.error || 'Unable to load deliveries');
+            throw new Error(body?.error || "Unable to load deliveries");
           }
 
           const items = Array.isArray(body?.data) ? body.data : [];
           items.sort((a, b) => {
-            const aTime = readTimestampMs(a.timestamps?.deliveredAt || a.timestamps?.createdAt);
-            const bTime = readTimestampMs(b.timestamps?.deliveredAt || b.timestamps?.createdAt);
+            const aTime = readTimestampMs(
+              a.timestamps?.deliveredAt || a.timestamps?.createdAt,
+            );
+            const bTime = readTimestampMs(
+              b.timestamps?.deliveredAt || b.timestamps?.createdAt,
+            );
             return bTime - aTime;
           });
+          const senderIds = Array.from(
+            new Set(
+              items
+                .map((delivery) => delivery.senderId)
+                .filter((senderId): senderId is string => Boolean(senderId)),
+            ),
+          );
+          const senderPhotoEntries = await Promise.all(
+            senderIds.map(async (senderId) => {
+              const photoUrl = await getCustomerProfilePhotoUrl(
+                senderId,
+                idToken,
+              ).catch((error) => {
+                console.error("Error loading sender profile photo:", error);
+                return "";
+              });
+              return [senderId, photoUrl] as const;
+            }),
+          );
 
           if (isActive) {
+            setSenderPhotoById(Object.fromEntries(senderPhotoEntries));
             setDeliveries(items);
           }
         } catch (error) {
-          console.error('Error loading my deliveries:', error);
+          console.error("Error loading my deliveries:", error);
         } finally {
           if (isActive) {
             hasLoadedDeliveriesRef.current = true;
@@ -513,46 +627,58 @@ export default function MyDeliveriesScreen() {
         isActive = false;
         clearInterval(interval);
       };
-    }, [])
+    }, []),
   );
 
-  const completedDeliveries = deliveries.filter((delivery) => isPaidDelivery(delivery.status));
-  const weeklyCompletedDeliveries = completedDeliveries.filter((delivery) =>
-    isWithinWeek(getDeliveryCompletedMs(delivery), weekDays)
+  const completedDeliveries = deliveries.filter((delivery) =>
+    isPaidDelivery(delivery),
   );
-  const weeklyTotalEarnings = weeklyCompletedDeliveries.reduce((sum, delivery) => {
-    return sum + toAmount(delivery);
-  }, 0);
+  const weeklyCompletedDeliveries = completedDeliveries.filter((delivery) =>
+    isWithinWeek(getDeliveryCompletedMs(delivery), weekDays),
+  );
+  const weeklyTotalEarnings = weeklyCompletedDeliveries.reduce(
+    (sum, delivery) => {
+      return sum + toAmount(delivery);
+    },
+    0,
+  );
   const weeklyAmounts = weekDays.map((day) => {
     return weeklyCompletedDeliveries
       .filter((delivery) =>
-        isSameLocalDay(
-          getDeliveryCompletedMs(delivery),
-          day
-        )
+        isSameLocalDay(getDeliveryCompletedMs(delivery), day),
       )
       .reduce((sum, delivery) => sum + toAmount(delivery), 0);
   });
   const maxWeeklyAmount = Math.max(...weeklyAmounts, 0);
   const chartBars =
     maxWeeklyAmount > 0
-      ? weeklyAmounts.map((amount) => Math.max(36, Math.round((amount / maxWeeklyAmount) * 112)))
+      ? weeklyAmounts.map((amount) =>
+          Math.max(36, Math.round((amount / maxWeeklyAmount) * 112)),
+        )
       : weeklyAmounts.map(() => 0);
   const chartAmounts = weeklyAmounts.map((amount) => formatCurrency(amount));
   const peakAmount = formatCurrency(maxWeeklyAmount);
   const weekLabel = `${formatShortDate(weekDays[0])} - ${formatShortDate(weekDays[6])}`;
   const activeDuration = formatDuration(
-    weeklyCompletedDeliveries.reduce((sum, delivery) => sum + getActiveDurationMs(delivery), 0)
+    weeklyCompletedDeliveries.reduce(
+      (sum, delivery) => sum + getActiveDurationMs(delivery),
+      0,
+    ),
   );
   const listItems = deliveries.map((delivery, index) => {
-    const status: PaymentFilter = isPaidDelivery(delivery.status) ? 'paid' : 'pending';
+    const status: PaymentFilter = isPaidDelivery(delivery) ? "paid" : "pending";
 
     return {
       id: delivery.id || `delivery-${index}`,
       title: getDeliveryTitle(delivery),
       amount: toAmount(delivery),
-      date: formatListDate(delivery.timestamps?.deliveredAt || delivery.timestamps?.createdAt),
+      date: formatListDate(
+        delivery.timestamps?.deliveredAt || delivery.timestamps?.createdAt,
+      ),
       status,
+      profileImageUri: delivery.senderId
+        ? senderPhotoById[delivery.senderId] || ""
+        : "",
       source: delivery,
     };
   });
@@ -562,7 +688,7 @@ export default function MyDeliveriesScreen() {
     <SafeAreaView style={styles.container}>
       <TopSummary
         weekLabel={weekLabel}
-        totalEarned={formatCurrency(weeklyTotalEarnings)}
+        totalEarned={isLoading ? "..." : formatCurrency(weeklyTotalEarnings)}
         onPreviousWeek={() => setWeekOffset((current) => current - 1)}
         onNextWeek={() => setWeekOffset((current) => Math.min(current + 1, 0))}
         canGoNext={canGoNextWeek}
@@ -570,62 +696,64 @@ export default function MyDeliveriesScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[
-          styles.content,
-        
-        ]}
+        contentContainerStyle={[styles.content]}
         showsVerticalScrollIndicator={false}
       >
-        <WeeklyChart
-          bars={chartBars}
-          amounts={chartAmounts}
-          days={weekDays}
-          activeIndex={activeDayIndex}
-          peakAmount={peakAmount}
-        />  
-        <StatsBlock
-          completedCount={weeklyCompletedDeliveries.length}
-          activeDuration={activeDuration}
-        />
-
-        <View style={styles.deliveriesSection}>
-          <View style={styles.deliveriesHeader}>
-            <Text style={styles.sectionTitle}>My Deliveries</Text>
-            <SegmentedFilter value={filter} onChange={setFilter} />
+        {isLoading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color="#0055cc" />
+            <Text style={styles.loadingText}>Loading deliveries...</Text>
           </View>
+        ) : (
+          <>
+            <WeeklyChart
+              bars={chartBars}
+              amounts={chartAmounts}
+              days={weekDays}
+              activeIndex={activeDayIndex}
+              peakAmount={peakAmount}
+            />
+            <StatsBlock
+              completedCount={weeklyCompletedDeliveries.length}
+              activeDuration={activeDuration}
+            />
 
-          {isLoading ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator size="small" color="#0055cc" />
-              <Text style={styles.loadingText}>Loading deliveries...</Text>
+            <View style={styles.deliveriesSection}>
+              <View style={styles.deliveriesHeader}>
+                <Text style={styles.sectionTitle}>My Deliveries</Text>
+                <SegmentedFilter value={filter} onChange={setFilter} />
+              </View>
+
+              {visibleItems.length > 0 ? (
+                <View style={styles.deliveryList}>
+                  {visibleItems.map((item) => (
+                    <DeliveryRow
+                      key={item.id}
+                      item={item}
+                      onPress={
+                        item.source?.id
+                          ? () =>
+                              router.push({
+                                pathname:
+                                  item.status === "paid"
+                                    ? "/payment-received"
+                                    : "/payment-pending",
+                                params: {
+                                  deliveryId: item.source?.id,
+                                },
+                              })
+                          : undefined
+                      }
+                    />
+                  ))}
+                </View>
+              ) : (
+                <EmptyList filter={filter} />
+              )}
             </View>
-          ) : visibleItems.length > 0 ? (
-            <View style={styles.deliveryList}>
-              {visibleItems.map((item) => (
-                <DeliveryRow
-                  key={item.id}
-                  item={item}
-                  thumbnail={deliveryThumbImage}
-                  onPress={
-                    item.source?.id
-                      ? () =>
-                          router.push({
-                            pathname: item.status === 'paid' ? '/payment-received' : '/payment-pending',
-                            params: {
-                              deliveryId: item.source?.id,
-                            },
-                          })
-                      : undefined
-                  }
-                />
-              ))}
-            </View>
-          ) : (
-            <EmptyList filter={filter} />
-          )}
-        </View>
+          </>
+        )}
       </ScrollView>
-
     </SafeAreaView>
   );
 }
@@ -633,17 +761,17 @@ export default function MyDeliveriesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#dbe6f7',
+    backgroundColor: "#dbe6f7",
   },
   header: {
-    backgroundColor: '#dbe6f7',
+    backgroundColor: "#dbe6f7",
     borderBottomLeftRadius: rs(24),
     borderBottomRightRadius: rs(24),
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   topNav: {
     minHeight: vs(56),
-    justifyContent: 'center',
+    justifyContent: "center",
     paddingLeft: rs(16),
     paddingRight: rs(4),
     paddingVertical: vs(4),
@@ -651,39 +779,39 @@ const styles = StyleSheet.create({
   navTitle: {
     minWidth: 0,
     flexShrink: 1,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
     fontSize: fs(20, 17, 22),
     lineHeight: fs(32, 26, 34),
-    color: '#1c1c1c',
+    color: "#1c1c1c",
   },
   weekSummary: {
-    width: '100%',
+    width: "100%",
     maxWidth: rs(412, 320, 430),
-    alignSelf: 'center',
+    alignSelf: "center",
     paddingTop: vs(24),
     paddingBottom: vs(24),
     gap: vs(4),
   },
   weekLabel: {
-    width: '100%',
-    fontFamily: 'Poppins_500Medium',
+    width: "100%",
+    fontFamily: "Poppins_500Medium",
     fontSize: 16,
     letterSpacing: -0.5,
-    color: '#1c1c1c',
-    textAlign: 'center',
+    color: "#1c1c1c",
+    textAlign: "center",
   },
   weekAmountRow: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: rs(40, 24, 44),
   },
   weekNavButton: {
     width: hit(44),
     height: hit(44),
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   weekNavButtonDisabled: {
     opacity: 0.35,
@@ -692,222 +820,217 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     flexShrink: 1,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
     fontSize: fs(40, 30, 42),
     lineHeight: fs(48, 36, 50),
-    color: '#1c1c1c',
-    textAlign: 'center',
+    color: "#1c1c1c",
+    textAlign: "center",
   },
   weekCaption: {
-    width: '100%',
-    fontFamily: 'Poppins_400Regular',
+    width: "100%",
+    fontFamily: "Poppins_400Regular",
     fontSize: 16,
     lineHeight: fs(24),
-    color: '#606060',
-    textAlign: 'center',
+    color: "#606060",
+    textAlign: "center",
   },
   scroll: {
     flex: 1,
-    backgroundColor: '#eff2f6',
+    backgroundColor: "#eff2f6",
   },
   content: {
-    width: '100%',
+    width: "100%",
     maxWidth: rs(412, 320, 430),
-    alignSelf: 'center',
-    paddingBottom: 30 ,
+    alignSelf: "center",
+    paddingBottom: 30,
   },
   chartSection: {
-    width: '100%',
-    backgroundColor: '#ffffff',
+    width: "100%",
+    backgroundColor: "#ffffff",
     paddingHorizontal: rs(16, 12, 18),
     paddingTop: vs(24),
     paddingBottom: vs(16),
   },
   peakAmount: {
-    width: '100%',
-    fontFamily: 'Poppins_500Medium',
+    width: "100%",
+    fontFamily: "Poppins_500Medium",
     fontSize: 16,
     letterSpacing: -0.5,
-    color: '#1c1c1c',
-    textAlign: 'center',
+    color: "#1c1c1c",
+    textAlign: "center",
     marginBottom: 4,
   },
   chartGrid: {
     height: vs(141, 126, 150),
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'center',
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "center",
     gap: rs(12, 6, 12),
-    borderBottomWidth : 1,
+    borderBottomWidth: 1,
     borderTopWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: '#d6d6d6',
+    borderStyle: "dashed",
+    borderColor: "#d6d6d6",
   },
   chartColumn: {
     flex: 1,
-    height: '100%',
+    height: "100%",
     minWidth: 1,
     maxWidth: rs(44, 34, 46),
-    alignItems: 'center',
-    justifyContent: 'flex-end',
+    alignItems: "center",
+    justifyContent: "flex-end",
     gap: vs(4),
   },
   chartAmount: {
-    width: '100%',
-    fontFamily: 'Poppins_500Medium',
+    width: "100%",
+    fontFamily: "Poppins_500Medium",
     fontSize: fs(10, 9, 11),
     lineHeight: fs(14, 12, 15),
-    color: '#606060',
-    textAlign: 'center',
+    color: "#606060",
+    textAlign: "center",
   },
   chartAmountActive: {
-    color: '#0055cc',
+    color: "#0055cc",
   },
   chartBar: {
-    width: '100%',
+    width: "100%",
     borderRadius: rs(4),
     borderBottomWidth: 1,
-    borderBottomColor: '#33333380',
-    backgroundColor: '#76b0ff',
+    borderBottomColor: "#33333380",
+    backgroundColor: "#76b0ff",
   },
   chartBarActive: {
-    backgroundColor: '#0055cc',
+    backgroundColor: "#0055cc",
   },
   dayRow: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: rs(16, 6, 16),
   },
   dayLabel: {
     flex: 1,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     fontSize: fs(13),
     lineHeight: fs(21, 17, 22),
-    color: '#606060',
-    textAlign: 'center',
+    color: "#606060",
+    textAlign: "center",
   },
   dayLabelActive: {
-    color: '#1c1c1c',
+    color: "#1c1c1c",
   },
   statsSection: {
-    width: '100%',
-    backgroundColor: '#ffffff',
+    width: "100%",
+    backgroundColor: "#ffffff",
     borderBottomWidth: 1,
-    borderBottomColor: '#d2d2d2',
+    borderBottomColor: "#d2d2d2",
     paddingHorizontal: rs(16),
     paddingTop: vs(16),
     paddingBottom: vs(24),
     gap: vs(16),
   },
   sectionTitle: {
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
     fontSize: fs(20, 17, 22),
-    color: '#1c1c1c',
+    color: "#1c1c1c",
   },
   statsRow: {
-    width: '100%',
-    flexDirection: 'row',
+    width: "100%",
+    flexDirection: "row",
     gap: rs(16, 10, 16),
-    flexWrap: isCompactPhone ? 'wrap' : 'nowrap',
+    flexWrap: isCompactPhone ? "wrap" : "nowrap",
   },
   statItem: {
     flex: 1,
-    minWidth: isCompactPhone ? '46%' : 0,
+    minWidth: isCompactPhone ? "46%" : 0,
     gap: vs(4),
   },
   statLabel: {
-    width: '100%',
-    fontFamily: 'Poppins_400Regular',
+    width: "100%",
+    fontFamily: "Poppins_400Regular",
     fontSize: fs(14, 12, 15),
     lineHeight: fs(21),
-    color: '#606060',
+    color: "#606060",
   },
   statValue: {
-    width: '100%',
-    fontFamily: 'Poppins_500Medium',
+    width: "100%",
+    fontFamily: "Poppins_500Medium",
     fontSize: fs(24, 20, 26),
     lineHeight: fs(26),
     letterSpacing: -1,
-    color: '#1c1c1c',
+    color: "#1c1c1c",
   },
   deliveriesSection: {
-    width: '100%',
+    width: "100%",
     paddingTop: vs(24),
     gap: vs(24),
   },
   deliveriesHeader: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding : rs(16),
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: rs(16),
     gap: rs(12),
-    flexWrap: 'wrap',
+    flexWrap: "wrap",
   },
   segmentedControl: {
-
     height: hit(32),
-    flexDirection: 'row',
+    flexDirection: "row",
     borderWidth: 1,
-    borderColor: '#bbbbbb',
+    borderColor: "#bbbbbb",
     borderRadius: rs(8),
-    overflow: 'hidden',
-    backgroundColor: '#eff2f6',
-  
+    overflow: "hidden",
+    backgroundColor: "#eff2f6",
   },
   segment: {
-   
-    alignItems: 'center',
-    justifyContent: 'center',
-    
-    width: rs(85, 72, 90)
+    alignItems: "center",
+    justifyContent: "center",
+
+    width: rs(85, 72, 90),
   },
   segmentActive: {
-    backgroundColor: '#ffffff',
-  
+    backgroundColor: "#ffffff",
   },
   segmentText: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     fontSize: fs(12, 11, 13),
     lineHeight: fs(18),
-    color: '#606060',
+    color: "#606060",
   },
   segmentTextActive: {
-    color: '#1c1c1c',
-
+    color: "#1c1c1c",
   },
   loadingRow: {
-    width: '100%',
+    width: "100%",
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: '#d2d2d2',
-    backgroundColor: '#eff2f6',
+    borderColor: "#d2d2d2",
+    backgroundColor: "#eff2f6",
     paddingHorizontal: rs(16),
     paddingVertical: vs(24),
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     gap: 10,
   },
   loadingText: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     fontSize: fs(14),
     lineHeight: fs(21),
-    color: '#606060',
+    color: "#606060",
   },
   deliveryList: {
-    width: '100%',
+    width: "100%",
   },
   deliveryRow: {
-    width: '100%',
+    width: "100%",
     minHeight: vs(88),
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: rs(12),
     borderBottomWidth: 1,
-    borderBottomColor: '#d2d2d2',
+    borderBottomColor: "#d2d2d2",
     paddingHorizontal: rs(16),
     paddingVertical: vs(20),
   },
@@ -915,7 +1038,7 @@ const styles = StyleSheet.create({
     width: rs(40),
     height: rs(40),
     borderRadius: rs(8),
-    backgroundColor: '#000000',
+    backgroundColor: "#000000",
   },
   deliveryCopy: {
     flex: 1,
@@ -924,66 +1047,66 @@ const styles = StyleSheet.create({
     gap: vs(4),
   },
   deliveryTitle: {
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
     fontSize: 16,
     lineHeight: fs(18),
     letterSpacing: -0.5,
-    color: '#1c1c1c',
+    color: "#1c1c1c",
   },
   deliveryMeta: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     fontSize: fs(14, 12, 15),
     lineHeight: fs(21),
-    color: '#606060',
+    color: "#606060",
   },
   statusBadge: {
-    maxWidth: '28%',
+    maxWidth: "28%",
     flexShrink: 0,
     minHeight: hit(24),
     borderRadius: rs(4),
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: rs(8),
     paddingVertical: vs(4),
   },
   paidBadge: {
-    backgroundColor: '#1fc16b',
+    backgroundColor: "#1fc16b",
   },
   pendingBadge: {
-    backgroundColor: '#ffdb43',
+    backgroundColor: "#ffdb43",
   },
   statusBadgeText: {
-    maxWidth: '100%',
-    fontFamily: 'Poppins_400Regular',
+    maxWidth: "100%",
+    fontFamily: "Poppins_400Regular",
     fontSize: fs(12, 11, 13),
     lineHeight: fs(18),
-    textAlign: 'center',
+    textAlign: "center",
   },
   paidBadgeText: {
-    color: '#ffffff',
+    color: "#ffffff",
   },
   pendingBadgeText: {
-    color: '#1c1c1c',
+    color: "#1c1c1c",
   },
   emptyRow: {
-    width: '100%',
+    width: "100%",
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: '#d2d2d2',
+    borderColor: "#d2d2d2",
     paddingHorizontal: 16,
     paddingVertical: 28,
   },
   emptyTitle: {
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
     fontSize: 16,
-    color: '#606060',
-    textAlign: 'center',
+    color: "#606060",
+    textAlign: "center",
   },
   routeSeparator: {
-    height: 1, 
+    height: 1,
     borderTopWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: '#d6d6d6',
-    width : '100%'
+    borderStyle: "dashed",
+    borderColor: "#d6d6d6",
+    width: "100%",
   },
 });

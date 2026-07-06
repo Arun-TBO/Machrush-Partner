@@ -11,8 +11,10 @@ import {
   Animated, 
   PanResponder
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
 import { fs, rs, vs } from '@/lib/responsive';
+import { useAppAlert } from './AppAlertModal';
 
 const backImage = require('@/assets/images/profile/back.png');
 const chevrondown = require('@/assets/images/chevron-down.png');
@@ -49,6 +51,8 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
   initialData,
   onDraftChange,
 }) => {
+  const insets = useSafeAreaInsets();
+  const { alertModal, showAlert } = useAppAlert();
   const [bankName, setBankName] = useState(initialData?.bankName || '');
   const [accountNumber, setAccountNumber] = useState(initialData?.accountNumber || '');
   const [ifscCode, setIfscCode] = useState(initialData?.ifscCode || '');
@@ -70,7 +74,12 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
     setShowBankModal(false);
   };
 
-  const isFormValid = bankName && accountNumber && ifscCode;
+  const trimmedBankName = bankName.trim();
+  const trimmedAccountNumber = accountNumber.trim();
+  const trimmedIfscCode = ifscCode.trim().toUpperCase();
+  const trimmedUpiId = upiId.trim();
+
+  const isFormValid = Boolean(trimmedBankName && trimmedAccountNumber && trimmedIfscCode);
 
   const handleContinue = async () => {
     if (isSubmitting) {
@@ -78,19 +87,22 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
     }
 
     if (!isFormValid) {
-      alert('Please fill in all required fields');
+      showAlert('Incomplete Form', 'Please fill in all required bank details.');
       return;
     }
 
-    // Validate IFSC code format (11 characters)
-    if (ifscCode.length !== 11) {
-      alert('IFSC code must be 11 characters long');
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(trimmedIfscCode)) {
+      showAlert('Invalid IFSC Code', 'Please enter a valid 11-character IFSC code.');
       return;
     }
 
-    // Validate account number (should be numeric)
-    if (!/^\d+$/.test(accountNumber)) {
-      alert('Account number must contain only digits');
+    if (!/^\d+$/.test(trimmedAccountNumber)) {
+      showAlert('Invalid Account Number', 'Account number must contain only digits.');
+      return;
+    }
+
+    if (trimmedUpiId && !/^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$/.test(trimmedUpiId)) {
+      showAlert('Invalid UPI ID', 'Please enter a valid UPI ID.');
       return;
     }
 
@@ -98,10 +110,10 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
       setIsSubmitting(true);
       try {
         await onContinue({
-          bankName,
-          accountNumber,
-          ifscCode: ifscCode.toUpperCase(),
-          upiId,
+          bankName: trimmedBankName,
+          accountNumber: trimmedAccountNumber,
+          ifscCode: trimmedIfscCode,
+          upiId: trimmedUpiId,
         });
       } catch (error) {
         setIsSubmitting(false);
@@ -192,7 +204,10 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
       {/* Main Content */}
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom + 24, 40) },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Header Section */}
@@ -332,6 +347,7 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
          </Animated.View>
         </Pressable>
       </Modal>
+      {alertModal}
     </View>
   );
 };
@@ -386,7 +402,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: rs(16),
     paddingTop: vs(24),
     paddingBottom: vs(24),
-    gap: vs(40),
+    gap: vs(24),
   },
 
   // Header Section
@@ -484,7 +500,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: rs(24),
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom : vs(15)
   },
   buttonDisabled: {
     opacity: 0.6,

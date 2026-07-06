@@ -11,12 +11,18 @@ import {
   SafeAreaView,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/lib/theme';
+import { fs } from '@/lib/responsive';
+import { useAppAlert } from './AppAlertModal';
 
-const backImage = require('@/assets/images/profile/back.png');
 const uploadIcon = require('@/assets/images/uploadIcon.png');
 const CloseButton = require('@/assets/images/Close button.png');
-import { fs, hit, rs, vs } from '@/lib/responsive';
+
+const isPdfFile = (uri?: string) => {
+  return Boolean(uri && /\.pdf($|\?)/i.test(uri));
+};
 
 interface DriverDetailsScreenProps {
   onContinue?: (data: DriverDetailsData) => void;
@@ -36,6 +42,8 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
   onBack,
   initialData,
 }) => {
+  const insets = useSafeAreaInsets();
+  const { alertModal, showAlert } = useAppAlert();
   const [fullName, setFullName] = useState(initialData?.fullName || '');
   const [photoUri, setPhotoUri] = useState<string | undefined>(initialData?.photoUri);
   const [drivingLicenseUri, setDrivingLicenseUri] = useState<string | undefined>(
@@ -68,21 +76,31 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
     setIdentityProofUri(initialData.identityProofUri);
   }, [initialData]);
 
-  const pickImage = async (
-    type: 'photo' | 'license' | 'identity',
-  ) => {
+  const pickImage = async (type: 'photo' | 'license' | 'identity') => {
     try {
-      const permission =
-        type === 'photo'
-          ? await ImagePicker.requestCameraPermissionsAsync()
-          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (type !== 'photo') {
+        const result = await DocumentPicker.getDocumentAsync({
+          type: ['image/*', 'application/pdf'],
+          multiple: false,
+          copyToCacheDirectory: true,
+        });
+
+        if (!result.canceled && result.assets?.[0]) {
+          const uri = result.assets[0].uri;
+          if (type === 'license') {
+            setDrivingLicenseUri(uri);
+          } else {
+            setIdentityProofUri(uri);
+          }
+        }
+
+        return;
+      }
+
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
 
       if (permission.status !== 'granted') {
-        alert(
-          type === 'photo'
-            ? 'Permission to access camera is required!'
-            : 'Permission to access media library is required!'
-        );
+        showAlert('Permission Required', 'Permission to access camera is required.');
         return;
       }
 
@@ -93,24 +111,15 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
         quality: 0.8,
       };
 
-      const result =
-        type === 'photo'
-          ? await ImagePicker.launchCameraAsync(pickerOptions)
-          : await ImagePicker.launchImageLibraryAsync(pickerOptions);
+      const result = await ImagePicker.launchCameraAsync(pickerOptions);
 
       if (!result.canceled) {
         const uri = result.assets[0].uri;
-        if (type === 'photo') {
-          setPhotoUri(uri);
-        } else if (type === 'license') {
-          setDrivingLicenseUri(uri);
-        } else if (type === 'identity') {
-          setIdentityProofUri(uri);
-        }
+        setPhotoUri(uri);
       }
     } catch (error) {
-      console.error('Error picking image:', error);
-      alert('Failed to pick image');
+      console.error('Error picking file:', error);
+      showAlert('Upload Failed', 'Failed to pick file. Please try again.');
     }
   };
 
@@ -124,12 +133,13 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
     }
   };
 
-  const isFormValid =
-    fullName.trim().length > 0 && photoUri && drivingLicenseUri && identityProofUri;
+  const isFormValid = Boolean(
+    fullName.trim() && photoUri && drivingLicenseUri && identityProofUri
+  );
 
   const handleContinue = async () => {
     if (!isFormValid) {
-      alert('Please fill all required fields');
+      showAlert('Incomplete Form', 'Please fill in all required fields and upload all documents.');
       return;
     }
 
@@ -137,7 +147,7 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
     try {
       if (onContinue) {
         onContinue({
-          fullName,
+          fullName: fullName.trim(),
           photoUri,
           drivingLicenseUri,
           identityProofUri,
@@ -145,7 +155,7 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
       }
     } catch (error) {
       console.error('Error submitting driver details:', error);
-      alert('An error occurred. Please try again.');
+      showAlert('Error', 'An error occurred. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -159,21 +169,18 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
       {/* Header */}
 
       <View style={styles.header}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          onPress={onBack}
-          style={styles.backButton}
-        >
-          <Image source={backImage} style={styles.backIcon} resizeMode="contain" />
-        </Pressable>
         <Text style={styles.headerTitle}>Onboarding</Text>
       </View>
 
       <Animated.View style={[styles.contentWrapper, { opacity: fadeAnim }]}>
         {/* Main Content */}
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          <View style={styles.contentContainer}>
+          <View
+            style={[
+              styles.contentContainer,
+              { paddingBottom: Math.max(insets.bottom + 24, 40) },
+            ]}
+          >
             {/* Title and Description */}
             <View style={styles.titleContainer}>
               <Text style={styles.title}>Fill your details</Text>
@@ -215,7 +222,7 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
                 {/* Driving License */}
                 <DocumentUploadItem
                   title="Driving License"
-                  description="Upload a clear photo of your driving license"
+                  description="Upload a clear photo or PDF of your driving license"
                   hasError={!drivingLicenseUri}
                   imageUri={drivingLicenseUri}
                   onUpload={() => pickImage('license')}
@@ -226,7 +233,7 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
                 {/* Identity Proof */}
                 <DocumentUploadItem
                   title="Identity Proof"
-                  description="Upload Aadhaar or PAN card"
+                  description="Upload Aadhaar or PAN card photo or PDF"
                   hasError={!identityProofUri}
                   imageUri={identityProofUri}
                   onUpload={() => pickImage('identity')}
@@ -252,6 +259,7 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
           </View>
         </ScrollView>
       </Animated.View>
+      {alertModal}
     </SafeAreaView>
   );
 };
@@ -282,10 +290,16 @@ const DocumentUploadItem: React.FC<DocumentUploadItemProps> = ({
         <Text style={styles.documentTitle}>{title}</Text>
         <Text style={styles.documentDescription}>{description}</Text>
         {hasError && (
-          <View style={styles.errorContainer}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Upload ${title}`}
+            style={styles.errorContainer}
+            onPress={onUpload}
+            disabled={isLoading}
+          >
              <Image source={uploadIcon} style={{height : 20 , width  : 20}}/>
             <Text style={styles.errorText}>Upload</Text>
-          </View>
+          </Pressable>
         )}
       </View>
 
@@ -293,7 +307,13 @@ const DocumentUploadItem: React.FC<DocumentUploadItemProps> = ({
       <View style={styles.documentUploadBox}>
         {imageUri ? (
           <View style={styles.uploadedImageContainer}>
-            <Image source={{ uri: imageUri }} style={styles.uploadedImage} />
+            {isPdfFile(imageUri) ? (
+              <View style={styles.pdfPreview}>
+                <Text style={styles.pdfPreviewText}>PDF</Text>
+              </View>
+            ) : (
+              <Image source={{ uri: imageUri }} style={styles.uploadedImage} />
+            )}
             <Pressable
               style={styles.removeButton}
               onPress={onRemove}
@@ -328,7 +348,7 @@ const styles = StyleSheet.create({
 
   header: {
     minHeight: 64,
-    paddingHorizontal: 4,
+    paddingHorizontal: 16,
     paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
@@ -371,7 +391,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 24,
     paddingBottom: 24,
-    gap: 40,
+    gap: 24,
   },
 
   // Title Container
@@ -395,7 +415,7 @@ const styles = StyleSheet.create({
 
   // Form Container
   formContainer: {
-    gap: 40,
+    gap: 24,
   },
 
   // Field Group
@@ -528,6 +548,22 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 12,
   },
+  pdfPreview: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d2d2d2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pdfPreviewText: {
+    color: '#0055cc',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 12,
+    fontWeight: '500',
+  },
   removeButton: {
     position: 'absolute',
     top: -1,
@@ -542,12 +578,13 @@ const styles = StyleSheet.create({
 
   // Continue Button
   continueButton: {
-    minHeight: 56,
     backgroundColor: '#05c',
     borderRadius: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom : 15
+    minHeight: 56,
   },
   continueButtonDisabled: {
     opacity: 0.5,

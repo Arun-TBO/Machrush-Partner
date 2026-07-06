@@ -41,6 +41,7 @@ export interface OnboardingData {
 
   // Verification Status
   verificationStatus: 'pending' | 'verified' | 'rejected' | 'suspended';
+  rejectionMessage?: string;
   rejectionReason?: string;
   rejectedDocuments?: string[];
   verificationNotes?: string;
@@ -1176,6 +1177,7 @@ export const getVerificationStatus = async (uidOrPhone: string, idToken?: string
 
       return {
         status,
+        rejectionMessage: data.rejectionMessage,
         rejectionReason: data.rejectionReason,
         rejectedDocuments: data.rejectedDocuments,
         verificationNotes: data.verificationNotes,
@@ -1209,6 +1211,7 @@ export const getVerificationStatus = async (uidOrPhone: string, idToken?: string
 
       return {
         status,
+        rejectionMessage: data.rejectionMessage,
         rejectionReason: data.rejectionReason,
         rejectedDocuments: data.rejectedDocuments,
         verificationNotes: data.verificationNotes,
@@ -1359,7 +1362,8 @@ export const updateVerificationStatus = async (
   uidOrPhone: string,
   status: 'pending' | 'verified' | 'rejected' | 'suspended',
   rejectionReason?: string,
-  rejectedDocuments?: string[]
+  rejectedDocuments?: string[],
+  rejectionMessage?: string
 ): Promise<{ success: boolean; error?: string }> => {
   try {
     let docId = uidOrPhone;
@@ -1388,6 +1392,7 @@ export const updateVerificationStatus = async (
     };
 
     if (status === 'rejected') {
+      updateData.rejectionMessage = rejectionMessage || rejectionReason;
       updateData.rejectionReason = rejectionReason;
       updateData.rejectedDocuments = rejectedDocuments;
     }

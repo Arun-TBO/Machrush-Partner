@@ -28,6 +28,7 @@ type DeliveryTimestamp =
 
 type DeliveryDetails = {
   id?: string;
+  senderId?: string | null;
   status?: string;
   sender?: {
     photoUri?: string;
@@ -64,8 +65,30 @@ type DeliveryDetails = {
   };
 };
 
+type CustomerProfileResponse = {
+  success?: boolean;
+  data?: {
+    profilePhotoUrl?: string;
+    photoUri?: string;
+  } | null;
+};
+
 const getApiBaseUrl = () => {
   return (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
+};
+
+const getCustomerProfilePhotoUrl = async (senderId: string) => {
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/firestore/customers/${encodeURIComponent(senderId)}`
+  );
+  const body = (await response.json().catch(() => null)) as CustomerProfileResponse | null;
+
+  if (!response.ok || body?.success === false) {
+    return '';
+  }
+
+  const photoUrl = body?.data?.profilePhotoUrl || body?.data?.photoUri || '';
+  return photoUrl.startsWith('http') ? photoUrl : '';
 };
 
 const readTimestampMs = (value: DeliveryTimestamp | undefined) => {
@@ -220,6 +243,7 @@ export default function PaymentPendingScreen() {
   const insets = useSafeAreaInsets();
   const { deliveryId } = useLocalSearchParams<{ deliveryId?: string }>();
   const [delivery, setDelivery] = React.useState<DeliveryDetails | null>(null);
+  const [senderProfilePhotoUrl, setSenderProfilePhotoUrl] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(true);
   const hasLoadedDeliveryRef = React.useRef(false);
 
@@ -249,6 +273,17 @@ export default function PaymentPendingScreen() {
 
         if (isActive) {
           setDelivery(body?.data || null);
+        }
+
+        const senderId = body?.data?.senderId;
+        const senderPhotoUrl = senderId
+          ? await getCustomerProfilePhotoUrl(senderId).catch((error) => {
+              console.error('Error loading sender profile photo:', error);
+              return '';
+            })
+          : '';
+        if (isActive) {
+          setSenderProfilePhotoUrl(senderPhotoUrl);
         }
       } catch (error) {
         console.error('Error loading payment details:', error);
@@ -282,7 +317,7 @@ export default function PaymentPendingScreen() {
   const deliveredDate = formatDate(delivery?.timestamps?.deliveredAt || delivery?.timestamps?.createdAt);
   const title = `${pickupParts.primary}${pickupParts.secondary ? `, ${pickupParts.secondary}` : ''}`;
   const routeDuration = formatDuration(delivery);
-  const profileImageUri = getProfileImageUri(delivery);
+  const profileImageUri = senderProfilePhotoUrl || getProfileImageUri(delivery);
  
   const tableLocationImage = require('@/assets/images/profile/tablelocation.png');
   const pickAndDropIcon = require('@/assets/images/pickAndDropIcon1.png');

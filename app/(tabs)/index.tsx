@@ -6,14 +6,13 @@ import {
   ImageSourcePropType,
   Modal,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth } from '@/lib/firebase';
 import { useAppAlert } from '@/components/AppAlertModal';
 import { fs, hit, rs, vs } from '@/lib/responsive';
@@ -51,6 +50,7 @@ type LatLng = {
 
 const DRIVER_ONLINE_MAX_DURATION_MS = 12 * 60 * 60 * 1000;
 const AVERAGE_CITY_SPEED_KMPH = 30;
+const ACTIVE_DELIVERY_STATUSES = ['assigned', 'arrived', 'in_transit'];
 
 const getHomeAuthContext = async () => {
   const [storedUid, storedIdToken] = await Promise.all([
@@ -121,6 +121,7 @@ type OpenDelivery = {
   id?: string;
   driverId?: string | null;
   status?: string;
+  pricingStatus?: string | null;
   sender?: {
     name?: string;
     phone?: string;
@@ -159,7 +160,10 @@ type OpenDelivery = {
     total?: number | string;
     distanceKm?: number | string;
     distance?: number | string;
+    pricingStatus?: string | null;
+    paymentStatus?: string | null;
   };
+  paymentStatus?: string | null;
   timestamps?: {
     createdAt?: DeliveryTimestamp;
     deliveredAt?: DeliveryTimestamp;
@@ -168,6 +172,40 @@ type OpenDelivery = {
 
 type DeliveryLocation = NonNullable<OpenDelivery['locations']>;
 type DeliveryPoint = DeliveryLocation['pickup'];
+
+const isActiveDelivery = (delivery: OpenDelivery) =>
+  ACTIVE_DELIVERY_STATUSES.includes(delivery.status || '');
+
+const isPricingCompleted = (delivery: OpenDelivery) => {
+  const pricingStatus = String(
+    delivery.pricingStatus ||
+      delivery.pricing?.pricingStatus ||
+      delivery.paymentStatus ||
+      delivery.pricing?.paymentStatus ||
+      ''
+  ).toLowerCase();
+  return pricingStatus === 'completed' || pricingStatus === 'paid';
+};
+
+const getHasActiveDriverDelivery = async (uid: string, idToken?: string | null) => {
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/deliveries/driver/${encodeURIComponent(uid)}?type=all`,
+    {
+      headers: getDeliveryHeaders(idToken),
+    }
+  );
+  const body = (await response.json().catch(() => null)) as {
+    success?: boolean;
+    data?: OpenDelivery[];
+    error?: string;
+  } | null;
+
+  if (!response.ok || body?.success === false) {
+    throw new Error(body?.error || 'Unable to load driver deliveries');
+  }
+
+  return Array.isArray(body?.data) && body.data.some(isActiveDelivery);
+};
 
 type JobRequest = {
   id: string;
@@ -445,6 +483,7 @@ function Header({
   onTogglePress,
   onProfilePress,
   profilePhotoUrl,
+  isProfileLoading,
   currentLocation,
   todayEarnings,
 }: {
@@ -452,6 +491,7 @@ function Header({
   onTogglePress: () => void;
   onProfilePress: () => void;
   profilePhotoUrl: string | null;
+  isProfileLoading: boolean;
   currentLocation: CurrentLocationLabel;
   todayEarnings: string;
 }) {
@@ -471,11 +511,15 @@ function Header({
           accessibilityLabel="Open profile"
           onPress={onProfilePress}
         >
-          <Image
-            source={profilePhotoUrl ? { uri: profilePhotoUrl } : profileImage}
-            style={styles.profileImage}
-            resizeMode="cover"
-          />
+          {isProfileLoading ? (
+            <View style={styles.profileImage} />
+          ) : (
+            <Image
+              source={profilePhotoUrl ? { uri: profilePhotoUrl } : profileImage}
+              style={styles.profileImage}
+              resizeMode="cover"
+            />
+          )}
         </Pressable>
       </View>
 
@@ -727,13 +771,24 @@ export default function HomeScreen() {
     () => jobRequests.slice(0, 0) as JobRequest[]
   );
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
+  const [isLoadingHomeState, setIsLoadingHomeState] = useState(true);
   const [todayTotalEarnings, setTodayTotalEarnings] = useState(formatCurrency(0));
   const [hasTripInProgress, setHasTripInProgress] = useState(false);
   const [pendingRejectedJob, setPendingRejectedJob] = useState<JobRequest | null>(null);
   const [isRejectingJob, setIsRejectingJob] = useState(false);
   const hasLoadedJobsRef = React.useRef(false);
+  const hasTripInProgressRef = React.useRef(false);
+  const driverStatusRef = React.useRef<DriverStatus>('offline');
   const currentCoordsRef = React.useRef<LatLng | null>(null);
   const { alertModal, showAlert } = useAppAlert();
+
+  React.useEffect(() => {
+    hasTripInProgressRef.current = hasTripInProgress;
+  }, [hasTripInProgress]);
+
+  React.useEffect(() => {
+    driverStatusRef.current = driverStatus;
+  }, [driverStatus]);
 
   React.useEffect(() => {
     let isActive = true;
@@ -869,12 +924,10 @@ export default function HomeScreen() {
             openDeliveries = Array.isArray(openBody?.data) ? openBody.data : [];
           }
 
-          const activeDriverDeliveries = driverDeliveries.filter((delivery) =>
-            ['assigned', 'arrived', 'in_transit'].includes(delivery.status || '')
-          );
+          const activeDriverDeliveries = driverDeliveries.filter(isActiveDelivery);
           const today = Date.now();
           const todayEarningsAmount = driverDeliveries
-            .filter((delivery) => ['delivered', 'completed'].includes(delivery.status || ''))
+            .filter(isPricingCompleted)
             .filter((delivery) =>
               isSameLocalDay(readTimestampMs(delivery.timestamps?.deliveredAt), today)
             )
@@ -898,6 +951,14 @@ export default function HomeScreen() {
           });
 
           if (isActive) {
+            if (activeDriverDeliveries.length > 0 && driverStatusRef.current !== 'online') {
+              const changedAtMs = Date.now();
+              setDriverStatus('online');
+              setDriverStatusChangedAtMs(changedAtMs);
+              await setCachedAvailabilityStatus(uid, 'online');
+              await setCachedAvailabilityChangedAtMs(uid, changedAtMs);
+              updateDriverAvailability(uid, 'online', idToken);
+            }
             setJobRequestList(
               deliveries.map((delivery, index) =>
                 mapDeliveryToJobRequest(delivery, index, currentCoordsRef.current)
@@ -931,87 +992,124 @@ export default function HomeScreen() {
       let isActive = true;
 
       const loadDriverHomeState = async () => {
-        const [storedUid, storedIdToken] = await Promise.all([
-          AsyncStorage.getItem('firebaseUid'),
-          AsyncStorage.getItem('firebaseIdToken'),
-        ]);
-        const uid = auth.currentUser?.uid || storedUid;
+        try {
+          const [storedUid, storedIdToken] = await Promise.all([
+            AsyncStorage.getItem('firebaseUid'),
+            AsyncStorage.getItem('firebaseIdToken'),
+          ]);
+          const uid = auth.currentUser?.uid || storedUid;
 
-        if (!uid) {
-          if (isActive) {
-            setProfilePhotoUrl(null);
+          if (!uid) {
+            if (isActive) {
+              setProfilePhotoUrl(null);
+            }
+            return;
           }
-          return;
-        }
 
-        const [cachedPhotoUrl, cachedStatus] = await Promise.all([
-          getCachedProfilePhotoUrl(uid),
-          getCachedAvailabilityStatus(uid),
-        ]);
-        const cachedChangedAtMs = await getCachedAvailabilityChangedAtMs(uid);
-        const cachedStatusExpired =
-          cachedStatus === 'online' &&
-          cachedChangedAtMs > 0 &&
-          Date.now() - cachedChangedAtMs >= DRIVER_ONLINE_MAX_DURATION_MS;
-        const resolvedCachedStatus = cachedStatusExpired ? 'offline' : cachedStatus;
+          const [cachedPhotoUrl, cachedStatus] = await Promise.all([
+            getCachedProfilePhotoUrl(uid),
+            getCachedAvailabilityStatus(uid),
+          ]);
+          const cachedChangedAtMs = await getCachedAvailabilityChangedAtMs(uid);
+          const hasActiveDriverDelivery = await getHasActiveDriverDelivery(uid, storedIdToken).catch((error) => {
+            console.error('Error checking active driver delivery on home:', error);
+            return hasTripInProgressRef.current;
+          });
+          const cachedStatusExpired =
+            cachedStatus === 'online' &&
+            cachedChangedAtMs > 0 &&
+            Date.now() - cachedChangedAtMs >= DRIVER_ONLINE_MAX_DURATION_MS;
+          const resolvedCachedStatus = hasActiveDriverDelivery
+            ? 'online'
+            : cachedStatusExpired
+            ? 'offline'
+            : cachedStatus;
 
-        if (isActive && cachedPhotoUrl) {
-          setProfilePhotoUrl(cachedPhotoUrl);
-        }
-        if (cachedStatusExpired) {
-          await setCachedAvailabilityStatus(uid, 'offline');
-          await setCachedAvailabilityChangedAtMs(uid, null);
-          updateDriverAvailability(uid, 'offline', storedIdToken);
-        }
-        if (isActive && resolvedCachedStatus) {
-          setDriverStatus(resolvedCachedStatus);
-          setDriverStatusChangedAtMs(resolvedCachedStatus === 'online' ? cachedChangedAtMs : 0);
-        }
+          if (isActive && cachedPhotoUrl) {
+            setProfilePhotoUrl(cachedPhotoUrl);
+          }
+          if (hasActiveDriverDelivery) {
+            const changedAtMs = cachedChangedAtMs || Date.now();
+            await setCachedAvailabilityStatus(uid, 'online');
+            await setCachedAvailabilityChangedAtMs(uid, changedAtMs);
+            if (cachedStatus !== 'online' || cachedStatusExpired) {
+              updateDriverAvailability(uid, 'online', storedIdToken);
+            }
+          } else if (cachedStatusExpired) {
+            await setCachedAvailabilityStatus(uid, 'offline');
+            await setCachedAvailabilityChangedAtMs(uid, null);
+            updateDriverAvailability(uid, 'offline', storedIdToken);
+          }
+          if (isActive && resolvedCachedStatus) {
+            setDriverStatus(resolvedCachedStatus);
+            setDriverStatusChangedAtMs(
+              resolvedCachedStatus === 'online'
+                ? hasActiveDriverDelivery
+                  ? cachedChangedAtMs || Date.now()
+                  : cachedChangedAtMs
+                : 0
+            );
+          }
 
-        const [driverProfile, latestAvailability] = await Promise.all([
-          getDriverProfile(uid, storedIdToken).catch((error) => {
-            console.error('Error loading driver profile on home:', error);
-            return null;
-          }),
-          getLatestDriverAvailability(uid, storedIdToken).catch((error) => {
-            console.error('Error loading driver availability on home:', error);
-            return null;
-          }),
-        ]);
-        const savedPhotoUrl =
-          driverProfile?.profilePhotoUrl ||
-          (driverProfile?.photoUri?.startsWith('http') ? driverProfile.photoUri : null);
+          const [driverProfile, latestAvailability] = await Promise.all([
+            getDriverProfile(uid, storedIdToken).catch((error) => {
+              console.error('Error loading driver profile on home:', error);
+              return null;
+            }),
+            getLatestDriverAvailability(uid, storedIdToken).catch((error) => {
+              console.error('Error loading driver availability on home:', error);
+              return null;
+            }),
+          ]);
+          const savedPhotoUrl =
+            driverProfile?.profilePhotoUrl ||
+            (driverProfile?.photoUri?.startsWith('http') ? driverProfile.photoUri : null);
 
-        if (savedPhotoUrl) {
-          await setCachedProfilePhotoUrl(uid, savedPhotoUrl);
-        }
+          if (savedPhotoUrl) {
+            await setCachedProfilePhotoUrl(uid, savedPhotoUrl);
+          }
 
-        let resolvedStatus = latestAvailability?.status || resolvedCachedStatus || 'offline';
-        const changedAtMs =
-          readTimestampMs(latestAvailability?.changedAt || undefined) ||
-          (resolvedCachedStatus === 'online' ? cachedChangedAtMs : 0);
-        const isOnlineExpired =
-          resolvedStatus === 'online' &&
-          changedAtMs > 0 &&
-          Date.now() - changedAtMs >= DRIVER_ONLINE_MAX_DURATION_MS;
+          let resolvedStatus = hasActiveDriverDelivery
+            ? 'online'
+            : latestAvailability?.status || resolvedCachedStatus || 'offline';
+          const changedAtMs =
+            (hasActiveDriverDelivery ? cachedChangedAtMs || Date.now() : 0) ||
+            readTimestampMs(latestAvailability?.changedAt || undefined) ||
+            (resolvedCachedStatus === 'online' ? cachedChangedAtMs : 0);
+          const isOnlineExpired =
+            !hasActiveDriverDelivery &&
+            resolvedStatus === 'online' &&
+            changedAtMs > 0 &&
+            Date.now() - changedAtMs >= DRIVER_ONLINE_MAX_DURATION_MS;
 
-        if (isOnlineExpired) {
-          resolvedStatus = 'offline';
-          await setCachedAvailabilityStatus(uid, 'offline');
-          await setCachedAvailabilityChangedAtMs(uid, null);
-          updateDriverAvailability(uid, 'offline', storedIdToken);
-        } else if (latestAvailability?.status) {
-          await setCachedAvailabilityStatus(uid, latestAvailability.status);
-          await setCachedAvailabilityChangedAtMs(
-            uid,
-            latestAvailability.status === 'online' ? changedAtMs : null
-          );
-        }
+          if (hasActiveDriverDelivery) {
+            await setCachedAvailabilityStatus(uid, 'online');
+            await setCachedAvailabilityChangedAtMs(uid, changedAtMs);
+            if (latestAvailability?.status === 'offline') {
+              updateDriverAvailability(uid, 'online', storedIdToken);
+            }
+          } else if (isOnlineExpired) {
+            resolvedStatus = 'offline';
+            await setCachedAvailabilityStatus(uid, 'offline');
+            await setCachedAvailabilityChangedAtMs(uid, null);
+            updateDriverAvailability(uid, 'offline', storedIdToken);
+          } else if (latestAvailability?.status) {
+            await setCachedAvailabilityStatus(uid, latestAvailability.status);
+            await setCachedAvailabilityChangedAtMs(
+              uid,
+              latestAvailability.status === 'online' ? changedAtMs : null
+            );
+          }
 
-        if (isActive) {
-          setProfilePhotoUrl(savedPhotoUrl || cachedPhotoUrl || null);
-          setDriverStatus(resolvedStatus);
-          setDriverStatusChangedAtMs(resolvedStatus === 'online' ? changedAtMs : 0);
+          if (isActive) {
+            setProfilePhotoUrl(savedPhotoUrl || cachedPhotoUrl || null);
+            setDriverStatus(resolvedStatus);
+            setDriverStatusChangedAtMs(resolvedStatus === 'online' ? changedAtMs : 0);
+          }
+        } finally {
+          if (isActive) {
+            setIsLoadingHomeState(false);
+          }
         }
       };
 
@@ -1092,7 +1190,11 @@ export default function HomeScreen() {
 
     router.push({
       pathname: '/accepted-trip',
-      params: { deliveryId: job.deliveryId },
+      params: {
+        deliveryId: job.deliveryId,
+        pickupEta: job.pickupTime,
+        dropEta: job.dropTime,
+      },
     });
   };
 
@@ -1150,9 +1252,16 @@ export default function HomeScreen() {
       return;
     }
 
+    if (hasTripInProgress) {
+      return;
+    }
+
     const remainingMs = DRIVER_ONLINE_MAX_DURATION_MS - (Date.now() - driverStatusChangedAtMs);
 
     if (remainingMs <= 0) {
+      if (hasTripInProgressRef.current) {
+        return;
+      }
       setDriverStatus('offline');
       setDriverStatusChangedAtMs(0);
       Promise.all([
@@ -1170,6 +1279,9 @@ export default function HomeScreen() {
     }
 
     const timeout = setTimeout(() => {
+      if (hasTripInProgressRef.current) {
+        return;
+      }
       setDriverStatus('offline');
       setDriverStatusChangedAtMs(0);
       Promise.all([
@@ -1186,7 +1298,7 @@ export default function HomeScreen() {
     }, remainingMs);
 
     return () => clearTimeout(timeout);
-  }, [driverStatus, driverStatusChangedAtMs]);
+  }, [driverStatus, driverStatusChangedAtMs, hasTripInProgress]);
 
   const inProgressJobs = jobRequestList.filter((job) => job.isResumeTrip);
   const openJobRequests = jobRequestList.filter((job) => !job.isResumeTrip);
@@ -1198,8 +1310,9 @@ export default function HomeScreen() {
         onTogglePress={handleTogglePress}
         onProfilePress={handleProfilePress}
         profilePhotoUrl={profilePhotoUrl}
+        isProfileLoading={isLoadingHomeState}
         currentLocation={currentLocation}
-        todayEarnings={todayTotalEarnings}
+        todayEarnings={isLoadingJobs ? '...' : todayTotalEarnings}
       />
 
       <ScrollView

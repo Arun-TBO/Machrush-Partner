@@ -43,7 +43,7 @@ const supportCallImage = require('@/assets/images/profile/phone.png');
 const tableLocationImage = require('@/assets/images/profile/tablelocation.png');
 const otpResetImage = require('@/assets/images/profile/mdi_password-reset.png');
 const BYPASS_PICKUP_GEOFENCE_FOR_TESTING = false;
-const BYPASS_DROP_GEOFENCE_FOR_TESTING = true;
+const BYPASS_DROP_GEOFENCE_FOR_TESTING = false;
 const PICKUP_ARRIVAL_RADIUS_METERS = 100;
 const DROP_ARRIVAL_RADIUS_METERS = 120;
 const OFF_ROUTE_THRESHOLD_METERS = 60;
@@ -183,6 +183,7 @@ type DeliveryDetails = {
   id?: string;
   senderId?: string | null;
   status?: string;
+  pricingStatus?: string | null;
   pickupTime?: string | null;
   dropoffTime?: string | null;
   sender?: {
@@ -383,6 +384,9 @@ type RouteSummary = {
   durationText: string | null;
 };
 
+const isCancelledDeliveryStatus = (status: string | null | undefined) =>
+  status === 'cancelled' || status === 'canceled';
+
 const formatApproxDuration = (value: string | null | undefined) => {
   if (!value) {
     return '';
@@ -391,19 +395,41 @@ const formatApproxDuration = (value: string | null | undefined) => {
   return value.toLowerCase().startsWith('approx') ? value : `Approx. ${value}`;
 };
 
+const getEstimatedDurationFromKm = (distanceKm: number | null | undefined) => {
+  if (typeof distanceKm !== 'number' || !Number.isFinite(distanceKm) || distanceKm <= 0) {
+    return null;
+  }
+
+  const estimatedMinutes = Math.max(1, Math.round((distanceKm / 30) * 60));
+
+  if (estimatedMinutes < 60) {
+    return `${estimatedMinutes} min`;
+  }
+
+  const hours = Math.floor(estimatedMinutes / 60);
+  const remainingMinutes = estimatedMinutes % 60;
+
+  return remainingMinutes ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`;
+};
+
+const getApproxDurationLabel = (...values: (string | null | undefined)[]) => {
+  const value = values.find((item) => item && item.trim());
+  return value ? formatApproxDuration(value) : 'ETA unavailable';
+};
+
+const getParamValue = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
+
 const getFallbackRouteSummary = (origin: LatLng | null, destination: LatLng | null): RouteSummary => {
   if (!origin || !destination) {
     return { distanceText: null, durationText: null };
   }
 
   const distanceMeters = getDistanceMeters(origin, destination);
-  const estimatedMinutes = Math.max(1, Math.round((distanceMeters / 1000 / 30) * 60));
 
   return {
     distanceText: formatDistanceMeters(distanceMeters),
-    durationText: estimatedMinutes < 60
-      ? `${estimatedMinutes} min`
-      : `${Math.floor(estimatedMinutes / 60)} hr ${estimatedMinutes % 60} min`,
+    durationText: getEstimatedDurationFromKm(distanceMeters / 1000),
   };
 };
 
@@ -959,9 +985,15 @@ function AcceptedPickupView({
   onArrivedPickupPoint: () => void;
   onVerifyPickupOtp: (otp: string) => Promise<boolean>;
   onCompleteDrop: () => void;
-  onOpenDeliveryDetails: () => void;
+  onOpenDeliveryDetails: (details: { etaText: string; isInTransit: boolean }) => void;
 }) {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
+  const trackingSheetBottomInset = Math.max(insets.bottom, vs(16));
+  const trackingSheetCollapsedOffset = Math.max(
+    0,
+    TRACKING_SHEET_COLLAPSED_OFFSET - trackingSheetBottomInset
+  );
   const mapRef = React.useRef<MapViewRef>(null);
   const previousLocationRef = React.useRef<LatLng | null>(null);
   const driverLocationRef = React.useRef<LatLng | null>(null);
@@ -997,7 +1029,9 @@ function AcceptedPickupView({
   const [isVerifyingOtp, setIsVerifyingOtp] = React.useState(false);
   const [isOtpModalVisible, setIsOtpModalVisible] = React.useState(false);
   const { alertModal, showAlert } = useAppAlert();
-  const bookingPerson = delivery?.sender?.name ? delivery.sender : delivery?.receiver;
+  const bookingPerson = delivery?.receiver?.name || delivery?.receiver?.phone
+    ? delivery.receiver
+    : delivery?.sender;
   const bookingName = bookingPerson?.name || 'Customer';
   const bookingPhone = bookingPerson?.phone || '';
   const [bookingCompanyName, setBookingCompanyName] = React.useState(
@@ -1008,6 +1042,7 @@ function AcceptedPickupView({
   );
   const isArrived = delivery?.status === 'arrived';
   const isInTransit = delivery?.status === 'in_transit';
+  const isCancelled = isCancelledDeliveryStatus(delivery?.status);
   const activeAddress = isInTransit ? dropAddress : pickupAddress;
   const { primaryAddress, secondaryAddress } = getAddressParts(activeAddress);
   const routeOrigin = driverLocation;
@@ -1038,7 +1073,7 @@ function AcceptedPickupView({
   const etaText =
     routeDuration ||
     delivery?.tracking?.estimatedArrival?.replace('~', '') ||
-    delivery?.pickupTime ||
+    (isInTransit ? delivery?.dropoffTime : delivery?.pickupTime) ||
     '4 min';
   const etaTitle = etaText.toLowerCase().includes('away') ? etaText : `${etaText} away`;
   const nextInstruction =
@@ -1068,13 +1103,14 @@ function AcceptedPickupView({
     [sheetTranslateY]
   );
 
-  const sheetPanResponder = React.useRef(
+  const sheetPanResponder = React.useMemo(
+    () =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 8,
       onPanResponderMove: (_, gestureState) => {
         const nextValue = Math.min(
-          TRACKING_SHEET_COLLAPSED_OFFSET,
+          trackingSheetCollapsedOffset,
           Math.max(0, sheetPositionRef.current + gestureState.dy)
         );
         sheetTranslateY.setValue(nextValue);
@@ -1083,20 +1119,21 @@ function AcceptedPickupView({
         const projectedValue = sheetPositionRef.current + gestureState.dy;
         const shouldCollapse =
           gestureState.vy > 0.45 ||
-          projectedValue > TRACKING_SHEET_COLLAPSED_OFFSET * 0.45;
+          projectedValue > trackingSheetCollapsedOffset * 0.45;
 
-        snapTrackingSheet(shouldCollapse ? TRACKING_SHEET_COLLAPSED_OFFSET : 0);
+        snapTrackingSheet(shouldCollapse ? trackingSheetCollapsedOffset : 0);
       },
       onPanResponderTerminate: (_, gestureState) => {
         const projectedValue = sheetPositionRef.current + gestureState.dy;
         snapTrackingSheet(
-          projectedValue > TRACKING_SHEET_COLLAPSED_OFFSET * 0.5
-            ? TRACKING_SHEET_COLLAPSED_OFFSET
+          projectedValue > trackingSheetCollapsedOffset * 0.5
+            ? trackingSheetCollapsedOffset
             : 0
         );
       },
-    })
-  ).current;
+    }),
+    [sheetTranslateY, snapTrackingSheet, trackingSheetCollapsedOffset]
+  );
 
   React.useEffect(() => {
     let isActive = true;
@@ -1120,11 +1157,11 @@ function AcceptedPickupView({
           `${getApiBaseUrl()}/api/firestore/customers/${encodeURIComponent(delivery.senderId)}`
         );
         const body = (await response.json().catch(() => null)) as CustomerProfileResponse | null;
-        const photoUri = body?.data?.profilePhotoUrl || body?.data?.photoUri || null;
         const companyName = getCompanyName(body?.data) || getCompanyName(delivery?.sender);
+        const photoUri = body?.data?.profilePhotoUrl || body?.data?.photoUri || null;
 
         if (isActive) {
-          setBookingPhotoUri(photoUri);
+          setBookingPhotoUri(photoUri?.startsWith('http') ? photoUri : null);
           setBookingCompanyName(companyName);
         }
       } catch (error) {
@@ -1554,8 +1591,10 @@ function AcceptedPickupView({
             </Marker>
           ) : null}
 
-          {routeSegments.length > 0
-            ? routeSegments.map((segment, index) => (
+          {Array.isArray(routeSegments) && routeSegments.length > 0
+            ? routeSegments
+                .filter((segment) => Array.isArray(segment?.coordinates) && segment.coordinates.length > 1)
+                .map((segment, index) => (
                 <Polyline
                   key={`route-segment-${index}`}
                   coordinates={segment.coordinates.map(toMapCoordinate)}
@@ -1572,16 +1611,33 @@ function AcceptedPickupView({
     <StatusBar backgroundColor="#fff" />
       <Animated.View
         style={[
-          styles.pickupSheet,
+          isCancelled ? styles.cancelledTrackingSheet : styles.pickupSheet,
           {
-            height: TRACKING_SHEET_HEIGHT + 85,
-            paddingBottom: Math.max(insets.bottom, vs(16)) + vs(16),
-            transform: [{ translateY: sheetTranslateY }],
+            height: isCancelled ? undefined : TRACKING_SHEET_HEIGHT + 85,
+            paddingBottom: trackingSheetBottomInset + vs(16),
+            transform: isCancelled ? [{ translateY: 0 }] : [{ translateY: sheetTranslateY }],
           },
           
         ]}
       >
-        <View style={styles.pickupSheetContent}>
+        {isCancelled ? (
+          <View style={styles.cancelledTrackingContent}>
+            <View style={styles.cancelledTrackingIcon}>
+              <Ionicons name="close" size={56} color="#ffffff" />
+            </View>
+            <Text style={styles.cancelledTrackingTitle}>Cancelled</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+              style={styles.cancelledTrackingButton}
+              onPress={() => router.replace('/(tabs)')}
+            >
+              <Text style={styles.cancelledTrackingButtonText}>Go back</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            <View style={styles.pickupSheetContent}>
           <View style={styles.arrivalCard} {...sheetPanResponder.panHandlers}>
             <View style={styles.dragHandleWrap}>
               <View style={styles.dragHandle} />
@@ -1639,7 +1695,7 @@ function AcceptedPickupView({
                 accessibilityRole="button"
                 accessibilityLabel="Open delivery details"
                 style={styles.headingDetailsButton}
-                onPress={onOpenDeliveryDetails}
+                onPress={() => onOpenDeliveryDetails({ etaText, isInTransit })}
               >
                 <Text style={styles.headingDetailsText}>Delivery details</Text>
                 <Ionicons name="arrow-forward" size={18} color="#606060" />
@@ -1715,11 +1771,13 @@ function AcceptedPickupView({
             </Pressable>
           )}
         </View>
+          </>
+        )}
       
       </Animated.View>
 
       <Modal
-        visible={isArrived && isOtpModalVisible} 
+        visible={!isCancelled && isArrived && isOtpModalVisible}
         transparent  
         animationType="fade"
         statusBarTranslucent
@@ -1807,7 +1865,7 @@ function CancelDeliveryModal({
               style={styles.cancelModalNoButton}
               onPress={onClose}
             >
-              <Text style={styles.cancelModalNoText}>No</Text>
+              <Text style={styles.cancelModalNoText} numberOfLines={1}>No</Text>
             </Pressable>
 
             <Pressable
@@ -1816,11 +1874,51 @@ function CancelDeliveryModal({
               style={styles.cancelModalSendButton}
               onPress={onSendRequest}
             >
-              <Text style={styles.cancelModalSendText}>Send request</Text>
+              <Text style={styles.cancelModalSendText} numberOfLines={1}>Send request</Text>
             </Pressable>
           </View>
         </Pressable>
       </Pressable>
+    </Modal>
+  );
+}
+
+function TripCancelledModal({
+  visible,
+  onGoHome,
+}: {
+  visible: boolean;
+  onGoHome: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onGoHome}>
+      <View style={styles.cancelModalBackdrop}>
+        <View style={styles.cancelModalCard}>
+          <View style={styles.cancelModalContent}>
+            <View style={styles.cancelWarningIcon}>
+              <Text style={styles.cancelWarningText}>!</Text>
+            </View>
+
+            <View style={styles.cancelModalCopy}>
+              <Text style={styles.cancelModalTitle}>Trip cancelled</Text>
+              <Text style={styles.cancelModalSubtitle}>
+                This trip was cancelled by admin.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.cancelModalActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Go back to home"
+              style={styles.cancelledModalHomeButton}
+              onPress={onGoHome}
+            >
+              <Text style={styles.cancelModalSendText}>Go to home</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -1992,7 +2090,12 @@ function SlideAcceptButton({
 export default function AcceptedTripScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { deliveryId, view } = useLocalSearchParams<{ deliveryId?: string; view?: string }>();
+  const { deliveryId, view, pickupEta, dropEta } = useLocalSearchParams<{
+    deliveryId?: string;
+    view?: string;
+    pickupEta?: string;
+    dropEta?: string;
+  }>();
   const [delivery, setDelivery] = React.useState<DeliveryDetails | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isAccepting, setIsAccepting] = React.useState(false);
@@ -2073,31 +2176,41 @@ export default function AcceptedTripScreen() {
   const dropLocation = isValidCoord(delivery?.locations?.dropoff?.coords)
     ? delivery.locations.dropoff.coords
     : null;
+  const isCancelledDelivery = isCancelledDeliveryStatus(delivery?.status);
   const isCompletedDelivery =
     delivery?.status === 'delivered' || delivery?.status === 'completed';
   const isAccepted =
-    delivery?.status === 'assigned' ||
-    delivery?.status === 'arrived' ||
-    delivery?.status === 'in_transit' ||
-    (!isCompletedDelivery && Boolean(delivery?.driver));
+    !isCancelledDelivery &&
+    (delivery?.status === 'assigned' ||
+      delivery?.status === 'arrived' ||
+      delivery?.status === 'in_transit' ||
+      (!isCompletedDelivery && Boolean(delivery?.driver)));
   const isDetailsView = view === 'details';
-  const showTrackingView = isAccepted && !isCompletedDelivery && !isDetailsView;
+  const showTrackingView =
+    (isAccepted || isCancelledDelivery) && !isCompletedDelivery && !isDetailsView;
+  const pickupEtaParam = getParamValue(pickupEta);
+  const dropEtaParam = getParamValue(dropEta);
   const pickupDetailTitle = pickupRouteSummary?.distanceText
     ? `To Pickup ${pickupRouteSummary.distanceText}`
     : 'To Pickup';
-  const pickupDetailTime = pickupRouteSummary?.durationText
-    ? formatApproxDuration(pickupRouteSummary.durationText)
-    : isLoadingDetailRoutes
+  const pickupFallbackDuration =
+    delivery?.pickupTime ||
+    pickupEtaParam ||
+    getEstimatedDurationFromKm(
+      Number.isFinite(pickupDistanceKm) && pickupDistanceKm > 0 ? pickupDistanceKm : null
+    );
+  const pickupDetailTime = isLoadingDetailRoutes
     ? 'Calculating route...'
-    : 'Route unavailable';
+    : getApproxDurationLabel(pickupRouteSummary?.durationText, pickupFallbackDuration);
   const dropDetailTitle = dropRouteSummary?.distanceText
     ? `Drop ${dropRouteSummary.distanceText}`
     : 'Drop';
-  const dropDetailTime = dropRouteSummary?.durationText
-    ? formatApproxDuration(dropRouteSummary.durationText)
-    : isLoadingDetailRoutes
+  const dropFallbackDistanceKm = getDistanceKm(delivery);
+  const dropFallbackDuration =
+    delivery?.dropoffTime || dropEtaParam || getEstimatedDurationFromKm(dropFallbackDistanceKm);
+  const dropDetailTime = isLoadingDetailRoutes
     ? 'Calculating route...'
-    : 'Route unavailable';
+    : getApproxDurationLabel(dropRouteSummary?.durationText, dropFallbackDuration);
 
   React.useEffect(() => {
     let isActive = true;
@@ -2357,7 +2470,10 @@ export default function AcceptedTripScreen() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ status: 'delivered' }),
+        body: JSON.stringify({
+          status: 'delivered',
+          pricingStatus: 'pending',
+        }),
       });
       const body = (await response.json().catch(() => null)) as {
         success?: boolean;
@@ -2373,6 +2489,7 @@ export default function AcceptedTripScreen() {
           ? {
               ...current,
               status: 'delivered',
+              pricingStatus: 'pending',
             }
           : current
       );
@@ -2408,18 +2525,40 @@ export default function AcceptedTripScreen() {
           onArrivedPickupPoint={handleArrivedPickupPoint}
           onVerifyPickupOtp={handleVerifyPickupOtp}
           onCompleteDrop={handleCompleteDrop}
-          onOpenDeliveryDetails={() =>
+          onOpenDeliveryDetails={({ etaText, isInTransit }) =>
             router.push({
               pathname: '/accepted-trip',
               params: {
                 deliveryId,
                 view: 'details',
+                pickupEta: isInTransit ? delivery?.pickupTime : etaText,
+                dropEta: isInTransit ? etaText : delivery?.dropoffTime,
               },
             })
           }
         />
         {alertModal}
       </>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <TopNav onHelp={handleReportIssue} />
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.content,
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.detailsLoadingCard}>
+            <Text style={styles.detailsLoadingText}>Loading delivery...</Text>
+          </View>
+        </ScrollView>
+        {alertModal}
+      </SafeAreaView>
     );
   }
 
@@ -2500,11 +2639,27 @@ export default function AcceptedTripScreen() {
         </View>
       </ScrollView>
 
-      <View style={[styles.ctaBar]}>
+      <View
+        style={[
+          styles.ctaBar,
+          { paddingBottom: Math.max(insets.bottom, vs(16)) },
+        ]}
+      >
         {isCompletedDelivery ? (
           <Pressable style={styles.reportButton} onPress={handleReportIssue}>
             <Text style={styles.reportButtonText}>Report issue</Text>
             <Ionicons name="arrow-forward" size={20} color="#d00416" />
+          </Pressable>
+        ) : isCancelledDelivery ? (
+          <Pressable
+            style={styles.acceptButton}
+            onPress={() => router.replace('/(tabs)')}
+          >
+            <View style={styles.acceptIconBox}>
+              <Ionicons name="home" size={20} color="#ffffff" />
+            </View>
+            <Text style={styles.acceptText}>Go to home</Text>
+            <View style={styles.acceptIconGhost} />
           </Pressable>
         ) : isAccepted && isDetailsView ? (
           <Pressable style={styles.cancelDeliveryButton} onPress={handleCancelDelivery}>
@@ -2541,6 +2696,10 @@ export default function AcceptedTripScreen() {
         onClose={() => setIsCancelModalVisible(false)}
         onSendRequest={handleSendCancelRequest}
       />
+      <TripCancelledModal
+        visible={isCancelledDelivery}
+        onGoHome={() => router.replace('/(tabs)')}
+      />
       {alertModal}
     </SafeAreaView>
   );
@@ -2550,6 +2709,22 @@ const styles = StyleSheet.create({
   completedContainer: {
     flex: 1,
     backgroundColor: '#eff2f6',
+  },
+  detailsLoadingCard: {
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: rs(12),
+    paddingHorizontal: rs(16),
+    paddingVertical: vs(24),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailsLoadingText: {
+    color: '#606060',
+    fontFamily: 'Poppins_400Regular',
+    fontSize: fs(14),
+    lineHeight: fs(21),
+    textAlign: 'center',
   },
   completedMain: {
     flex: 1,
@@ -2760,6 +2935,53 @@ const styles = StyleSheet.create({
     // padding : 30,
      zIndex: 10,
      
+  },
+  cancelledTrackingSheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopLeftRadius: rs(24),
+    borderTopRightRadius: rs(24),
+    backgroundColor: '#ffffff',
+    paddingHorizontal: rs(36, 24, 40),
+    paddingTop: vs(44),
+    zIndex: 10,
+  },
+  cancelledTrackingContent: {
+    width: '100%',
+    alignItems: 'center',
+    gap: vs(28),
+  },
+  cancelledTrackingIcon: {
+    width: rs(94, 82, 104),
+    height: rs(94, 82, 104),
+    borderRadius: rs(47, 41, 52),
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ef1b2d',
+  },
+  cancelledTrackingTitle: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: fs(34, 28, 38),
+    lineHeight: fs(42, 36, 46),
+    color: '#1c1c1c',
+    textAlign: 'center',
+  },
+  cancelledTrackingButton: {
+    width: '100%',
+    minHeight: vs(76, 64, 82),
+    borderRadius: rs(14),
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ef1b2d',
+  },
+  cancelledTrackingButtonText: {
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: fs(24, 20, 28),
+    lineHeight: fs(32, 28, 36),
+    color: '#ffffff',
+    textAlign: 'center',
   },
   pickupSheetContent: {
     flex: 1,
@@ -3123,18 +3345,20 @@ otpBox: {
   cancelModalActions: {
     width: '100%',
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'stretch',
     gap: rs(10),
   },
   cancelModalNoButton: {
     flex: 1,
+    flexBasis: 0,
     minWidth: 0,
+    minHeight: vs(48),
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#0055cc',
     borderRadius: rs(8),
-    paddingHorizontal: rs(24),
+    paddingHorizontal: rs(8),
     paddingVertical: vs(12),
   },
   cancelModalNoText: {
@@ -3147,11 +3371,23 @@ otpBox: {
   },
   cancelModalSendButton: {
     flex: 1,
+    flexBasis: 0,
     minWidth: 0,
+    minHeight: vs(48),
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: rs(8),
     backgroundColor: '#d00416',
+    paddingHorizontal: rs(8),
+    paddingVertical: vs(12),
+  },
+  cancelledModalHomeButton: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: rs(8),
+    backgroundColor: '#0055cc',
     paddingHorizontal: rs(24),
     paddingVertical: vs(12),
   },
