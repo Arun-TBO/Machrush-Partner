@@ -116,9 +116,11 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   primary: {
+    flex: 1,
     backgroundColor: Colors.primary,
   },
   secondary: {
+    minWidth: rs(100),
     borderWidth: rs(1.5),
     borderColor: Colors.primary,
     backgroundColor: 'transparent',
@@ -132,6 +134,9 @@ const styles = StyleSheet.create({
   },
   text: {
     flexShrink: 1,
+    fontSize: 16,
+    fontWeight: '500',
+    letterSpacing: -0.5,
     textAlign: 'center',
   },
   textPrimary: {
@@ -145,29 +150,5 @@ const styles = StyleSheet.create({
   },
   textDisabled: {
     color: Colors.neutral600,
-  },
-});
-  primary: {
-    flex: 1,
-    backgroundColor: Colors.primary,
-  },
-  secondary: {
-    minWidth: rs(100),
-    borderWidth: rs(1.5),
-    borderColor: Colors.primary,
-    backgroundColor: 'transparent',
-  },
-  text: {
-    flexShrink: 1,
-    fontSize: 16,
-    fontWeight: '500',
-    letterSpacing: -0.5,
-    textAlign: 'center',
-  },
-  textPrimary: {
-    color: Colors.neutral100,
-  },
-  textSecondary: {
-    color: Colors.neutral800,
   },
 });
