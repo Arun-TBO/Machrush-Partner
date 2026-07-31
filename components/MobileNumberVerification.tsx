@@ -144,6 +144,21 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
       ]);
       
       console.log('✅ Firebase UID stored in state');
+      // Fetch the logged-in user's data from MongoDB (via backend) and log it as JSON.
+      // Requires EXPO_PUBLIC_API_BASE_URL to point at the MachrushBackend (MongoDB).
+      try {
+        const mongoApiBase = (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
+        const phoneForMongo = result.phoneNumber || `+91${mobileNumber}`;
+        const mongoResponse = await fetch(
+          `${mongoApiBase}/api/drivers/by-phone/${encodeURIComponent(phoneForMongo)}`,
+          { headers: { Authorization: `Bearer ${result.idToken}` } }
+        );
+        const mongoBody = await mongoResponse.json().catch(() => null);
+        console.log('MongoDB driver data (on OTP verify):', JSON.stringify(mongoBody, null, 2));
+      } catch (mongoError) {
+        console.warn('Could not fetch MongoDB driver data on OTP:', mongoError);
+      }
+
 
       const lookupIds = Array.from(
         new Set(

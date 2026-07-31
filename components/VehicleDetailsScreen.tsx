@@ -16,6 +16,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius } from '@/lib/theme';
 import { useAppAlert } from './AppAlertModal';
+import { getVehicleImageUrl } from '@/lib/vehicleImageService';
 
 const backImage = require('@/assets/images/profile/back.png');
 const closedBodyImage = require('@/assets/images/vehicle-details/closed-body.png');
@@ -46,6 +47,8 @@ interface VehicleOption {
   id: string;
   name: string;
   capacity: string;
+  imageKey?: string;
+  imageUrl?: string | null;
 }
 
 const BODY_TYPES = [
@@ -111,6 +114,8 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   const [showVehicleTypeModal, setShowVehicleTypeModal] = useState(false);
   const [vehicleOptions, setVehicleOptions] = useState<VehicleOption[]>([]);
   const [isLoadingVehicles, setIsLoadingVehicles] = useState(true);
+  const [vehicleImageUrls, setVehicleImageUrls] = useState<Record<string, string>>({});
+  const [selectedVehicleImageUrl, setSelectedVehicleImageUrl] = useState<string | null>(null);
   const { alertModal, showAlert } = useAppAlert();
   
   // File URIs
@@ -165,11 +170,30 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
             id: (vehicle.id || getVehicleName(vehicle)).toString(),
             name: getVehicleName(vehicle),
             capacity: getVehicleCapacity(vehicle),
+            imageKey: vehicle.imageKey || vehicle.image_key || null,
+            imageUrl: vehicle.imageUrl || vehicle.image_url || null,
           }))
           .filter((vehicle: VehicleOption) => vehicle.id && vehicle.name);
 
         if (isMounted) {
           setVehicleOptions(options);
+
+          // Resolve all vehicle images from Firebase Storage
+          const imageMap: Record<string, string> = {};
+          const resolvePromises = options.map(async (v: VehicleOption) => {
+            if (v.imageUrl) {
+              // If backend already provided the full URL, use it directly
+              imageMap[v.id] = v.imageUrl;
+            } else if (v.imageKey) {
+              // Otherwise, resolve from Firebase Storage using the imageKey
+              const url = await getVehicleImageUrl(v.imageKey);
+              if (url) {
+                imageMap[v.id] = url;
+              }
+            }
+          });
+          await Promise.all(resolvePromises);
+          setVehicleImageUrls(imageMap);
         }
       } catch (error) {
         console.error('Error loading vehicle types:', error);
@@ -285,6 +309,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   const handleVehicleTypeSelect = (vehicle: VehicleOption) => {
     setVehicleType(vehicle.name);
     setVehicleCapacity(vehicle.capacity);
+    setSelectedVehicleImageUrl(vehicleImageUrls[vehicle.id] || null);
     setShowVehicleTypeModal(false);
   };
 
@@ -438,14 +463,23 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
             onPress={() => setShowVehicleTypeModal(true)}
             disabled={isLoadingVehicles}
           >
-            <Text
-              style={[
-                styles.dropdownText,
-                { color: vehicleType ? Colors.neutral900 : Colors.neutral800 },
-              ]}
-            >
-              {vehicleType || (isLoadingVehicles ? 'Loading vehicle types...' : 'Select Vehicle type')}
-            </Text>
+            <View style={styles.dropdownContent}>
+              {selectedVehicleImageUrl ? (
+                <Image
+                  source={{ uri: selectedVehicleImageUrl }}
+                  style={styles.dropdownImage}
+                  resizeMode="contain"
+                />
+              ) : null}
+              <Text
+                style={[
+                  styles.dropdownText,
+                  { color: vehicleType ? Colors.neutral900 : Colors.neutral800 },
+                ]}
+              >
+                {vehicleType || (isLoadingVehicles ? 'Loading vehicle types...' : 'Select Vehicle type')}
+              </Text>
+            </View>
             <Image source={chevrondown} style={{height : 15 , width : 15}}/>
           </Pressable>
         </View>
@@ -695,6 +729,19 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                     style={styles.modalOption}
                     onPress={() => handleVehicleTypeSelect(item)}
                   >
+                    {vehicleImageUrls[item.id] ? (
+                      <Image
+                        source={{ uri: vehicleImageUrls[item.id] }}
+                        style={styles.modalOptionImage}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <View style={styles.modalOptionImagePlaceholder}>
+                        <Text style={styles.modalOptionImagePlaceholderText}>
+                          {item.name.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
                     <View style={styles.modalOptionTextGroup}>
                       <Text style={styles.modalOptionText}>{item.name}</Text>
                       {item.capacity ? (
@@ -844,6 +891,17 @@ const styles = StyleSheet.create({
   dropdownIcon: {
     fontSize: 12,
     color: '#606060',
+  },
+  dropdownContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 10,
+  },
+  dropdownImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 6,
   },
 
   // Body Type Section
@@ -1142,10 +1200,31 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   modalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: Colors.neutral200,
+  },
+  modalOptionImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+  },
+  modalOptionImagePlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: Colors.neutral200,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalOptionImagePlaceholderText: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 18,
+    color: Colors.neutral600,
   },
   modalOptionTextGroup: {
     gap: 4,

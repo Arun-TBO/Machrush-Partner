@@ -1061,6 +1061,10 @@ export default function HomeScreen() {
               return null;
             }),
           ]);
+
+          // Log the logged-in user's complete data in JSON format for debugging.
+          // console.log('Logged-in user data:', JSON.stringify(driverProfile, null, 2));
+
           const savedPhotoUrl =
             driverProfile?.profilePhotoUrl ||
             (driverProfile?.photoUri?.startsWith('http') ? driverProfile.photoUri : null);
@@ -1304,7 +1308,7 @@ export default function HomeScreen() {
   const openJobRequests = jobRequestList.filter((job) => !job.isResumeTrip);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <Header
         driverStatus={driverStatus}
         onTogglePress={handleTogglePress}
@@ -1403,6 +1407,8 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: rs(24),
     borderBottomRightRadius: rs(24),
     paddingBottom: vs(24),
+    marginTop: vs(0),
+    overflow: 'hidden',
   },
   statusBar: {
     height: vs(52),

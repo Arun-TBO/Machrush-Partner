@@ -41,6 +41,14 @@ export interface OnboardingData {
 
   // Verification Status
   verificationStatus: 'pending' | 'verified' | 'rejected' | 'suspended';
+  // Additional verification fields written by the backend admin endpoints
+  // (/drivers/:id/approve|reject|suspend|unsuspend). Kept optional because the
+  // onboarding flow and older documents may not include them.
+  documentVerificationStatus?: string;
+  verified?: boolean;
+  status?: string;
+  verifiedDate?: string;
+  verifiedAt?: string;
   rejectionMessage?: string;
   rejectionReason?: string;
   rejectedDocuments?: string[];
@@ -343,6 +351,78 @@ const normalizeVerificationStatus = (status: unknown): VerificationStatus | null
     normalized === 'block'
   ) {
     return 'suspended';
+  }
+
+  return null;
+};
+
+/**
+ * Resolve a driver's verification status from a raw Firestore document.
+ *
+ * The backend admin writes verification state across several fields —
+ * `verificationStatus`, `documentVerificationStatus`, `verified` (boolean) and
+ * `status` — and the admin API's `isVerified` / `isSuspended` helpers treat a
+ * driver as verified when ANY of those fields indicate it. The mobile app used
+ * to look only at the `verificationStatus` string, so a verified driver whose
+ * `verificationStatus` was missing or held an unexpected value fell through to
+ * `null` and rendered as "pending" (and could even be routed back into
+ * onboarding, wiping their verified state). This mirrors the backend logic so
+ * verified drivers are always recognised. Suspension always wins.
+ */
+export const resolveDriverVerificationStatus = (
+  data: Record<string, any> | null | undefined
+): VerificationStatus | null => {
+  if (!data) {
+    return null;
+  }
+
+  // Normalised views of the three string fields the backend writes.
+  const vStatus = normalizeVerificationStatus(data.verificationStatus);
+  const dStatus = normalizeVerificationStatus(data.documentVerificationStatus);
+  const statusField = normalizeVerificationStatus(data.status);
+
+  // 1. Suspension always wins — a suspended driver is never verified/pending.
+  if (
+    vStatus === 'suspended' ||
+    dStatus === 'suspended' ||
+    statusField === 'suspended'
+  ) {
+    return 'suspended';
+  }
+
+  // 2. Verified — mirrors backend isVerified(). `verified: true` and
+  //    `status: 'Verified'` are written by /drivers/:id/approve, so a driver
+  //    can be verified even when `verificationStatus` alone is missing/stale.
+  if (
+    vStatus === 'verified' ||
+    dStatus === 'verified' ||
+    statusField === 'verified' ||
+    data.verified === true
+  ) {
+    return 'verified';
+  }
+
+  // 3. Rejected
+  if (
+    vStatus === 'rejected' ||
+    dStatus === 'rejected' ||
+    statusField === 'rejected'
+  ) {
+    return 'rejected';
+  }
+
+  // 4. Explicit pending values
+  if (
+    vStatus === 'pending' ||
+    dStatus === 'pending' ||
+    statusField === 'pending'
+  ) {
+    return 'pending';
+  }
+
+  // 5. Onboarding was submitted but no explicit status yet => under review.
+  if (data.submittedAt || data.createdAt) {
+    return 'pending';
   }
 
   return null;
@@ -1106,6 +1186,28 @@ export const storeOnboardingData = async (
       throw new Error('Firebase UID is required');
     }
 
+    // SAFEGUARD: never clobber an existing terminal verification decision.
+    // storeOnboardingData writes the driver document with setDoc() (a full
+    // overwrite) and defaults `verificationStatus` to 'pending'. If this is ever
+    // reached for a driver who is already verified/suspended — e.g. because an
+    // earlier getVerificationStatus() lookup failed and the flow fell through to
+    // onboarding — the overwrite would permanently wipe their verified state and
+    // show them as "pending". Rejected/pending drivers may legitimately
+    // re-submit, so only verified/suspended drivers are protected here.
+    try {
+      const existing = await getDriverProfile(uid, idToken);
+      const existingStatus = resolveDriverVerificationStatus(existing);
+      if (existingStatus === 'verified' || existingStatus === 'suspended') {
+        console.warn(
+          `Driver ${uid} is already ${existingStatus}; skipping onboarding overwrite to preserve verification state.`
+        );
+        return { success: true, driverId: uid };
+      }
+    } catch (preCheckError) {
+      // Non-fatal: if the pre-check read fails, proceed with normal onboarding.
+      console.warn('Could not pre-check existing verification status:', preCheckError);
+    }
+
     const now = Timestamp.now();
 
     const uploadedOnboardingData = await uploadOnboardingAssets(uid, onboardingData, idToken);
@@ -1158,68 +1260,38 @@ export const storeOnboardingData = async (
  */
 export const getVerificationStatus = async (uidOrPhone: string, idToken?: string) => {
   try {
-    if (idToken && auth.currentUser?.uid !== uidOrPhone) {
-      const data = isPhoneIdentifier(uidOrPhone)
-        ? await getDriverByPhoneViaRest(uidOrPhone, idToken)
-        : await getDriverByUidViaRest(uidOrPhone, idToken);
+    // Fetch driver record from the backend API endpoint which reads from the
+    // real MongoDB store (via MachrushBackend). The old code read Firestore
+    // directly (getDoc on the 'drivers' collection), which was always stale
+    // because verification state is written to MongoDB — not Firestore — by
+    // the admin panel. The backend endpoint /api/firestore/drivers/:id bridges
+    // this gap via its dbService router (DATABASE_TYPE=mongodb).
+    const profile = await getDriverProfile(uidOrPhone, idToken);
 
-      if (!data) {
-        console.warn(`âš ï¸ No verification status found for: ${uidOrPhone}`);
-        return null;
-      }
-
-      const status = normalizeVerificationStatus(data.verificationStatus);
-
-      if (!status) {
-        console.warn(`Unknown verification status for ${uidOrPhone}:`, data.verificationStatus);
-        return null;
-      }
-
-      return {
-        status,
-        rejectionMessage: data.rejectionMessage,
-        rejectionReason: data.rejectionReason,
-        rejectedDocuments: data.rejectedDocuments,
-        verificationNotes: data.verificationNotes,
-      };
+    if (!profile) {
+      console.warn(`No verification status found for: ${uidOrPhone}`);
+      return null;
     }
 
-    // Try as UID first (direct document access)
-    let docSnap = await getDoc(doc(db, 'drivers', uidOrPhone));
+    const status = resolveDriverVerificationStatus(profile);
 
-    // If not found and looks like a phone number, try searching by phone field
-    if (!docSnap.exists() && isPhoneIdentifier(uidOrPhone)) {
-      const q = query(
-        collection(db, 'drivers'),
-        where('phoneNumber', '==', uidOrPhone)
-      );
-      const querySnapshot = await getDocs(q);
-      
-      if (querySnapshot.docs.length > 0) {
-        docSnap = querySnapshot.docs[0];
-      }
+    if (!status) {
+      console.warn(`Unknown verification status for ${uidOrPhone}:`, {
+        verificationStatus: profile.verificationStatus,
+        documentVerificationStatus: profile.documentVerificationStatus,
+        status: profile.status,
+        verified: profile.verified,
+      });
+      return null;
     }
 
-    if (docSnap.exists()) {
-      const data = docSnap.data() as OnboardingData;
-      const status = normalizeVerificationStatus(data.verificationStatus);
-
-      if (!status) {
-        console.warn(`Unknown verification status for ${uidOrPhone}:`, data.verificationStatus);
-        return null;
-      }
-
-      return {
-        status,
-        rejectionMessage: data.rejectionMessage,
-        rejectionReason: data.rejectionReason,
-        rejectedDocuments: data.rejectedDocuments,
-        verificationNotes: data.verificationNotes,
-      };
-    }
-
-    console.warn(`⚠️ No verification status found for: ${uidOrPhone}`);
-    return null;
+    return {
+      status,
+      rejectionMessage: profile.rejectionMessage,
+      rejectionReason: profile.rejectionReason,
+      rejectedDocuments: profile.rejectedDocuments,
+      verificationNotes: profile.verificationNotes,
+    };
   } catch (error) {
     console.error('Error fetching verification status:', error);
     return null;
@@ -1232,37 +1304,64 @@ export const getVerificationStatus = async (uidOrPhone: string, idToken?: string
  */
 export const getDriverProfile = async (uidOrPhone: string, idToken?: string | null) => {
   try {
-    if (idToken && auth.currentUser?.uid !== uidOrPhone) {
-      const data = isPhoneIdentifier(uidOrPhone)
-        ? await getDriverByPhoneViaRest(uidOrPhone, idToken)
-        : await getDriverByUidViaRest(uidOrPhone, idToken);
+    // Primary path: fetch from the backend API which reads the real MongoDB
+    // store (MachrushBackend, DATABASE_TYPE=mongodb). The old code read
+    // Firestore directly via the Firebase SDK (getDoc), but verification state
+    // and the full driver document are stored in MongoDB.
+    const apiBase = getApiBaseUrl();
+    const url = `${apiBase}/api/firestore/drivers/${encodeURIComponent(uidOrPhone)}`;
 
-      return data;
+    const headers: Record<string, string> = {};
+    if (idToken) {
+      headers['Authorization'] = `Bearer ${idToken}`;
     }
 
-    // Try as UID first
-    let docSnap = await getDoc(doc(db, 'drivers', uidOrPhone));
+    const response = await fetch(url, { headers, cache: 'no-cache' });
 
-    // If not found and looks like a phone number, search by phone field
-    if (!docSnap.exists() && uidOrPhone.startsWith('+')) {
-      const q = query(
-        collection(db, 'drivers'),
-        where('phoneNumber', '==', uidOrPhone)
-      );
-      const querySnapshot = await getDocs(q);
-      
-      if (querySnapshot.docs.length > 0) {
-        docSnap = querySnapshot.docs[0];
+    if (response.ok) {
+      const body = await response.json().catch(() => null);
+      if (body && body.success && body.data) {
+        // console.log(`[backend-api] Driver profile fetched for ${uidOrPhone}`);
+        return body.data;
       }
     }
 
-    if (docSnap.exists()) {
-      return docSnap.data() as OnboardingData;
+    // Fallback: if the backend is unreachable or returns 404, try the direct
+    // Firestore reads so the app doesn't break completely in offline/edge cases.
+    // console.warn(`[backend-api] Fallback to Firestore for ${uidOrPhone} (HTTP ${response.status})`);
+
+    if (auth.currentUser?.uid === uidOrPhone) {
+      let docSnap = await getDoc(doc(db, 'drivers', uidOrPhone));
+
+      if (!docSnap.exists() && uidOrPhone.startsWith('+')) {
+        const q = query(
+          collection(db, 'drivers'),
+          where('phoneNumber', '==', uidOrPhone)
+        );
+        const querySnapshot = await getDocs(q);
+
+        if (querySnapshot.docs.length > 0) {
+          docSnap = querySnapshot.docs[0];
+        }
+      }
+
+      if (docSnap.exists()) {
+        return docSnap.data() as OnboardingData;
+      }
     }
 
     return null;
   } catch (error) {
     console.error('Error fetching driver profile:', error);
+    // Fallback to Firestore on network error
+    try {
+      if (auth.currentUser?.uid === uidOrPhone) {
+        let docSnap = await getDoc(doc(db, 'drivers', uidOrPhone));
+        if (docSnap.exists()) {
+          return docSnap.data() as OnboardingData;
+        }
+      }
+    } catch (_) {}
     return null;
   }
 };

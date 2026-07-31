@@ -1,30 +1,99 @@
-import { Dimensions, PixelRatio } from 'react-native';
+import { Dimensions, PixelRatio, Platform, NativeModules } from 'react-native';
+import { useWindowDimensions } from 'react-native';
 
-const { width, height } = Dimensions.get('window');
+// Base guideline (iPhone 14 Pro / 14 Pro Max portrait)
+const guidelineWidth = 393;
+const guidelineHeight = 852;
 
-const guidelineWidth = 390;
-const guidelineHeight = 844;
-const shortestSide = Math.min(width, height); 
-const longestSide = Math.max(width, height);
+// Detect initial screen dimensions
+const initialWindow = Dimensions.get('window');
+const initialWidth = initialWindow.width;
+const initialHeight = initialWindow.height;
+const isTablet = initialWidth >= 768 || initialHeight >= 768;
+const isSmallScreen = Math.min(initialWidth, initialHeight) < 340;
 
-export const isCompactPhone = shortestSide < 340;
+// iOS-specific adjustments
+const isIOS = Platform.OS === 'ios';
+const { StatusBarManager } = NativeModules;
+const STATUS_BAR_HEIGHT = isIOS ? (StatusBarManager?.HEIGHT ?? 44) : 0;
+
+export const useResponsive = () => {
+  const { width, height } = useWindowDimensions();
+  const shortestSide = Math.min(width, height);
+  const longestSide = Math.max(width, height);
+  const isLandscape = width > height;
+
+  return {
+    width,
+    height,
+    shortestSide,
+    longestSide,
+    isLandscape,
+    isTablet: isTablet || width >= 768,
+    isSmallScreen: isSmallScreen || shortestSide < 340,
+    isIOS,
+    statusBarHeight: STATUS_BAR_HEIGHT,
+  };
+};
+
+export const isCompactDevice = isSmallScreen;
 
 export const clamp = (value: number, min: number, max: number) => {
   return Math.min(Math.max(value, min), max);
 };
 
-export const rs = (size: number, min = size * 0.86, max = size * 1.12) => {
-  return PixelRatio.roundToNearestPixel(clamp((shortestSide / guidelineWidth) * size, min, max));
+// Responsive scaling based on window width
+export const rs = (
+  size: number,
+  min?: number,
+  max?: number
+): number => {
+  const defaultMin = size * 0.82;
+  const defaultMax = size * 1.18;
+  return PixelRatio.roundToNearestPixel(
+    clamp(
+      (Dimensions.get('window').width / guidelineWidth) * size,
+      min ?? defaultMin,
+      max ?? defaultMax
+    )
+  );
 };
 
-export const vs = (size: number, min = size * 0.86, max = size * 1.12) => {
-  return PixelRatio.roundToNearestPixel(clamp((longestSide / guidelineHeight) * size, min, max));
+// Responsive scaling based on window height
+export const vs = (
+  size: number,
+  min?: number,
+  max?: number
+): number => {
+  const defaultMin = size * 0.82;
+  const defaultMax = size * 1.18;
+  return PixelRatio.roundToNearestPixel(
+    clamp(
+      (Dimensions.get('window').height / guidelineHeight) * size,
+      min ?? defaultMin,
+      max ?? defaultMax
+    )
+  );
 };
 
-export const fs = (size: number, min = size * 0.88, max = size * 1.08) => {
-  return PixelRatio.roundToNearestPixel(clamp((shortestSide / guidelineWidth) * size, min, max));
+// Responsive font scaling
+export const fs = (
+  size: number,
+  min?: number,
+  max?: number
+): number => {
+  const defaultMin = size * 0.86;
+  const defaultMax = size * 1.12;
+  return PixelRatio.roundToNearestPixel(
+    clamp(
+      (Dimensions.get('window').width / guidelineWidth) * size,
+      min ?? defaultMin,
+      max ?? defaultMax
+    )
+  );
 };
 
-export const hit = (size: number) => {
+// Minimum touch target for iOS
+export const hit = (size: number): number => {
   return Math.max(44, rs(size));
 };
