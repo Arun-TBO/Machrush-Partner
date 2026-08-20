@@ -1,127 +1,87 @@
-import { getDownloadURL, ref } from 'firebase/storage';
-import { storage } from './firebase';
+/**
+ * Vehicle image resolution via AWS S3.
+ *
+ * Storage is handled by the backend (MacrushBackend) which uploads to an AWS S3
+ * bucket. This app no longer reads anything from Firebase Storage.
+ *
+ * The vehicle image mapping below mirrors the backend's
+ * config/vehicleImageMapping.js: the MongoDB `imageKey` (e.g. "3wheeler") is
+ * mapped to the exact file name in S3 (e.g. "3Wheeler.png").
+ */
 
 /**
- * ✅ Firebase Storage folder where vehicle images are stored.
- * From your Firebase Console: vehicle_images/
+ * S3 folder where vehicle images live (matches the backend bucket layout).
  */
 const VEHICLE_IMAGES_PATH = 'vehicle_images';
 
 /**
- * In-memory cache to avoid repeated Firebase Storage calls
+ * Public S3 base URL.
+ * Defaults to: https://{bucket}.s3.{region}.amazonaws.com
+ * Override by setting EXPO_PUBLIC_S3_BASE_URL (e.g. a CloudFront distribution).
+ */
+const S3_PUBLIC_BASE_URL = (
+  process.env.EXPO_PUBLIC_S3_BASE_URL ||
+  'https://machrush-storage.s3.us-east-1.amazonaws.com'
+).replace(/\/+$/, '');
+
+/**
+ * imageKey -> exact S3 file name.
+ * Keep in sync with backend config/vehicleImageMapping.js.
+ */
+const vehicleImageMap: Record<string, string> = {
+  '3wheeler':       '3Wheeler.png',
+  'mini3wheeler':   'Mini3W.png',
+  'pickup9ft':      'pickup.png',
+  'tataace_open':   'Tataopen.png',
+  'tataace_closed': 'Tata.png',
+  'pickup8ft':      'pickup.png',
+  '14ft':           '14ft.png',
+  '17ft':           '17ft.png',
+  'scooty':         'Scooter.png',
+  '2wheeler':       '2Wheeler.png',
+  'bike':           '2Wheeler.png', // fallback — uses 2-wheeler image
+};
+
+/**
+ * In-memory cache to avoid repeated URL building.
  */
 const imageUrlCache = new Map<string, string>();
 
-/**
- * Generate possible file name variations for case-insensitive matching.
- * Firebase Storage is case-sensitive, so we try multiple casing patterns.
- *
- * Example: imageKey "3wheeler" generates:
- *   - "3wheeler"      (as-is / lowercase)
- *   - "3Wheeler"      (PascalCase — capitalize first alpha after digits)
- *   - "3WHEELER"      (all uppercase)
- *
- * Then each variation is tried with extensions: (none), .png, .jpg, .jpeg, .webp
- */
-function generateNameVariations(imageKey: string): string[] {
-  const seen = new Set<string>();
-  const add = (s: string) => { if (s && !seen.has(s)) { seen.add(s); } };
-
-  const lower = imageKey.toLowerCase();
-  const upper = imageKey.toUpperCase();
-
-  // 1. As-is (whatever MongoDB stored)
-  add(imageKey);
-  // 2. All lowercase
-  add(lower);
-  // 3. PascalCase: capitalize first alpha after any leading digits/non-alpha chars
-  //    e.g. "3wheeler" → "3Wheeler", "mini-truck" → "Mini-Truck"
-  const pascalCased = lower.replace(/(^|\d+|\W+)([a-z])/g, (_, prefix, letter) =>
-    prefix + letter.toUpperCase()
-  );
-  add(pascalCased);
-  // 4. Title Case (capitalize first char only if it's a letter)
-  if (/^[a-z]/i.test(imageKey)) {
-    add(imageKey.charAt(0).toUpperCase() + imageKey.slice(1).toLowerCase());
-  }
-  // 5. All uppercase
-  add(upper);
-
-  return Array.from(seen);
-}
+const toS3Url = (fileName: string) => {
+  const encoded = fileName.split('/').map(encodeURIComponent).join('/');
+  return `${S3_PUBLIC_BASE_URL}/${VEHICLE_IMAGES_PATH}/${encoded}`;
+};
 
 /**
- * Try to resolve a file path in Firebase Storage with multiple extensions.
- */
-async function tryResolve(pathVariations: string[]): Promise<string | null> {
-  const extensions = ['', '.png', '.jpg', '.jpeg', '.webp'];
-
-  for (const name of pathVariations) {
-    for (const ext of extensions) {
-      const fullPath = `${VEHICLE_IMAGES_PATH}/${name}${ext}`;
-      try {
-        const storageRef = ref(storage, fullPath);
-        const url = await getDownloadURL(storageRef);
-        return url;
-      } catch {
-        // Try next extension/name
-        continue;
-      }
-    }
-  }
-
-  return null;
-}
-
-/**
- * Resolve a vehicle imageKey to a full download URL using Firebase SDK.
+ * Resolve a vehicle imageKey to a full public S3 URL.
  *
- * The imageKey comes from MongoDB (e.g., "3wheeler") and is matched
- * against files in Firebase Storage at vehicle_images/ (e.g., "3Wheeler.png").
- *
- * Since Firebase Storage is case-sensitive but the imageKey casing may differ
- * from the file name, we automatically try multiple casing variations and
- * file extensions. Results are cached for the session.
+ * @param imageKey - the MongoDB vehicleType/imageKey (e.g. "3wheeler")
+ * @returns the S3 URL, or null if no mapping exists for the key
  */
-export async function getVehicleImageUrl(imageKey: string): Promise<string | null> {
+export function getVehicleImageUrl(imageKey: string): string | null {
   if (!imageKey) return null;
 
-  // Check cache first (no need to re-resolve during the session)
-  if (imageUrlCache.has(imageKey)) {
-    return imageUrlCache.get(imageKey)!;
+  const key = imageKey.trim().toLowerCase();
+
+  // Check cache first
+  if (imageUrlCache.has(key)) {
+    return imageUrlCache.get(key)!;
   }
 
-  // Generate all possible name variations to handle case differences
-  const nameVariations = generateNameVariations(imageKey);
-
-  const url = await tryResolve(nameVariations);
-
-  if (url) {
-    imageUrlCache.set(imageKey, url);
-    return url;
+  const fileName = vehicleImageMap[key];
+  if (!fileName) {
+    console.warn(`[vehicleImageService] No image mapping for key: ${imageKey}`);
+    return null;
   }
 
-  console.warn(`[vehicleImageService] No image found for key: ${imageKey} (tried: ${nameVariations.join(', ')})`);
-  return null;
+  const url = toS3Url(fileName);
+  imageUrlCache.set(key, url);
+  return url;
 }
 
 /**
- * Build a Firebase Storage public URL without SDK calls.
- * Faster than getVehicleImageUrl() but only works if your Firebase
- * Storage rules allow public reads.
- *
- * Useful when you know the exact file name convention.
+ * Alias kept for compatibility. Returns the public S3 URL for an imageKey.
  */
 export function getPublicVehicleImageUrl(imageKey: string): string | null {
-  if (!imageKey) return null;
-
-  const bucket = process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET;
-  if (!bucket) return null;
-
-  // Assume PascalCase .png (most common convention)
-  const pascalCased = imageKey.toLowerCase().replace(/(^|\d+|\W+)([a-z])/g, (_, prefix, letter) =>
-    prefix + letter.toUpperCase()
-  );
-
-  return `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(`${VEHICLE_IMAGES_PATH}/${pascalCased}.png`)}?alt=media`;
+  return getVehicleImageUrl(imageKey);
 }

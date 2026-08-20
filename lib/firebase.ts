@@ -1,20 +1,24 @@
 import { initializeApp, FirebaseApp, getApp } from 'firebase/app';
 import { Auth, getAuth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
-import { FirebaseStorage, getStorage } from 'firebase/storage';
 
 // Firebase configuration from environment variables
 // These values are securely stored in .env.local (never commit to git)
+//
+// IMPORTANT: This app uses Firebase for AUTHENTICATION ONLY.
+// - All file/image storage is handled by the backend via AWS S3
+//   (see lib/firestoreOnboardingService.ts / the /api/uploads routes).
+// - All application data lives in MongoDB (exposed by the same backend).
+//
+// Firestore and Firebase Storage are intentionally NOT initialized here.
 const firebaseConfig = {
   projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
   messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
 };
 
 // Validate that all required Firebase config values are present
-const requiredFields = ['projectId', 'storageBucket', 'apiKey', 'appId', 'messagingSenderId'];
+const requiredFields = ['projectId', 'apiKey', 'appId', 'messagingSenderId'];
 const missingFields = requiredFields.filter(field => !firebaseConfig[field as keyof typeof firebaseConfig]);
 
 if (missingFields.length > 0) {
@@ -52,24 +56,4 @@ try {
   throw error;
 }
 
-// Initialize Firestore
-let db: Firestore;
-try {
-  db = getFirestore(firebaseApp);
-  console.log('✅ Firestore initialized');
-} catch (error) {
-  console.error('❌ Firestore initialization error:', error);
-  throw error;
-}
-
-// Initialize Firebase Storage
-let storage: FirebaseStorage;
-try {
-  storage = getStorage(firebaseApp);
-  console.log('âœ… Firebase Storage initialized');
-} catch (error) {
-  console.error('âŒ Firebase Storage initialization error:', error);
-  throw error;
-}
-
-export { firebaseApp, auth, db, storage };
+export { auth };
