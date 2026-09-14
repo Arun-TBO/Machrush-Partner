@@ -20,7 +20,9 @@ import { SuspendedScreen } from './SuspendedScreen';
 import {
   storeOnboardingData,
   getVerificationStatus,
+  getDriverProfile,
   OnboardingData,
+  logOnboardingFieldSizes,
 } from '@/lib/firestoreOnboardingService'; // Real Firebase Firestore
 
 import { sendOTP } from '@/lib/firebaseAuthService'; // Real Firebase Auth
@@ -209,6 +211,10 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
 
       if (verificationStatus?.status === 'rejected') {
         console.log('Existing driver rejected, showing review screen with admin message');
+        // Silently prefetch the previously submitted data so that when the
+        // driver taps "Re-upload Documents", the forms come prefilled and
+        // only the rejected details need to be corrected.
+        loadExistingProfileData(result.uid, result.idToken, true);
         setShowVerification(true);
         setShowOTP(false);
         return;
@@ -288,6 +294,10 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
         verificationStatus: 'pending',
       };
 
+      // Diagnostics — log how large each field is before submitting (helps spot
+      // an overly large image/base64 field if anything still fails).
+      logOnboardingFieldSizes(onboardingData as unknown as Record<string, any>);
+
       console.log(`📝 Storing onboarding data to Firestore using UID: ${firebaseUid}`);
 
       // Store to Firestore using Firebase UID
@@ -320,6 +330,79 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
     }
   };
 
+  const [isProfileDataLoading, setIsProfileDataLoading] = useState(false);
+  const profileDataLoadedRef = useRef(false);
+
+  /**
+   * Fetch the driver's previously submitted onboarding data from the backend
+   * and prefill the form drafts, so after a verification rejection the driver
+   * only has to edit/replace the rejected details instead of re-entering
+   * everything. Documents already uploaded to S3 (remote URLs) are kept as-is
+   * and skipped by uploadOnboardingAssets on resubmission.
+   */
+  const loadExistingProfileData = async (
+    uidOverride?: string | null,
+    idTokenOverride?: string | null,
+    silent = false
+  ): Promise<boolean> => {
+    if (profileDataLoadedRef.current) return true;
+
+    const lookupId = uidOverride || firebaseUid || `+91${mobileNumber}`;
+    const idToken = idTokenOverride || firebaseIdToken || undefined;
+
+    if (!lookupId) return false;
+
+    try {
+      if (!silent) setIsProfileDataLoading(true);
+
+      const profile: OnboardingData | null = await getDriverProfile(lookupId, idToken);
+      if (!profile) {
+        console.warn('No existing driver profile found for:', lookupId);
+        return false;
+      }
+
+      console.log('✅ Existing driver profile loaded, prefilling onboarding forms');
+
+      // Driver details screen expects: fullName, photoUri, drivingLicenseUri, identityProofUri
+      setDriverData({
+        fullName: profile.fullName || '',
+        photoUri: profile.photoUri || profile.profilePhotoUrl || '',
+        drivingLicenseUri: profile.drivingLicenseUri || '',
+        identityProofUri: profile.identityProofUri || '',
+      });
+
+      // Vehicle details screen expects: vehicleNumber, vehicleType, vehicleCapacity,
+      // bodyType, rcBook, insurance, vehiclePhotos
+      setVehicleData({
+        vehicleNumber: profile.vehicleNumber || '',
+        vehicleType: profile.vehicleType || '',
+        vehicleCapacity: profile.vehicleCapacity || '',
+        bodyType: profile.bodyType || '',
+        rcBook: profile.rcBookUri || '',
+        insurance: profile.insuranceUri || '',
+        vehiclePhotos: Array.isArray(profile.vehiclePhotoUris)
+          ? profile.vehiclePhotoUris.filter(Boolean)
+          : [],
+      });
+
+      // Bank details screen expects: bankName, accountNumber, ifscCode, upiId
+      setBankData({
+        bankName: profile.bankName || '',
+        accountNumber: profile.accountNumber || '',
+        ifscCode: profile.ifscCode || '',
+        upiId: profile.upiId || '',
+      });
+
+      profileDataLoadedRef.current = true;
+      return true;
+    } catch (error) {
+      console.warn('Could not load existing driver profile for prefill:', error);
+      return false;
+    } finally {
+      if (!silent) setIsProfileDataLoading(false);
+    }
+  };
+
   const handleVerificationComplete = () => {
     // All verified and user can access the app
     console.log('✅ User verified, accessing app');
@@ -328,7 +411,12 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
     }
   };
 
-  const handleRetryUpload = () => {
+  const handleRetryUpload = async () => {
+    // Make sure the previously submitted driver information is loaded from the
+    // backend so the driver only needs to correct the rejected details instead
+    // of re-entering everything from scratch.
+    await loadExistingProfileData(firebaseUid, firebaseIdToken);
+
     // User wants to re-upload documents (go back to driver details)
     setShowVerification(false);
     setShowBankDetails(false);

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Dimensions, Platform, NativeModules, KeyboardEvent } from 'react-native';
+import { Dimensions, Platform, NativeModules, Keyboard, KeyboardEvent } from 'react-native';
 
 export const useResponsiveScreen = () => {
   const [dimensions, setDimensions] = useState(() => Dimensions.get('window'));

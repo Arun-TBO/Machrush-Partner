@@ -96,8 +96,8 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
       return;
     }
 
-    if (!/^\d+$/.test(trimmedAccountNumber)) {
-      showAlert('Invalid Account Number', 'Account number must contain only digits.');
+    if (!/^\d{9,18}$/.test(trimmedAccountNumber)) {
+      showAlert('Invalid Account Number', 'Account number must be 9 to 18 digits.');
       return;
     }
 
@@ -243,8 +243,11 @@ export const BankDetailsScreen: React.FC<BankDetailsScreenProps> = ({
             placeholder="Enter account number"
             placeholderTextColor={Colors.neutral800}
             value={accountNumber}
-            onChangeText={setAccountNumber}
+            onChangeText={(value) =>
+              setAccountNumber(value.replace(/\D/g, '').slice(0, 18))
+            }
             keyboardType="number-pad"
+            maxLength={18}
           />
         </View>
 

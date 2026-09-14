@@ -15,6 +15,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth } from '@/lib/firebase';
 import { useAppAlert } from '@/components/AppAlertModal';
+import { refreshSession } from '@/lib/session';
 import { fs, hit, rs, vs } from '@/lib/responsive';
 import {
   getDriverProfile,
@@ -53,26 +54,8 @@ const AVERAGE_CITY_SPEED_KMPH = 30;
 const ACTIVE_DELIVERY_STATUSES = ['assigned', 'arrived', 'in_transit'];
 
 const getHomeAuthContext = async () => {
-  const [storedUid, storedIdToken] = await Promise.all([
-    AsyncStorage.getItem('firebaseUid'),
-    AsyncStorage.getItem('firebaseIdToken'),
-  ]);
-  const currentUser = auth.currentUser;
-  const uid = currentUser?.uid || storedUid;
-  let idToken = storedIdToken;
-
-  if (currentUser) {
-    const refreshedToken = await currentUser.getIdToken().catch(() => null);
-    if (refreshedToken) {
-      idToken = refreshedToken;
-      await AsyncStorage.multiSet([
-        ['firebaseUid', currentUser.uid],
-        ['firebaseIdToken', refreshedToken],
-      ]);
-    }
-  }
-
-  return { uid, idToken };
+  const { uid, idToken, sessionExpired } = await refreshSession();
+  return { uid, idToken, sessionExpired };
 };
 
 const getDeliveryHeaders = (idToken?: string | null, includeJson = false) => ({
@@ -730,7 +713,7 @@ function StatusConfirmModal({
               </Text>
               <Text style={styles.confirmDescription}>
                 {goingOnline
-                  ? 'After going online you will start receiving\nnew ride requests.'
+                  ? 'After going online you will start\nreceiving new ride requests.'
                   : 'You will stop receiving new\ndelivery requests'}
               </Text>
             </View>
@@ -862,10 +845,24 @@ export default function HomeScreen() {
           if (!hasLoadedJobsRef.current) {
             setIsLoadingJobs(true);
           }
-          const { uid, idToken } = await getHomeAuthContext();
+          const { uid, idToken, sessionExpired } = await getHomeAuthContext();
           let driverVehicleType = '';
           let openDeliveries: OpenDelivery[] = [];
           let driverDeliveries: OpenDelivery[] = [];
+
+          // Graceful session-expiry handling: the auth token could not be
+          // refreshed and is no longer valid. Notify the driver and send them
+          // back to the login screen instead of failing silently.
+          if (sessionExpired) {
+            if (isActive) {
+              setJobRequestList([]);
+              setTodayTotalEarnings(formatCurrency(0));
+              setHasTripInProgress(false);
+            }
+            showAlert('Session expired', 'Please log in again to continue.');
+            router.replace('/phone-number');
+            return;
+          }
 
           if (!uid) {
             if (isActive) {
@@ -921,7 +918,14 @@ export default function HomeScreen() {
               throw new Error(openBody?.error || 'Unable to load job requests');
             }
 
-            openDeliveries = Array.isArray(openBody?.data) ? openBody.data : [];
+            // Only show open jobs whose vehicle name matches the driver's
+            // vehicleType (e.g. delivery.vehicle.name === '3 Wheeler' &&
+            // driver.vehicleType === '3 Wheeler'). Anything else is hidden.
+            openDeliveries = (Array.isArray(openBody?.data) ? openBody.data : []).filter(
+              (delivery) =>
+                (delivery.vehicle?.name || '').trim().toLowerCase() ===
+                driverVehicleType.trim().toLowerCase()
+            );
           }
 
           const activeDriverDeliveries = driverDeliveries.filter(isActiveDelivery);

@@ -178,7 +178,7 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
           <View
             style={[
               styles.contentContainer,
-              { paddingBottom: Math.max(insets.bottom + 24, 40) },
+              { paddingBottom: 80 + insets.bottom + 24 },
             ]}
           >
             {/* Title and Description */}
@@ -241,23 +241,25 @@ export const DriverDetailsScreen: React.FC<DriverDetailsScreenProps> = ({
                   isLoading={isLoading}
                 />
               </View>
-
-              {/* Continue Button */}
-              <Pressable
-                style={[
-                  styles.continueButton,
-                  (!isFormValid || isLoading) && styles.continueButtonDisabled,
-                ]}
-                onPress={handleContinue}
-                disabled={!isFormValid || isLoading}
-              >
-                <Text style={styles.continueButtonText}>
-                  {isLoading ? 'Processing...' : 'Continue'}
-                </Text>
-              </Pressable>
             </View>
           </View>
         </ScrollView>
+
+        {/* Pinned Continue Button — always visible above the safe area (per design) */}
+        <View style={[styles.bottomArea, { paddingBottom: insets.bottom + 16 }]}>
+          <Pressable
+            style={[
+              styles.continueButton,
+              (!isFormValid || isLoading) && styles.continueButtonDisabled,
+            ]}
+            onPress={handleContinue}
+            disabled={!isFormValid || isLoading}
+          >
+            <Text style={styles.continueButtonText}>
+              {isLoading ? 'Processing...' : 'Continue'}
+            </Text>
+          </Pressable>
+        </View>
       </Animated.View>
       {alertModal}
     </SafeAreaView>
@@ -392,6 +394,16 @@ const styles = StyleSheet.create({
     paddingTop: 24,
     paddingBottom: 24,
     gap: 24,
+  },
+
+  // Pinned bottom CTA area (matches DocumentsVerificationScreen design)
+  bottomArea: {
+    width: '100%',
+    maxWidth: 412,
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 16,
   },
 
   // Title Container

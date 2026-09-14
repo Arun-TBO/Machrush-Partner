@@ -11,12 +11,13 @@ import {
   Animated,
   PanResponder
 } from 'react-native';
-import { MaterialIcons, Octicons } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { getVerificationStatus } from '@/lib/firestoreOnboardingService';
 import { useAppAlert } from './AppAlertModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const verifiedImage = require('@/assets/images/verified.png');
+const docRejectImage = require('@/assets/images/DocReject.png');
 const backImage = require('@/assets/images/profile/back.png');
 const supportCallImage = require('@/assets/images/profile/support-call.png');
 
@@ -104,15 +105,25 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
   const isVerified = status === 'verified';
   const isRejected = status === 'rejected';
   const canUseButton = isVerified || isRejected;
-  const title = isVerified ? 'Documents verified' : 'Documents under review';
+  const title = isVerified
+    ? 'Documents verified'
+    : isRejected
+      ? 'Verification failed'
+      : 'Documents under review';
   const description = isVerified
     ? 'All your documents have been approved. You can now access the app.'
-    : 'Our team will verify your documents within 24 hours.  We will notify you once the review is complete.';
+    : isRejected
+      ? 'Your documents could not be verified. Please check the note below and re-upload the required documents.'
+      : 'Our team will verify your documents within 24 hours.  We will notify you once the review is complete.';
   const actionMessage =
     verificationData?.rejectionMessage ||
     verificationData?.rejectionReason ||
     'Please check the admin message and re-upload your documents.';
   const buttonLabel = isRejected ? 'Re-upload Documents' : 'Go to app';
+  const hasAdminNote = Boolean(
+    verificationData?.rejectionMessage ||
+    verificationData?.rejectionReason
+  );
    
 
   // drag Modal
@@ -215,14 +226,20 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
             <View style={styles.reviewCard}>
               {isVerified ? (
                 <Image source={verifiedImage} style={styles.verifiedImage} resizeMode="contain" />
+              ) : isRejected ? (
+                <Image
+                  source={docRejectImage}
+                  style={styles.rejectedImage}
+                  resizeMode="contain"
+                />
               ) : (
-                <Octicons name="unverified" size={80} color="#e0ad00" />
+                <MaterialIcons name="plagiarism" size={120} color="#1b7cff" />
               )}
               <Text style={styles.mainTitle}>{title}</Text>
               <Text style={styles.mainDescription}>{description}</Text>
             </View>
 
-            {isRejected && (
+            {!isVerified && (isRejected || hasAdminNote) && (
               <View style={styles.actionRequiredBox}>
                 <View style={styles.actionHeaderContainer}>
                   <MaterialIcons name="message" size={16} color="#1d1b20" />
@@ -231,8 +248,6 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
                 <Text style={styles.actionMessage}>{actionMessage}</Text>
               </View>
             )}
-
-            <Text style={styles.infoText}>Complete all document uploads to access the app</Text>
           </ScrollView>
 
           <View style={[styles.bottomArea, { paddingBottom: insets.bottom + 16 }]}>
@@ -409,6 +424,10 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
   },
+  rejectedImage: {
+    width: 96,
+    height: 96,
+  },
   mainTitle: {
     color: '#1c1c1c',
     fontFamily: 'Poppins_500Medium',
@@ -460,16 +479,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 24,
-  },
-  infoText: {
-    marginTop: 40,
-    color: '#606060',
-    fontFamily: 'Poppins_400Regular',
-    fontSize: 14,
-    fontWeight: '400',
-    lineHeight: 21,
-  },
-  bottomArea: {
+  },  bottomArea: {
     width: '100%',
     maxWidth: 720,
     alignSelf: 'center',

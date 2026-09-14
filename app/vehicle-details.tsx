@@ -15,8 +15,10 @@ import { auth } from '@/lib/firebase';
 import { getDriverProfile, OnboardingData } from '@/lib/firestoreOnboardingService';
 
 const backImage = require('@/assets/images/profile/back.png');
-const closedBodyImage = require('@/assets/images/vehicle-details/closed-body.png');
-const openedBodyImage = require('@/assets/images/vehicle-details/opened-body.png');
+// Cropped variants (transparent padding removed) so the vehicle art fills
+// the body-type frame correctly without fragile negative-margin cropping.
+const closedBodyImage = require('@/assets/images/vehicle-details/closed-body-cropped.png');
+const openedBodyImage = require('@/assets/images/vehicle-details/opened-body-cropped.png');
 
 type VehicleFieldProps = {
   label: string;
@@ -79,6 +81,8 @@ const normalizeBodyType = (value: string | undefined) => value?.trim().toLowerCa
 
 export default function VehicleDetailsProfileScreen() {
   const [driverProfile, setDriverProfile] = React.useState<OnboardingData | null>(null);
+  const [hasLoadedProfile, setHasLoadedProfile] = React.useState(false);
+  const driverProfileKeyRef = React.useRef('');
 
   useFocusEffect(
     React.useCallback(() => {
@@ -93,16 +97,32 @@ export default function VehicleDetailsProfileScreen() {
 
         if (!uid) {
           if (isActive) {
-            setDriverProfile(null);
+            setHasLoadedProfile(true);
           }
           return;
         }
 
         const profile = await getDriverProfile(uid, storedIdToken);
 
-        if (isActive) {
+        if (!isActive) {
+          return;
+        }
+
+        // A transient/failed poll returns null — keep the last good data on
+        // screen instead of flashing the placeholders back in (glitch).
+        if (!profile) {
+          setHasLoadedProfile(true);
+          return;
+        }
+
+        // The 5s poll returns a fresh object every time — re-render only
+        // when the profile content actually changed.
+        const profileKey = JSON.stringify(profile);
+        if (profileKey !== driverProfileKeyRef.current) {
+          driverProfileKeyRef.current = profileKey;
           setDriverProfile(profile);
         }
+        setHasLoadedProfile(true);
       };
 
       loadDriverProfile();
@@ -114,6 +134,15 @@ export default function VehicleDetailsProfileScreen() {
       };
     }, [])
   );
+
+  // While the first load is in flight the value boxes stay empty (stable
+  // layout, no fake placeholder text that later swaps for real data).
+  const renderValue = (value: string | undefined | null, placeholder: string) => {
+    if (!hasLoadedProfile) {
+      return '';
+    }
+    return value || placeholder;
+  };
 
   const selectedBodyType = normalizeBodyType(driverProfile?.bodyType);
   const isClosedSelected = selectedBodyType.includes('closed');
@@ -136,12 +165,12 @@ export default function VehicleDetailsProfileScreen() {
         <View style={styles.fields}>
           <VehicleField
             label="Vehicle Number"
-            value={driverProfile?.vehicleNumber || 'e.g.TN 01 AB 1234'}
+            value={renderValue(driverProfile?.vehicleNumber, 'e.g.TN 01 AB 1234')}
           />
-          <VehicleField label="Vehicle type" value={driverProfile?.vehicleType || 'Pickup 9ft'} />
+          <VehicleField label="Vehicle type" value={renderValue(driverProfile?.vehicleType, 'Pickup 9ft')} />
           <VehicleField
             label="Enter vehicle capacity"
-            value={driverProfile?.vehicleCapacity || '500kg'}
+            value={renderValue(driverProfile?.vehicleCapacity, '500kg')}
           />
 
           <View style={styles.bodyTypeSection}>
@@ -309,16 +338,12 @@ const styles = StyleSheet.create({
     height: 88,
   },
   closedBodyImage: {
-    width: 190,
-    height: 98,
-    marginLeft: -70,
-    marginTop: 18,
+    width: '100%',
+    height: '100%',
   },
   openedBodyImage: {
-    width: 151,
-    height: 86,
-    marginLeft: -34,
-    marginTop: 10,
+    width: '100%',
+    height: '100%',
   },
   bodyTypeLabel: {
     minWidth: 0,

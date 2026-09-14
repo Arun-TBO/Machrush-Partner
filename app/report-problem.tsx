@@ -765,7 +765,7 @@ const styles = StyleSheet.create({
   selectedImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 12,
+    borderRadius: rs(8),
   },
   plusText: {
     fontFamily: 'Poppins_400Regular',
@@ -984,18 +984,20 @@ const styles = StyleSheet.create({
     width : 20
   },
   uploadedImageContainer: {
-  width: 64,
-  height: 64,
-  position: 'relative',
-  alignSelf: 'flex-start',
-  overflow: 'visible',
-  borderRadius: 12,
+    // Keep the exact same fixed dimensions/radius as the empty `imageSlot`
+    // so the Add images container does not change size, spacing or
+    // alignment after an image is uploaded (approved design).
+    width: rs(86, 72, 92),
+    height: rs(86, 72, 92),
+    position: 'relative',
+    overflow: 'visible',
+    borderRadius: rs(8),
   },
   removeButton: {
-  position: 'absolute',
-  top: -1,
-  right: -5,
-  zIndex: 10,
-  elevation: 5, // Android
+    position: 'absolute',
+    top: -1,
+    right: -5,
+    zIndex: 10,
+    elevation: 5, // Android
   },
 });

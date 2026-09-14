@@ -115,18 +115,14 @@ export default function RootLayout() {
 
   const checkWalkthroughStatus = async () => {
     try {
-      // FOR TESTING: Set to true to always show walkthrough
-      const TEST_MODE = true;
-      
-      if (TEST_MODE) {
-        setShowWalkthrough(true);
+      // Show the walkthrough only the first time — after that the saved flag
+      // in AsyncStorage keeps returning drivers straight into the app so a
+      // restart never looks like an automatic logout.
+      const completed = await AsyncStorage.getItem('walkthroughCompleted');
+      if (completed === 'true') {
+        setShowWalkthrough(false);
       } else {
-        const completed = await AsyncStorage.getItem('walkthroughCompleted');
-        if (completed === 'true') {
-          setShowWalkthrough(false);
-        } else {
-          setShowWalkthrough(true);
-        }
+        setShowWalkthrough(true);
       }
     } catch (error) {
       console.error('Error checking walkthrough status:', error);
@@ -190,6 +186,7 @@ export default function RootLayout() {
           <Stack.Screen name="accepted-trip" options={{ headerShown: false }} />
           <Stack.Screen name="payment-received" options={{ headerShown: false }} />
           <Stack.Screen name="payment-pending" options={{ headerShown: false }} />
+          <Stack.Screen name="cancelled-delivery" options={{ headerShown: false }} />
           <Stack.Screen name="report-problem" options={{ headerShown: false }} />
           <Stack.Screen name="phone-number" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />

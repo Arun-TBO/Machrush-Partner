@@ -49,6 +49,10 @@ const DROP_ARRIVAL_RADIUS_METERS = 120;
 const OFF_ROUTE_THRESHOLD_METERS = 60;
 const REROUTE_COOLDOWN_MS = 15000;
 const DRIVER_LOCATION_SYNC_INTERVAL_MS = 10000;
+// Location updates are only accepted when the driver actually moves —
+// GPS jitter while stationary must not re-render the map or shift texts.
+const DRIVER_LOCATION_MIN_UPDATE_METERS = 15;
+const DRIVER_LOCATION_DISTANCE_INTERVAL_METERS = 25;
 const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 const TRACKING_SHEET_HEIGHT = Math.min(520, Math.max(480, Dimensions.get('window').height * 0.54));
 const TRACKING_SHEET_COLLAPSED_VISIBLE_HEIGHT = 149;
@@ -354,7 +358,9 @@ const formatDistanceMeters = (meters: number | null) => {
   }
 
   if (meters < 1000) {
-    return `${Math.max(1, Math.round(meters))}m`;
+    // Quantize to 10m steps so the distance text stays stable between
+    // meaningful location updates instead of shifting on every GPS sample.
+    return `${Math.max(10, Math.round(meters / 10) * 10)}m`;
   }
 
   return `${(meters / 1000).toFixed(meters < 10000 ? 1 : 0)} km`;
@@ -969,6 +975,7 @@ function AcceptedPickupView({
   dropAddress,
   dropLocation,
   isUpdatingStatus,
+  onGoHome,
   onArrivedPickupPoint,
   onVerifyPickupOtp,
   onCompleteDrop,
@@ -982,12 +989,12 @@ function AcceptedPickupView({
   dropAddress: string;
   dropLocation: LatLng | null;
   isUpdatingStatus: boolean;
+  onGoHome: () => void;
   onArrivedPickupPoint: () => void;
   onVerifyPickupOtp: (otp: string) => Promise<boolean>;
   onCompleteDrop: () => void;
   onOpenDeliveryDetails: (details: { etaText: string; isInTransit: boolean }) => void;
 }) {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const trackingSheetBottomInset = Math.max(insets.bottom, vs(16));
   const trackingSheetCollapsedOffset = Math.max(
@@ -1047,6 +1054,9 @@ function AcceptedPickupView({
   const { primaryAddress, secondaryAddress } = getAddressParts(activeAddress);
   const routeOrigin = driverLocation;
   const routeDestination = isInTransit ? dropLocation : pickupLocation;
+  const routeDestinationKey = routeDestination
+    ? `${routeDestination.lat},${routeDestination.lng}`
+    : null;
   const pickupDistanceMeters =
     driverLocation && pickupLocation ? getDistanceMeters(driverLocation, pickupLocation) : null;
   const dropDistanceMeters =
@@ -1184,11 +1194,30 @@ function AcceptedPickupView({
     let isActive = true;
     let subscription: Location.LocationSubscription | null = null;
 
+    // The trip was cancelled by admin — stop GPS tracking, camera animation
+    // and background location sync for the dead trip so the UI stays
+    // responsive while the cancellation popup is shown.
+    if (isCancelled) {
+      return;
+    }
+
     const updateDriverLocation = (
       nextLocation: LatLng,
       metadata: DriverLocationMetadata = {}
     ) => {
       const previousLocation = previousLocationRef.current;
+
+      // Ignore GPS jitter while stationary — the map, route and ETA texts
+      // must only refresh when the driver has actually moved a meaningful
+      // distance, keeping the screen stable between real location updates.
+      if (
+        previousLocation &&
+        getDistanceMeters(previousLocation, nextLocation) <
+          DRIVER_LOCATION_MIN_UPDATE_METERS
+      ) {
+        return;
+      }
+
       const nextHeading =
         typeof metadata.heading === 'number'
           ? metadata.heading
@@ -1273,7 +1302,9 @@ function AcceptedPickupView({
         subscription = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.High,
-            distanceInterval: 0,
+            // Event-driven updates: only fire when the driver has actually
+            // moved, instead of streaming every raw GPS sample.
+            distanceInterval: DRIVER_LOCATION_DISTANCE_INTERVAL_METERS,
             timeInterval: DRIVER_LOCATION_SYNC_INTERVAL_MS,
           },
           (location) => {
@@ -1304,7 +1335,7 @@ function AcceptedPickupView({
       isActive = false;
       subscription?.remove();
     };
-  }, [deliveryId]);
+  }, [deliveryId, isCancelled]);
 
   React.useEffect(() => {
     if (driverLocation && !routeStartLocation) {
@@ -1322,7 +1353,7 @@ function AcceptedPickupView({
   }, [isInTransit]);
 
   React.useEffect(() => {
-    if (!driverLocation || routeCoordinates.length < 2) {
+    if (isCancelled || !driverLocation || routeCoordinates.length < 2) {
       return;
     }
 
@@ -1334,13 +1365,13 @@ function AcceptedPickupView({
       setRouteStartLocation(driverLocation);
       setRouteRefreshIndex((current) => current + 1);
     }
-  }, [driverLocation, routeCoordinates]);
+  }, [driverLocation, routeCoordinates, isCancelled]);
 
   React.useEffect(() => {
     let isActive = true;
 
     const loadBestRoute = async () => {
-      if (!GOOGLE_MAPS_API_KEY || !routeStartLocation || !routeDestination) {
+      if (isCancelled || !GOOGLE_MAPS_API_KEY || !routeStartLocation || !routeDestination) {
         if (isActive) {
           setRouteCoordinates([]);
           setRouteSegments([]);
@@ -1501,7 +1532,7 @@ function AcceptedPickupView({
     return () => {
       isActive = false;
     };
-  }, [routeStartLocation, routeDestination, routeRefreshIndex]);
+  }, [routeStartLocation, routeDestinationKey, routeRefreshIndex, isCancelled]);
 
   const handleCallBookingPerson = async () => {
     if (!bookingPhone) {
@@ -1623,14 +1654,14 @@ function AcceptedPickupView({
         {isCancelled ? (
           <View style={styles.cancelledTrackingContent}>
             <View style={styles.cancelledTrackingIcon}>
-              <Ionicons name="close" size={56} color="#ffffff" />
+              <Ionicons name="close" size={36} color="#ffffff" />
             </View>
             <Text style={styles.cancelledTrackingTitle}>Cancelled</Text>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Go back"
               style={styles.cancelledTrackingButton}
-              onPress={() => router.replace('/(tabs)')}
+              onPress={onGoHome}
             >
               <Text style={styles.cancelledTrackingButtonText}>Go back</Text>
             </Pressable>
@@ -2101,10 +2132,11 @@ export default function AcceptedTripScreen() {
   const [isAccepting, setIsAccepting] = React.useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = React.useState(false);
   const [isCancelModalVisible, setIsCancelModalVisible] = React.useState(false);
+  const deliveryKeyRef = React.useRef('');
   const [pickupRouteSummary, setPickupRouteSummary] = React.useState<RouteSummary | null>(null);
   const [dropRouteSummary, setDropRouteSummary] = React.useState<RouteSummary | null>(null);
-  const [isLoadingDetailRoutes, setIsLoadingDetailRoutes] = React.useState(false);
   const hasLoadedDeliveryRef = React.useRef(false);
+  const isCancelledRef = React.useRef(false);
   const { alertModal, showAlert } = useAppAlert();
 
   React.useEffect(() => {
@@ -2113,6 +2145,12 @@ export default function AcceptedTripScreen() {
     const loadDelivery = async () => {
       if (!deliveryId) {
         setIsLoading(false);
+        return;
+      }
+
+      // Once the admin cancellation has been picked up and surfaced there is
+      // nothing new to poll for — keep polling only while the trip is live.
+      if (isCancelledRef.current) {
         return;
       }
 
@@ -2132,7 +2170,14 @@ export default function AcceptedTripScreen() {
         }
 
         if (isActive) {
-          setDelivery(body?.data || null);
+          // The poll returns a fresh object every 5s — re-render (and redraw
+          // the map route/markers) only when the delivery actually changed,
+          // otherwise the route visibly "refreshes" on every poll.
+          const deliveryKey = JSON.stringify(body?.data ?? null);
+          if (deliveryKey !== deliveryKeyRef.current) {
+            deliveryKeyRef.current = deliveryKey;
+            setDelivery(body?.data || null);
+          }
         }
       } catch (error) {
         console.error('Error loading accepted trip:', error);
@@ -2176,7 +2221,22 @@ export default function AcceptedTripScreen() {
   const dropLocation = isValidCoord(delivery?.locations?.dropoff?.coords)
     ? delivery.locations.dropoff.coords
     : null;
+  // Stable primitive keys derived from the coords — the delivery object is
+  // re-polled every 5s (creating new object references each time), but the
+  // actual pickup/drop coordinates never change. Using these keys as effect
+  // deps prevents needless Google-route refetches and text layout jumps.
+  const pickupLocationKey = pickupLocation
+    ? `${pickupLocation.lat},${pickupLocation.lng}`
+    : null;
+  const dropLocationKey = dropLocation
+    ? `${dropLocation.lat},${dropLocation.lng}`
+    : null;
   const isCancelledDelivery = isCancelledDeliveryStatus(delivery?.status);
+
+  React.useEffect(() => {
+    isCancelledRef.current = isCancelledDelivery;
+  }, [isCancelledDelivery]);
+
   const isCompletedDelivery =
     delivery?.status === 'delivered' || delivery?.status === 'completed';
   const isAccepted =
@@ -2199,18 +2259,20 @@ export default function AcceptedTripScreen() {
     getEstimatedDurationFromKm(
       Number.isFinite(pickupDistanceKm) && pickupDistanceKm > 0 ? pickupDistanceKm : null
     );
-  const pickupDetailTime = isLoadingDetailRoutes
-    ? 'Calculating route...'
-    : getApproxDurationLabel(pickupRouteSummary?.durationText, pickupFallbackDuration);
+  const pickupDetailTime = getApproxDurationLabel(
+    pickupRouteSummary?.durationText,
+    pickupFallbackDuration,
+  );
   const dropDetailTitle = dropRouteSummary?.distanceText
     ? `Drop ${dropRouteSummary.distanceText}`
     : 'Drop';
   const dropFallbackDistanceKm = getDistanceKm(delivery);
   const dropFallbackDuration =
     delivery?.dropoffTime || dropEtaParam || getEstimatedDurationFromKm(dropFallbackDistanceKm);
-  const dropDetailTime = isLoadingDetailRoutes
-    ? 'Calculating route...'
-    : getApproxDurationLabel(dropRouteSummary?.durationText, dropFallbackDuration);
+  const dropDetailTime = getApproxDurationLabel(
+    dropRouteSummary?.durationText,
+    dropFallbackDuration,
+  );
 
   React.useEffect(() => {
     let isActive = true;
@@ -2219,12 +2281,10 @@ export default function AcceptedTripScreen() {
       if (!isDetailsView || !pickupLocation || !dropLocation) {
         setPickupRouteSummary(null);
         setDropRouteSummary(null);
-        setIsLoadingDetailRoutes(false);
         return;
       }
 
       try {
-        setIsLoadingDetailRoutes(true);
         const { status } = await Location.requestForegroundPermissionsAsync();
         let currentLocation: LatLng | null = null;
 
@@ -2246,7 +2306,6 @@ export default function AcceptedTripScreen() {
         if (isActive) {
           setPickupRouteSummary(pickupSummary);
           setDropRouteSummary(dropSummary);
-          setIsLoadingDetailRoutes(false);
         }
       } catch (error) {
         console.error('Error loading delivery detail route summaries:', error);
@@ -2254,7 +2313,6 @@ export default function AcceptedTripScreen() {
         if (isActive) {
           setPickupRouteSummary(getFallbackRouteSummary(null, pickupLocation));
           setDropRouteSummary(getFallbackRouteSummary(pickupLocation, dropLocation));
-          setIsLoadingDetailRoutes(false);
         }
       }
     };
@@ -2264,7 +2322,7 @@ export default function AcceptedTripScreen() {
     return () => {
       isActive = false;
     };
-  }, [dropLocation, isDetailsView, pickupLocation]);
+  }, [dropLocationKey, isDetailsView, pickupLocationKey]);
 
   const handleReportIssue = () => {
     if (!deliveryId) {
@@ -2291,6 +2349,15 @@ export default function AcceptedTripScreen() {
     setIsCancelModalVisible(false);
     handleReportIssue();
   };
+
+  // Admin cancelled the trip: close the popup and land the driver on Home.
+  // navigate() (instead of replace) pops every cancelled-trip screen pushed
+  // on top of the Home tab (tracking + details views), so no background
+  // polling/GPS work keeps running for a dead trip and the app stays fully
+  // interactive.
+  const handleGoHomeAfterCancel = React.useCallback(() => {
+    router.navigate('/(tabs)');
+  }, [router]);
 
   const handleAcceptDelivery = async () => {
     if (!deliveryId || isAccepting || isAccepted) {
@@ -2522,6 +2589,7 @@ export default function AcceptedTripScreen() {
           dropAddress={dropAddress}
           dropLocation={dropLocation}
           isUpdatingStatus={isUpdatingStatus}
+          onGoHome={handleGoHomeAfterCancel}
           onArrivedPickupPoint={handleArrivedPickupPoint}
           onVerifyPickupOtp={handleVerifyPickupOtp}
           onCompleteDrop={handleCompleteDrop}
@@ -2536,6 +2604,12 @@ export default function AcceptedTripScreen() {
               },
             })
           }
+        />
+        {/* Also show the cancellation popup in the tracking view — the trip
+            can be cancelled by admin while the driver is navigating. */}
+        <TripCancelledModal
+          visible={isCancelledDelivery}
+          onGoHome={handleGoHomeAfterCancel}
         />
         {alertModal}
       </>
@@ -2653,7 +2727,7 @@ export default function AcceptedTripScreen() {
         ) : isCancelledDelivery ? (
           <Pressable
             style={styles.acceptButton}
-            onPress={() => router.replace('/(tabs)')}
+            onPress={handleGoHomeAfterCancel}
           >
             <View style={styles.acceptIconBox}>
               <Ionicons name="home" size={20} color="#ffffff" />
@@ -2698,7 +2772,7 @@ export default function AcceptedTripScreen() {
       />
       <TripCancelledModal
         visible={isCancelledDelivery}
-        onGoHome={() => router.replace('/(tabs)')}
+        onGoHome={handleGoHomeAfterCancel}
       />
       {alertModal}
     </SafeAreaView>
@@ -2945,32 +3019,33 @@ const styles = StyleSheet.create({
     borderTopRightRadius: rs(24),
     backgroundColor: '#ffffff',
     paddingHorizontal: rs(36, 24, 40),
-    paddingTop: vs(44),
+    // Compact, content-driven sheet — no excessive empty space.
+    paddingTop: vs(24),
     zIndex: 10,
   },
   cancelledTrackingContent: {
     width: '100%',
     alignItems: 'center',
-    gap: vs(28),
+    gap: vs(16),
   },
   cancelledTrackingIcon: {
-    width: rs(94, 82, 104),
-    height: rs(94, 82, 104),
-    borderRadius: rs(47, 41, 52),
+    width: rs(64, 56, 72),
+    height: rs(64, 56, 72),
+    borderRadius: rs(32, 28, 36),
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#ef1b2d',
   },
   cancelledTrackingTitle: {
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(34, 28, 38),
-    lineHeight: fs(42, 36, 46),
+    fontSize: fs(24, 20, 26),
+    lineHeight: fs(32, 28, 34),
     color: '#1c1c1c',
     textAlign: 'center',
   },
   cancelledTrackingButton: {
     width: '100%',
-    minHeight: vs(76, 64, 82),
+    minHeight: vs(56, 48, 60),
     borderRadius: rs(14),
     alignItems: 'center',
     justifyContent: 'center',
@@ -2978,8 +3053,8 @@ const styles = StyleSheet.create({
   },
   cancelledTrackingButtonText: {
     fontFamily: 'Poppins_600SemiBold',
-    fontSize: fs(24, 20, 28),
-    lineHeight: fs(32, 28, 36),
+    fontSize: fs(18, 16, 20),
+    lineHeight: fs(24, 22, 26),
     color: '#ffffff',
     textAlign: 'center',
   },
@@ -3660,16 +3735,16 @@ otpBox: {
     backgroundColor: '#eff2f6',
     alignItems: 'center',
     paddingHorizontal: rs(16),
-    paddingTop: vs(8),
+    paddingTop: vs(12),
     paddingBottom: vs(16),
   },
   acceptButton: {
-    minHeight: vs(52),
+    minHeight: vs(56),
     width: '100%',
     maxWidth: rs(720, 320, 720),
     backgroundColor: '#1fc16b',
     borderRadius: rs(12),
-    padding: rs(4),
+    padding: 4,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3682,17 +3757,17 @@ otpBox: {
     opacity: 0.65,
   },
   acceptIconBox: {
-    height: rs(44),
-    width: rs(44),
-    borderRadius: rs(16),
+    height: 44,
+    width: 44,
+    borderRadius: 16,
     backgroundColor: '#00a54d',
     alignItems: 'center',
     justifyContent: 'center',
   },
   acceptSlideIconBox: {
     position: 'absolute',
-    left: rs(4),
-    top: vs(4),
+    left: 4,
+    top: 6,
     zIndex: 2,
   },
   acceptIconGhost: {
@@ -3707,13 +3782,14 @@ otpBox: {
     flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(16),
+    lineHeight: fs(24),
     color: '#ffffff',
     textAlign: 'center',
     letterSpacing: -0.5,
   },
   reportButton: {
     width: '100%',
-    minHeight: vs(52),
+    minHeight: vs(56),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3723,7 +3799,7 @@ otpBox: {
     borderRadius: rs(12),
     backgroundColor: '#ffffff',
     paddingHorizontal: rs(18),
-    paddingVertical: vs(12),
+    paddingVertical: vs(16),
   },
   reportButtonText: {
     flexShrink: 1,
@@ -3735,14 +3811,14 @@ otpBox: {
   },
   cancelDeliveryButton: {
     width: '100%',
-    minHeight: vs(48),
+    minHeight: vs(56),
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#d00416',
     borderRadius: rs(8),
     paddingHorizontal: rs(24),
-    paddingVertical: vs(12),
+    paddingVertical: vs(16),
   },
   cancelDeliveryButtonText: {
     flexShrink: 1,

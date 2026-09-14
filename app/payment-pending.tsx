@@ -812,7 +812,7 @@ const styles = StyleSheet.create({
   reportButton: {
     width: '100%',
     maxWidth: 380,
-    minHeight: 53,
+    minHeight: 56,
     borderWidth: 1,
     borderColor: '#05c',
     borderRadius: 8,
@@ -826,7 +826,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
-    lineHeight: 20,
+    lineHeight: 24,
     letterSpacing: -0.5,
     color: '#d00416',
     textAlign: 'center',

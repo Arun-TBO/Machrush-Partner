@@ -1,18 +1,22 @@
 import { auth } from "@/lib/firebase";
-import { fs, hit, isCompactPhone, rs, vs } from "@/lib/responsive";
+import { fs, hit, isCompactDevice, rs, vs } from "@/lib/responsive";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
 import React from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
+import { refreshSession } from "@/lib/session";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -60,7 +64,7 @@ type DeliveryRecord = {
   };
 };
 
-type PaymentFilter = "paid" | "pending";
+type PaymentFilter = "all" | "paid" | "pending" | "canceled";
 
 type DeliveryListItem = {
   id: string;
@@ -89,26 +93,8 @@ const getApiBaseUrl = () => {
 };
 
 const getDriverAuthContext = async () => {
-  const [storedUid, storedIdToken] = await Promise.all([
-    AsyncStorage.getItem("firebaseUid"),
-    AsyncStorage.getItem("firebaseIdToken"),
-  ]);
-  const currentUser = auth.currentUser;
-  const uid = currentUser?.uid || storedUid;
-  let idToken = storedIdToken;
-
-  if (currentUser) {
-    const refreshedToken = await currentUser.getIdToken().catch(() => null);
-    if (refreshedToken) {
-      idToken = refreshedToken;
-      await AsyncStorage.multiSet([
-        ["firebaseUid", currentUser.uid],
-        ["firebaseIdToken", refreshedToken],
-      ]);
-    }
-  }
-
-  return { uid, idToken };
+  const { uid, idToken, sessionExpired } = await refreshSession();
+  return { uid, idToken, sessionExpired };
 };
 
 const getDeliveryHeaders = (idToken?: string | null) => ({
@@ -227,6 +213,20 @@ const isPaidDelivery = (delivery: DeliveryRecord) => {
   return pricingStatus === "completed" || pricingStatus === "paid";
 };
 
+const isCompletedDelivery = (delivery: DeliveryRecord) => {
+  if (isPaidDelivery(delivery)) return true;
+
+  // A delivery counts as "Completed" for the driver as soon as it has been
+  // delivered — even while the payment is still pending with the admin.
+  // Payment clears separately (admin/payment flow) and must not hide the
+  // driver's earnings from the weekly breakdown.
+  const status = String(delivery.status || "").toLowerCase();
+  return status === "delivered" || status === "completed";
+};
+
+const isCanceledDelivery = (delivery: DeliveryRecord) =>
+  delivery.status === "cancelled" || delivery.status === "canceled";
+
 const toAmount = (delivery: DeliveryRecord) => {
   const amount = Number(delivery.pricing?.tripFare ?? delivery.pricing?.total);
   return Number.isFinite(amount) ? amount : 0;
@@ -279,12 +279,14 @@ const getDeliveryTitle = (delivery: DeliveryRecord) => {
 function TopSummary({
   weekLabel,
   totalEarned,
+  pendingEarnings,
   onPreviousWeek,
   onNextWeek,
   canGoNext,
 }: {
   weekLabel: string;
   totalEarned: string;
+  pendingEarnings: number;
   onPreviousWeek: () => void;
   onNextWeek: () => void;
   canGoNext: boolean;
@@ -321,19 +323,26 @@ function TopSummary({
           </Pressable>
         </View>
         <Text style={styles.weekCaption}>Total earned</Text>
+        {pendingEarnings > 0 ? (
+          <Text style={styles.weekPendingNote}>
+            {formatCurrency(pendingEarnings)} pending payment
+          </Text>
+        ) : null}
       </View>
     </View>
   );
 }
 
 function WeeklyChart({
-  bars,
+  paidBars,
+  pendingBars,
   amounts,
   days,
   activeIndex,
   peakAmount,
 }: {
-  bars: number[];
+  paidBars: number[];
+  pendingBars: number[];
   amounts: string[];
   days: Date[];
   activeIndex: number | null;
@@ -344,28 +353,58 @@ function WeeklyChart({
       <Text style={styles.peakAmount}>{peakAmount}</Text>
       {/* <View style={styles.routeSeparator} /> */}
       <View style={styles.chartGrid}>
-        {bars.map((height, index) => (
-          <View
-            key={`${days[index].toISOString()}-${index}`}
-            style={styles.chartColumn}
-          >
-            <Text
-              style={[
-                styles.chartAmount,
-                index === activeIndex ? styles.chartAmountActive : null,
-              ]}
-            >
-              {amounts[index]}
-            </Text>
+        {days.map((date, index) => {
+          const paidHeight = paidBars[index] ?? 0;
+          const pendingHeight = pendingBars[index] ?? 0;
+
+          return (
             <View
-              style={[
-                styles.chartBar,
-                { height },
-                index === activeIndex ? styles.chartBarActive : null,
-              ]}
-            />
-          </View>
-        ))}
+              key={`${date.toISOString()}-${index}`}
+              style={styles.chartColumn}
+            >
+              <Text
+                style={[
+                  styles.chartAmount,
+                  index === activeIndex ? styles.chartAmountActive : null,
+                  pendingHeight > 0 ? styles.chartAmountPending : null,
+                ]}
+              >
+                {amounts[index]}
+              </Text>
+              {paidHeight + pendingHeight > 0 ? (
+                <View style={styles.barStack}>
+                  {pendingHeight > 0 ? (
+                    <View
+                      style={[
+                        styles.chartBarPending,
+                        { height: pendingHeight },
+                      ]}
+                    />
+                  ) : null}
+                  {paidHeight > 0 ? (
+                    <View
+                      style={[
+                        styles.chartBar,
+                        { height: paidHeight },
+                        index === activeIndex ? styles.chartBarActive : null,
+                      ]}
+                    />
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+      <View style={styles.legendRow}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, styles.legendDotPaid]} />
+          <Text style={styles.legendText}>Paid</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, styles.legendDotPending]} />
+          <Text style={styles.legendText}>Pending</Text>
+        </View>
       </View>
       <View style={styles.dayRow}>
         {days.map((date, index) => (
@@ -410,47 +449,101 @@ function StatsBlock({
   );
 }
 
-function SegmentedFilter({
+const filterOptions: { value: PaymentFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "paid", label: "Paid" },
+  { value: "pending", label: "Pending" },
+  { value: "canceled", label: "Canceled" },
+];
+
+function FilterDropdown({
   value,
   onChange,
 }: {
   value: PaymentFilter;
   onChange: (value: PaymentFilter) => void;
 }) {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const [anchor, setAnchor] = React.useState({ x: 0, y: 0, width: 0, height: 0 });
+  const buttonRef = React.useRef<View>(null);
+  const { width: windowWidth } = useWindowDimensions();
+
+  const selectedLabel =
+    filterOptions.find((option) => option.value === value)?.label ?? "All";
+
+  const openMenu = () => {
+    buttonRef.current?.measureInWindow((x, y, width, height) => {
+      setAnchor({ x, y, width, height });
+      setIsOpen(true);
+    });
+  };
+
   return (
-    <View style={styles.segmentedControl}>
-      <Pressable
-        accessibilityRole="button"
-        style={[styles.segment, value === "paid" ? styles.segmentActive : null]}
-        onPress={() => onChange("paid")}
-      >
-        <Text
-          style={[
-            styles.segmentText,
-            value === "paid" ? styles.segmentTextActive : null,
-          ]}
+    <>
+      <View ref={buttonRef}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Filter deliveries"
+          style={styles.filterButton}
+          onPress={openMenu}
         >
-          Paid
-        </Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        style={[
-          styles.segment,
-          value === "pending" ? styles.segmentActive : null,
-        ]}
-        onPress={() => onChange("pending")}
+          <Text style={styles.filterButtonText} numberOfLines={1}>
+            {selectedLabel}
+          </Text>
+          <Ionicons name="chevron-down" size={18} color="#1c1c1c" />
+        </Pressable>
+      </View>
+
+      <Modal
+        visible={isOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsOpen(false)}
       >
-        <Text
-          style={[
-            styles.segmentText,
-            value === "pending" ? styles.segmentTextActive : null,
-          ]}
+        <Pressable
+          style={styles.filterMenuBackdrop}
+          onPress={() => setIsOpen(false)}
         >
-          Pending
-        </Text>
-      </Pressable>
-    </View>
+          <View
+            style={[
+              styles.filterMenu,
+              {
+                top: anchor.y + anchor.height + 6,
+                right: Math.max(12, windowWidth - anchor.x - anchor.width),
+              },
+            ]}
+          >
+            {filterOptions.map((option) => {
+              const isSelected = option.value === value;
+
+              return (
+                <Pressable
+                  key={option.value}
+                  accessibilityRole="button"
+                  style={[
+                    styles.filterMenuItem,
+                    isSelected ? styles.filterMenuItemSelected : null,
+                  ]}
+                  onPress={() => {
+                    onChange(option.value);
+                    setIsOpen(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.filterMenuItemText,
+                      isSelected ? styles.filterMenuItemTextSelected : null,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
@@ -461,10 +554,25 @@ function DeliveryRow({
   item: DeliveryListItem;
   onPress?: () => void;
 }) {
-  const isPaid = item.status === "paid";
   const imageSource = item.profileImageUri
     ? { uri: item.profileImageUri }
     : deliveryThumbImage;
+  const badgeStyle =
+    item.status === "paid"
+      ? styles.paidBadge
+      : item.status === "canceled"
+      ? styles.canceledBadge
+      : styles.pendingBadge;
+  const badgeTextStyle =
+    item.status === "paid"
+      ? styles.paidBadgeText
+      : styles.pendingBadgeText;
+  const badgeLabel =
+    item.status === "paid"
+      ? "Paid"
+      : item.status === "canceled"
+      ? "Canceled"
+      : "Pending";
 
   return (
     <Pressable
@@ -485,20 +593,12 @@ function DeliveryRow({
           {formatCurrency(item.amount)} earned • {item.date}
         </Text>
       </View>
-      <View
-        style={[
-          styles.statusBadge,
-          isPaid ? styles.paidBadge : styles.pendingBadge,
-        ]}
-      >
+      <View style={[styles.statusBadge, badgeStyle]}>
         <Text
-          style={[
-            styles.statusBadgeText,
-            isPaid ? styles.paidBadgeText : styles.pendingBadgeText,
-          ]}
+          style={[styles.statusBadgeText, badgeTextStyle]}
           numberOfLines={1}
         >
-          {isPaid ? "Paid" : "Pending"}
+          {badgeLabel}
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={24} color="#d2d2d2" />
@@ -507,11 +607,18 @@ function DeliveryRow({
 }
 
 function EmptyList({ filter }: { filter: PaymentFilter }) {
+  const emptyTitle =
+    filter === "paid"
+      ? "No paid deliveries yet"
+      : filter === "pending"
+      ? "No pending deliveries"
+      : filter === "canceled"
+      ? "No canceled deliveries"
+      : "No deliveries yet";
+
   return (
     <View style={styles.emptyRow}>
-      <Text style={styles.emptyTitle}>
-        {filter === "paid" ? "No paid deliveries yet" : "No pending deliveries"}
-      </Text>
+      <Text style={styles.emptyTitle}>{emptyTitle}</Text>
     </View>
   );
 }
@@ -519,7 +626,7 @@ function EmptyList({ filter }: { filter: PaymentFilter }) {
 export default function MyDeliveriesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [filter, setFilter] = React.useState<PaymentFilter>("paid");
+  const [filter, setFilter] = React.useState<PaymentFilter>("all");
   const [deliveries, setDeliveries] = React.useState<DeliveryRecord[]>([]);
   const [senderPhotoById, setSenderPhotoById] = React.useState<
     Record<string, string>
@@ -550,7 +657,22 @@ export default function MyDeliveriesScreen() {
           if (!hasLoadedDeliveriesRef.current) {
             setIsLoading(true);
           }
-          const { uid, idToken } = await getDriverAuthContext();
+          const { uid, idToken, sessionExpired } = await getDriverAuthContext();
+
+          // Graceful session-expiry handling: notify the driver and return
+          // to the login screen instead of failing silently.
+          if (sessionExpired) {
+            if (isActive) {
+              setDeliveries([]);
+              setSenderPhotoById({});
+            }
+            Alert.alert(
+              "Session expired",
+              "Please log in again to continue.",
+            );
+            router.replace("/phone-number");
+            return;
+          }
 
           if (!uid) {
             if (isActive) {
@@ -630,8 +752,13 @@ export default function MyDeliveriesScreen() {
     }, []),
   );
 
+  // A delivery counts toward the weekly breakdown as soon as it has been
+  // delivered — even while the admin has not yet processed the payment.
+  // Unpaid earnings stay visible and clearly marked as pending, and flip to
+  // paid automatically once the admin processes the payment (picked up by
+  // the 5s polling of delivery records).
   const completedDeliveries = deliveries.filter((delivery) =>
-    isPaidDelivery(delivery),
+    isCompletedDelivery(delivery),
   );
   const weeklyCompletedDeliveries = completedDeliveries.filter((delivery) =>
     isWithinWeek(getDeliveryCompletedMs(delivery), weekDays),
@@ -642,10 +769,26 @@ export default function MyDeliveriesScreen() {
     },
     0,
   );
+  const weeklyPaidEarnings = weeklyCompletedDeliveries
+    .filter((delivery) => isPaidDelivery(delivery))
+    .reduce((sum, delivery) => sum + toAmount(delivery), 0);
+  const weeklyPendingEarnings = Math.max(
+    0,
+    weeklyTotalEarnings - weeklyPaidEarnings,
+  );
   const weeklyAmounts = weekDays.map((day) => {
     return weeklyCompletedDeliveries
       .filter((delivery) =>
         isSameLocalDay(getDeliveryCompletedMs(delivery), day),
+      )
+      .reduce((sum, delivery) => sum + toAmount(delivery), 0);
+  });
+  const weeklyPaidAmounts = weekDays.map((day) => {
+    return weeklyCompletedDeliveries
+      .filter(
+        (delivery) =>
+          isSameLocalDay(getDeliveryCompletedMs(delivery), day) &&
+          isPaidDelivery(delivery),
       )
       .reduce((sum, delivery) => sum + toAmount(delivery), 0);
   });
@@ -656,6 +799,19 @@ export default function MyDeliveriesScreen() {
           Math.max(36, Math.round((amount / maxWeeklyAmount) * 112)),
         )
       : weeklyAmounts.map(() => 0);
+  // Split each day's bar into its paid (blue) and pending (amber) portions,
+  // keeping the total bar height identical to the un-split behaviour.
+  const chartPaidBars = weeklyAmounts.map((amount, index) => {
+    const totalBar = chartBars[index];
+    if (totalBar <= 0 || amount <= 0) return 0;
+    const ratio = Math.min(1, weeklyPaidAmounts[index] / amount);
+    return Math.round(totalBar * ratio);
+  });
+  const chartPendingBars = weeklyAmounts.map((amount, index) => {
+    const totalBar = chartBars[index];
+    if (totalBar <= 0 || amount <= 0) return 0;
+    return Math.max(0, totalBar - chartPaidBars[index]);
+  });
   const chartAmounts = weeklyAmounts.map((amount) => formatCurrency(amount));
   const peakAmount = formatCurrency(maxWeeklyAmount);
   const weekLabel = `${formatShortDate(weekDays[0])} - ${formatShortDate(weekDays[6])}`;
@@ -666,7 +822,11 @@ export default function MyDeliveriesScreen() {
     ),
   );
   const listItems = deliveries.map((delivery, index) => {
-    const status: PaymentFilter = isPaidDelivery(delivery) ? "paid" : "pending";
+    const status: PaymentFilter = isCanceledDelivery(delivery)
+      ? "canceled"
+      : isPaidDelivery(delivery)
+      ? "paid"
+      : "pending";
 
     return {
       id: delivery.id || `delivery-${index}`,
@@ -682,13 +842,17 @@ export default function MyDeliveriesScreen() {
       source: delivery,
     };
   });
-  const visibleItems = listItems.filter((item) => item.status === filter);
+  const visibleItems =
+    filter === "all"
+      ? listItems
+      : listItems.filter((item) => item.status === filter);
 
   return (
     <SafeAreaView style={styles.container}>
       <TopSummary
         weekLabel={weekLabel}
         totalEarned={isLoading ? "..." : formatCurrency(weeklyTotalEarnings)}
+        pendingEarnings={weeklyPendingEarnings}
         onPreviousWeek={() => setWeekOffset((current) => current - 1)}
         onNextWeek={() => setWeekOffset((current) => Math.min(current + 1, 0))}
         canGoNext={canGoNextWeek}
@@ -707,7 +871,8 @@ export default function MyDeliveriesScreen() {
         ) : (
           <>
             <WeeklyChart
-              bars={chartBars}
+              paidBars={chartPaidBars}
+              pendingBars={chartPendingBars}
               amounts={chartAmounts}
               days={weekDays}
               activeIndex={activeDayIndex}
@@ -721,7 +886,7 @@ export default function MyDeliveriesScreen() {
             <View style={styles.deliveriesSection}>
               <View style={styles.deliveriesHeader}>
                 <Text style={styles.sectionTitle}>My Deliveries</Text>
-                <SegmentedFilter value={filter} onChange={setFilter} />
+                <FilterDropdown value={filter} onChange={setFilter} />
               </View>
 
               {visibleItems.length > 0 ? (
@@ -735,7 +900,9 @@ export default function MyDeliveriesScreen() {
                           ? () =>
                               router.push({
                                 pathname:
-                                  item.status === "paid"
+                                  item.status === "canceled"
+                                    ? "/cancelled-delivery"
+                                    : item.status === "paid"
                                     ? "/payment-received"
                                     : "/payment-pending",
                                 params: {
@@ -919,6 +1086,57 @@ const styles = StyleSheet.create({
   dayLabelActive: {
     color: "#1c1c1c",
   },
+  barStack: {
+    width: "100%",
+    justifyContent: "flex-end",
+  },
+  chartBarPending: {
+    width: "100%",
+    borderTopLeftRadius: rs(4),
+    borderTopRightRadius: rs(4),
+    backgroundColor: "#ffdb43",
+  },
+  chartAmountPending: {
+    color: "#a97b00",
+  },
+  legendRow: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: rs(16),
+    paddingTop: vs(12),
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  legendDot: {
+    width: rs(8),
+    height: rs(8),
+    borderRadius: rs(2),
+  },
+  legendDotPaid: {
+    backgroundColor: "#0055cc",
+  },
+  legendDotPending: {
+    backgroundColor: "#ffdb43",
+  },
+  legendText: {
+    fontFamily: "Poppins_400Regular",
+    fontSize: fs(11, 10, 12),
+    lineHeight: fs(16),
+    color: "#606060",
+  },
+  weekPendingNote: {
+    width: "100%",
+    fontFamily: "Poppins_500Medium",
+    fontSize: fs(13, 12, 14),
+    lineHeight: fs(20),
+    color: "#a97b00",
+    textAlign: "center",
+  },
   statsSection: {
     width: "100%",
     backgroundColor: "#ffffff",
@@ -938,11 +1156,11 @@ const styles = StyleSheet.create({
     width: "100%",
     flexDirection: "row",
     gap: rs(16, 10, 16),
-    flexWrap: isCompactPhone ? "wrap" : "nowrap",
+    flexWrap: isCompactDevice ? "wrap" : "nowrap",
   },
   statItem: {
     flex: 1,
-    minWidth: isCompactPhone ? "46%" : 0,
+    minWidth: isCompactDevice ? "46%" : 0,
     gap: vs(4),
   },
   statLabel: {
@@ -974,32 +1192,64 @@ const styles = StyleSheet.create({
     gap: rs(12),
     flexWrap: "wrap",
   },
-  segmentedControl: {
-    height: hit(32),
+  filterButton: {
+    minWidth: rs(104, 92, 112),
+    minHeight: hit(44),
     flexDirection: "row",
-    borderWidth: 1,
-    borderColor: "#bbbbbb",
-    borderRadius: rs(8),
-    overflow: "hidden",
-    backgroundColor: "#eff2f6",
-  },
-  segment: {
     alignItems: "center",
-    justifyContent: "center",
-
-    width: rs(85, 72, 90),
-  },
-  segmentActive: {
+    justifyContent: "space-between",
+    gap: rs(10),
     backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#d2d2d2",
+    borderRadius: rs(12),
+    paddingHorizontal: rs(14),
+    paddingVertical: vs(8),
   },
-  segmentText: {
+  filterButtonText: {
     fontFamily: "Poppins_400Regular",
-    fontSize: fs(12, 11, 13),
-    lineHeight: fs(18),
-    color: "#606060",
-  },
-  segmentTextActive: {
+    fontSize: fs(16, 14, 17),
+    lineHeight: fs(22),
     color: "#1c1c1c",
+  },
+  filterMenuBackdrop: {
+    flex: 1,
+  },
+  filterMenu: {
+    position: "absolute",
+    minWidth: rs(160, 140, 172),
+    backgroundColor: "#ffffff",
+    borderRadius: rs(16),
+    borderWidth: 1,
+    borderColor: "#e2e6ee",
+    padding: rs(8),
+    gap: rs(6),
+    shadowColor: "#1c1c1c",
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  filterMenuItem: {
+    borderRadius: rs(12),
+    backgroundColor: "#ffffff",
+    paddingHorizontal: rs(16),
+    paddingVertical: vs(12),
+  },
+  filterMenuItemSelected: {
+    backgroundColor: "#a9c9ff",
+  },
+  filterMenuItemText: {
+    fontFamily: "Poppins_400Regular",
+    fontSize: fs(16, 14, 17),
+    lineHeight: fs(22),
+    color: "#1c1c1c",
+  },
+  filterMenuItemTextSelected: {
+    fontFamily: "Poppins_500Medium",
+  },
+  canceledBadge: {
+    backgroundColor: "#d2d2d2",
   },
   loadingRow: {
     width: "100%",

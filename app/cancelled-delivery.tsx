@@ -1,0 +1,811 @@
+import React from 'react';
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { fs, hit, rs, vs } from '@/lib/responsive';
+
+const deliveryThumbImage = require('@/assets/images/delivery/delivery-list-thumb.png');
+const tableLocationImage = require('@/assets/images/profile/tablelocation.png');
+
+type DeliveryTimestamp =
+  | string
+  | number
+  | Date
+  | {
+      seconds?: number;
+      _seconds?: number;
+      toDate?: () => Date;
+    };
+
+type DeliveryDetails = {
+  id?: string;
+  senderId?: string | null;
+  status?: string;
+  sender?: {
+    photoUri?: string;
+    profilePhotoUrl?: string;
+  } | null;
+  receiver?: {
+    photoUri?: string;
+    profilePhotoUrl?: string;
+  } | null;
+  pickupTime?: string | null;
+  dropoffTime?: string | null;
+  locations?: {
+    pickup?: {
+      address?: string;
+    } | null;
+    dropoff?: {
+      address?: string;
+    } | null;
+  };
+  pricing?: {
+    tripFare?: number | string;
+    total?: number | string;
+    distanceKm?: number | string;
+    distance?: number | string;
+  };
+  // Cancellation metadata — different backend versions use different
+  // field names, so every known variant is accepted defensively.
+  cancellationReason?: string | null;
+  cancelReason?: string | null;
+  cancelledBy?: string | null;
+  canceledBy?: string | null;
+  timestamps?: {
+    createdAt?: DeliveryTimestamp;
+    assignedAt?: DeliveryTimestamp;
+    inTransitAt?: DeliveryTimestamp;
+    deliveredAt?: DeliveryTimestamp;
+    cancelledAt?: DeliveryTimestamp;
+    canceledAt?: DeliveryTimestamp;
+  };
+};
+
+type CustomerProfileResponse = {
+  success?: boolean;
+  data?: {
+    profilePhotoUrl?: string;
+    photoUri?: string;
+  } | null;
+};
+
+const getApiBaseUrl = () => {
+  return (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
+};
+
+const getCustomerProfilePhotoUrl = async (senderId: string) => {
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/firestore/customers/${encodeURIComponent(senderId)}`
+  );
+  const body = (await response.json().catch(() => null)) as CustomerProfileResponse | null;
+
+  if (!response.ok || body?.success === false) {
+    return '';
+  }
+
+  const photoUrl = body?.data?.profilePhotoUrl || body?.data?.photoUri || '';
+  return photoUrl.startsWith('http') ? photoUrl : '';
+};
+
+const readTimestampMs = (value: DeliveryTimestamp | undefined) => {
+  if (!value) return 0;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') return new Date(value).getTime() || 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value.toDate === 'function') return value.toDate().getTime();
+  if (typeof value._seconds === 'number') return value._seconds * 1000;
+  if (typeof value.seconds === 'number') return value.seconds * 1000;
+  return 0;
+};
+
+const toNumber = (value: unknown) => {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount : 0;
+};
+
+const formatCurrency = (value: unknown) => {
+  const amount = toNumber(value);
+  return `\u20b9${amount.toLocaleString('en-IN', {
+    maximumFractionDigits: 0,
+  })}`;
+};
+
+const formatDate = (value: DeliveryTimestamp | undefined) => {
+  const timestamp = readTimestampMs(value);
+  const date = timestamp ? new Date(timestamp) : new Date();
+
+  return date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
+const getAddressParts = (address: string) => {
+  const [primary, ...rest] = address.split(',').map((part) => part.trim()).filter(Boolean);
+  return {
+    primary: primary || 'Address unavailable',
+    secondary: rest.join(', '),
+  };
+};
+
+const getProfileImageUri = (delivery: DeliveryDetails | null) => {
+  return (
+    delivery?.sender?.photoUri ||
+    delivery?.sender?.profilePhotoUrl ||
+    delivery?.receiver?.photoUri ||
+    delivery?.receiver?.profilePhotoUrl ||
+    ''
+  );
+};
+
+const getCancellationReason = (delivery: DeliveryDetails | null) => {
+  return (
+    delivery?.cancellationReason ||
+    delivery?.cancelReason ||
+    ''
+  ).toString().trim();
+};
+
+const getCancellationTimestamp = (delivery: DeliveryDetails | null) => {
+  return (
+    readTimestampMs(delivery?.timestamps?.cancelledAt) ||
+    readTimestampMs(delivery?.timestamps?.canceledAt)
+  );
+};
+
+const getCancelledByLabel = (delivery: DeliveryDetails | null) => {
+  const cancelledBy = (delivery?.cancelledBy || delivery?.canceledBy || '')
+    .toString()
+    .trim();
+
+  if (!cancelledBy) return '';
+  if (/^(customer|sender)$/i.test(cancelledBy)) return 'by customer';
+  if (/^(driver)$/i.test(cancelledBy)) return 'by driver';
+  if (/^(admin|system)$/i.test(cancelledBy)) return 'by Machrush admin';
+  return `by ${cancelledBy}`;
+};
+
+function TopNav() {
+  const router = useRouter();
+
+  return (
+    <View style={styles.header}>
+      <View style={styles.statusSpacer} />
+      <View style={styles.topNav}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="arrow-back" size={24} color="#1c1c1c" />
+        </Pressable>
+        <Text style={styles.navTitle}>Delivery details</Text>
+      </View>
+    </View>
+  );
+}
+
+function RoutePoint({
+  title,
+  address,
+}: {
+  title: string;
+  address: string;
+}) {
+  const parts = getAddressParts(address);
+
+  return (
+    <View style={styles.routePoint}>
+      <View style={styles.routeText}>
+        <Text style={styles.routePointTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        <Text style={styles.routePrimary} numberOfLines={2}>
+          {parts.primary}
+        </Text>
+        {parts.secondary ? (
+          <Text style={styles.routeSecondary} numberOfLines={2}>
+            {parts.secondary}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function DeliveryInfoLine({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.paymentLine}>
+      <Text style={styles.paymentLabel} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={styles.paymentValue} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+export default function CancelledDeliveryScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { deliveryId } = useLocalSearchParams<{ deliveryId?: string }>();
+  const [delivery, setDelivery] = React.useState<DeliveryDetails | null>(null);
+  const [senderProfilePhotoUrl, setSenderProfilePhotoUrl] = React.useState('');
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState(false);
+
+  // Cancelled deliveries are final — a single fetch is enough (no polling,
+  // unlike the payment screens whose payment state can change over time).
+  React.useEffect(() => {
+    let isActive = true;
+
+    const loadDelivery = async () => {
+      if (!deliveryId) {
+        setIsLoading(false);
+        setLoadError(true);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${getApiBaseUrl()}/api/deliveries/${deliveryId}`);
+        const body = (await response.json().catch(() => null)) as {
+          success?: boolean;
+          data?: DeliveryDetails;
+          error?: string;
+        } | null;
+
+        if (!response.ok || body?.success === false) {
+          throw new Error(body?.error || 'Unable to load delivery details');
+        }
+
+        if (isActive) {
+          setDelivery(body?.data || null);
+          setLoadError(false);
+        }
+
+        const senderId = body?.data?.senderId;
+        const senderPhotoUrl = senderId
+          ? await getCustomerProfilePhotoUrl(senderId).catch((error) => {
+              console.error('Error loading sender profile photo:', error);
+              return '';
+            })
+          : '';
+        if (isActive) {
+          setSenderProfilePhotoUrl(senderPhotoUrl);
+        }
+      } catch (error) {
+        console.error('Error loading cancelled delivery details:', error);
+        if (isActive) {
+          setLoadError(true);
+        }
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadDelivery();
+
+    return () => {
+      isActive = false;
+    };
+  }, [deliveryId]);
+
+  const pickupAddress = delivery?.locations?.pickup?.address || 'Pickup address unavailable';
+  const dropAddress = delivery?.locations?.dropoff?.address || 'Drop address unavailable';
+  const pickupParts = getAddressParts(pickupAddress);
+  const distance = toNumber(delivery?.pricing?.distanceKm ?? delivery?.pricing?.distance);
+  const tripFare = toNumber(delivery?.pricing?.tripFare ?? delivery?.pricing?.total);
+  const requestedDate = formatDate(delivery?.timestamps?.createdAt);
+  const cancelledAtMs = getCancellationTimestamp(delivery);
+  const cancelledDate = cancelledAtMs
+    ? formatDate(cancelledAtMs)
+    : formatDate(delivery?.timestamps?.createdAt);
+  const cancelledByLabel = getCancelledByLabel(delivery);
+  const cancellationReason = getCancellationReason(delivery);
+  const title = `${pickupParts.primary}${pickupParts.secondary ? `, ${pickupParts.secondary}` : ''}`;
+  const profileImageUri = senderProfilePhotoUrl || getProfileImageUri(delivery);
+
+  const handleReportIssue = () => {
+    router.push({
+      pathname: '/report-problem',
+      params: {
+        deliveryId,
+        deliveryTitle: title,
+        prefillCategory: 'Other',
+      },
+    });
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <TopNav />
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator color="#05c" />
+          <Text style={styles.loadingText}>Loading delivery details...</Text>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: Math.max(insets.bottom, vs(16)) + vs(40) },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.summaryBlock}>
+            <View style={styles.deliveryHeaderRow}>
+              <Image
+                source={profileImageUri ? { uri: profileImageUri } : deliveryThumbImage}
+                style={styles.deliveryThumb}
+                resizeMode="cover"
+              />
+              <View style={styles.deliveryHeaderCopy}>
+                <Text style={styles.deliveryTitle} numberOfLines={1}>
+                  {title}
+                </Text>
+                <Text style={styles.deliveryMeta} numberOfLines={1}>
+                  {requestedDate} {'\u2022'} {formatCurrency(tripFare)} trip fare
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={styles.paymentStatusRow}>
+              <Text style={styles.earnedTitle}>{formatCurrency(tripFare)} trip fare</Text>
+              <View style={styles.cancelledRow}>
+                <Ionicons name="close-circle" size={20} color="#d00416" />
+                <Text style={styles.cancelledText} numberOfLines={1}>
+                  Cancelled{cancelledByLabel ? ` ${cancelledByLabel}` : ''}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.cancellationCard}>
+              <View style={styles.cancellationHeader}>
+                <View style={styles.cancellationIconWrap}>
+                  <Ionicons name="information-circle-outline" size={20} color="#d00416" />
+                </View>
+                <Text style={styles.cancellationTitle}>Cancellation details</Text>
+              </View>
+              <View style={styles.cancellationBody}>
+                <Text style={styles.cancellationLine} numberOfLines={1}>
+                  Cancelled on {cancelledDate}
+                </Text>
+                <Text style={styles.cancellationReason} numberOfLines={3}>
+                  {cancellationReason || 'No reason was provided for this cancellation.'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.routeCard}>
+              <View style={styles.routeHeader}>
+                <Image
+                  source={tableLocationImage}
+                  style={styles.headingTitleIcon}
+                  resizeMode="contain"
+                />
+                <Text style={styles.routeTitle}>
+                  {distance > 0 ? `Total ${Math.round(distance)} km` : 'Route'}
+                </Text>
+              </View>
+
+              <View style={styles.routeBox}>
+                <RoutePoint title="Pickup" address={pickupAddress} />
+                <View style={styles.routeDivider} />
+                <RoutePoint title="Drop" address={dropAddress} />
+              </View>
+            </View>
+
+            <View style={styles.paymentSummaryCard}>
+              <View style={styles.paymentSummaryHeader}>
+                <View style={styles.summaryIconCircle}>
+                  <Ionicons name="receipt-outline" size={16} color="#05c" />
+                </View>
+                <Text style={styles.paymentSummaryTitle}>Delivery info</Text>
+              </View>
+              <View style={styles.paymentAmountBox}>
+                <DeliveryInfoLine label="Trip fare" value={formatCurrency(tripFare)} />
+                <DeliveryInfoLine
+                  label="Distance"
+                  value={distance > 0 ? `${Math.round(distance)} km` : 'Unavailable'}
+                />
+                <DeliveryInfoLine
+                  label="Pickup time"
+                  value={delivery?.pickupTime || 'Not started'}
+                />
+                <DeliveryInfoLine
+                  label="Drop time"
+                  value={delivery?.dropoffTime || 'Not completed'}
+                />
+              </View>
+            </View>
+          </View>
+
+          {loadError ? (
+            <Text style={styles.errorText}>
+              Some details could not be loaded. Please check your connection and try again.
+            </Text>
+          ) : null}
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Report delivery issue"
+            style={styles.reportButton}
+            onPress={handleReportIssue}
+          >
+            <Text style={styles.reportButtonText}>Report an issue</Text>
+          </Pressable>
+        </ScrollView>
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    padding: 18,
+  },
+  header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 2,
+    backgroundColor: '#e8e8e8',
+  },
+  statusSpacer: {
+    height: vs(52),
+  },
+  topNav: {
+    minHeight: vs(64),
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: rs(4),
+    paddingVertical: vs(8),
+  },
+  backButton: {
+    width: hit(48),
+    height: hit(48),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navTitle: {
+    flex: 1,
+    minWidth: 0,
+    fontFamily: 'Poppins_500Medium',
+    fontSize: fs(20, 17, 22),
+    lineHeight: fs(32, 26, 34),
+    color: '#1c1c1c',
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: vs(10),
+    paddingTop: vs(116),
+  },
+  loadingText: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: fs(14),
+    lineHeight: fs(21),
+    color: '#606060',
+  },
+  scroll: {
+    flex: 1,
+  },
+  content: {
+    width: '100%',
+    maxWidth: rs(412, 320, 430),
+    alignSelf: 'center',
+    paddingTop: vs(116),
+    paddingBottom: vs(24),
+    gap: vs(24),
+    alignItems: 'center',
+  },
+  summaryBlock: {
+    width: '100%',
+    gap: vs(16),
+  },
+  deliveryHeaderRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: rs(12),
+  },
+  deliveryThumb: {
+    width: rs(48),
+    height: rs(48),
+    borderRadius: rs(8),
+    backgroundColor: '#000000',
+  },
+  deliveryHeaderCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: vs(8),
+  },
+  deliveryTitle: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: fs(20, 17, 22),
+    lineHeight: fs(32, 26, 34),
+    color: '#1c1c1c',
+  },
+  deliveryMeta: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: fs(14, 12, 15),
+    lineHeight: fs(21),
+    color: '#606060',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#d2d2d2',
+  },
+  paymentStatusRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: rs(8),
+    minWidth: 0,
+  },
+  earnedTitle: {
+    flex: 1,
+    fontFamily: 'Poppins_500Medium',
+    minWidth: 0,
+    fontSize: fs(22, 18, 24),
+    color: '#1c1c1c',
+  },
+  cancelledRow: {
+    maxWidth: '48%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: rs(4),
+  },
+  cancelledText: {
+    flexShrink: 1,
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 16,
+    lineHeight: fs(24),
+    color: '#d00416',
+  },
+  cancellationCard: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#f3c9cd',
+    borderRadius: rs(12),
+    paddingHorizontal: rs(12),
+    paddingVertical: vs(12),
+    gap: vs(8),
+    backgroundColor: 'rgba(208, 4, 22, 0.04)',
+  },
+  cancellationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: rs(8),
+  },
+  cancellationIconWrap: {
+    width: rs(24),
+    height: rs(24),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancellationTitle: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 16,
+    lineHeight: fs(18),
+    letterSpacing: -0.5,
+    color: '#1c1c1c',
+  },
+  cancellationBody: {
+    gap: vs(4),
+    paddingHorizontal: rs(4),
+  },
+  cancellationLine: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: fs(12, 11, 13),
+    lineHeight: fs(18),
+    color: '#8e8e8e',
+  },
+  cancellationReason: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: fs(14, 12, 15),
+    lineHeight: fs(21),
+    color: '#1c1c1c',
+  },
+  routeCard: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#e8e8e8',
+    borderRadius: rs(12),
+    paddingHorizontal: rs(8),
+    paddingVertical: vs(12),
+    gap: vs(12),
+    overflow: 'hidden',
+  },
+  routeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: rs(8),
+  },
+  routeTitle: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 16,
+    lineHeight: fs(18),
+    letterSpacing: -0.5,
+    color: '#1c1c1c',
+  },
+  routeBox: {
+    backgroundColor: '#eff2f6',
+    width: '100%',
+    borderRadius: rs(12),
+    padding: rs(12),
+    overflow: 'hidden',
+  },
+  routePoint: {
+    minHeight: vs(64),
+    justifyContent: 'center',
+    width: '90%',
+  },
+  routeText: {
+    width: '100%',
+    minWidth: 0,
+    padding: rs(4),
+  },
+  routePointTitle: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 16,
+    lineHeight: fs(18),
+    letterSpacing: -0.5,
+    color: '#1c1c1c',
+  },
+  routePrimary: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 16,
+    lineHeight: fs(24),
+    color: '#616161',
+  },
+  routeSecondary: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: fs(12, 11, 13),
+    lineHeight: fs(18),
+    color: '#616161',
+  },
+  routeDivider: {
+    height: 1,
+    marginLeft: rs(44, 32, 46),
+    borderTopWidth: 1,
+    borderStyle: 'dotted',
+    borderColor: '#0055cc',
+  },
+  paymentSummaryCard: {
+    width: '100%',
+    maxWidth: rs(380, 320, 420),
+    borderRadius: rs(12),
+    backgroundColor: 'rgba(27, 124, 255, 0.1)',
+    paddingHorizontal: rs(4),
+    paddingTop: vs(12),
+    paddingBottom: vs(8),
+    gap: vs(12),
+    overflow: 'hidden',
+    alignSelf: 'center',
+  },
+  paymentSummaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: rs(8),
+    paddingHorizontal: rs(4),
+  },
+  summaryIconCircle: {
+    width: rs(24),
+    height: rs(24),
+    borderRadius: rs(12),
+    backgroundColor: 'rgba(27, 124, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paymentSummaryTitle: {
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 16,
+    lineHeight: fs(18),
+    letterSpacing: -0.5,
+    color: '#1c1c1c',
+  },
+  paymentAmountBox: {
+    width: '100%',
+    borderRadius: rs(8),
+    backgroundColor: '#ffffff',
+    paddingVertical: vs(8),
+  },
+  paymentLine: {
+    width: '100%',
+    minHeight: hit(40),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: rs(12),
+    paddingVertical: vs(8),
+    gap: rs(10),
+  },
+  paymentLabel: {
+    minWidth: 0,
+    flexShrink: 1,
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 16,
+    lineHeight: fs(24),
+    color: '#8e8e8e',
+  },
+  paymentValue: {
+    fontFamily: 'Poppins_500Medium',
+    maxWidth: '45%',
+    flexShrink: 1,
+    fontSize: 16,
+    lineHeight: fs(18),
+    color: '#606060',
+    textAlign: 'right',
+  },
+  errorText: {
+    width: '100%',
+    fontFamily: 'Poppins_400Regular',
+    fontSize: fs(12, 11, 13),
+    lineHeight: fs(18),
+    color: '#d00416',
+    textAlign: 'center',
+  },
+  reportButton: {
+    width: '100%',
+    maxWidth: 380,
+    minHeight: 56,
+    borderWidth: 1,
+    borderColor: '#05c',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    alignSelf: 'center',
+  },
+  reportButtonText: {
+    flexShrink: 1,
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 16,
+    lineHeight: 24,
+    letterSpacing: -0.5,
+    color: '#d00416',
+    textAlign: 'center',
+  },
+  headingTitleIcon: {
+    width: 20,
+    height: 20,
+  },
+});
+
+
+
+
+

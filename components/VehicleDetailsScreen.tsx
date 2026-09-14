@@ -254,31 +254,43 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
     }
   };
 
-  // Pick one image for a specific vehicle photo slot
-  const pickVehiclePhoto = async (slotIndex: number) => {
+  // Pick up to the remaining number of vehicle photos at once (max 4 total).
+  const pickVehiclePhotos = async () => {
     const hasPermission = await requestMediaPermissions();
     if (!hasPermission) return;
+
+    const filled = vehiclePhotoUris.filter(Boolean);
+    const remaining = REQUIRED_VEHICLE_PHOTOS - filled.length;
+    if (remaining <= 0) return;
 
     try {
       setIsLoading(true);
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsMultipleSelection: false,
+        allowsMultipleSelection: true,
+        selectionLimit: remaining,
         allowsEditing: false,
         aspect: [1, 1],
         quality: 0.8,
       });
 
       if (!result.canceled) {
-        const uri = result.assets[0].uri;
+        const newUris = result.assets.slice(0, remaining).map((asset) => asset.uri);
+
         setVehiclePhotoUris((prev) => {
           const next = [...prev];
-          next[slotIndex] = uri;
-          return next.slice(0, 4);
+          let insertIndex = 0;
+          for (const uri of newUris) {
+            // Fill the next empty slot in order.
+            while (insertIndex < next.length && next[insertIndex]) insertIndex++;
+            next[insertIndex] = uri;
+            insertIndex++;
+          }
+          return next.slice(0, REQUIRED_VEHICLE_PHOTOS);
         });
       }
     } catch (error) {
-      showAlert('Error', 'Failed to pick photo');
+      showAlert('Error', 'Failed to pick photos');
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -564,13 +576,13 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                 <Text style={styles.uploadButtonSmallText}>Upload</Text>
               </Pressable>
             ) : (
-              <View style={styles.uploadedImageContainer}>
+              <View style={styles.documentImageContainer}>
                           {isPdfFile(rcBookUri) ? (
                             <View style={styles.pdfPreview}>
                               <Text style={styles.pdfPreviewText}>PDF</Text>
                             </View>
                           ) : (
-                            <Image source={{ uri: rcBookUri }} style={styles.uploadedImage} />
+                            <Image source={{ uri: rcBookUri }} style={styles.uploadedImage} resizeMode="cover" />
                           )}
                           <Pressable
                             style={styles.removeButton}
@@ -611,13 +623,13 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                 <Text style={styles.uploadButtonSmallText}>Upload</Text>
               </Pressable>
             ) : (
-              <View style={styles.uploadedImageContainer}>
+              <View style={styles.documentImageContainer}>
                           {isPdfFile(insuranceUri) ? (
                             <View style={styles.pdfPreview}>
                               <Text style={styles.pdfPreviewText}>PDF</Text>
                             </View>
                           ) : (
-                            <Image source={{ uri: insuranceUri }} style={styles.uploadedImage} />
+                            <Image source={{ uri: insuranceUri }} style={styles.uploadedImage} resizeMode="cover" />
                           )}
                           <Pressable
                             style={styles.removeButton}
@@ -655,7 +667,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                   <Pressable
                     key={slotIndex}
                     style={styles.vehiclePhotoPanel}
-                    onPress={() => pickVehiclePhoto(slotIndex)}
+                    onPress={pickVehiclePhotos}
                     disabled={isLoading}
                   >
                     <Text style={styles.vehiclePhotoPlus}>+</Text>
@@ -1048,17 +1060,29 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   uploadedImageContainer: {
+    flex: 1,
+    height: 96,
+    minWidth: 0,
+    position: 'relative',
+    alignSelf: 'flex-start',
+    overflow: 'visible',
+    borderRadius: 12,
+  },
+  // Fixed-size holder for RC book / Insurance uploads — matches the
+  // 64x64 "Upload" placeholder card so the size stays the same
+  // whether or not an image is selected.
+  documentImageContainer: {
     width: 64,
     height: 64,
-   position: 'relative',
-  alignSelf: 'flex-start',
-  overflow: 'visible',
+    position: 'relative',
+    alignSelf: 'flex-start',
+    overflow: 'visible',
     borderRadius: 12,
   },
   vehiclePhotoPanel: {
     flex: 1,
+    height: 96,
     minWidth: 0,
-    minHeight: 86,
     backgroundColor: '#ffffff',
     borderRadius: 8,
     borderWidth: 1,

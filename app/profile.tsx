@@ -19,6 +19,7 @@ import { signOutUser } from '@/lib/firebaseAuthService';
 import { auth } from '@/lib/firebase';
 import { getDriverProfile } from '@/lib/firestoreOnboardingService';
 import { useAppAlert } from '@/components/AppAlertModal';
+import { refreshSession } from '@/lib/session';
 import {
   getCachedDriverName,
   getCachedProfilePhotoUrl,
@@ -72,6 +73,11 @@ const getApiBaseUrl = () => {
   return (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
 };
 
+const getDeliveryHeaders = (idToken?: string | null, includeJson = false) => ({
+  ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+  ...(includeJson ? { 'Content-Type': 'application/json' } : {}),
+});
+
 const isCompletedDelivery = (delivery: DeliveryRecord) => {
   const pricingStatus = String(
     delivery.pricingStatus ||
@@ -80,7 +86,14 @@ const isCompletedDelivery = (delivery: DeliveryRecord) => {
       delivery.pricing?.paymentStatus ||
       ''
   ).toLowerCase();
-  return pricingStatus === 'completed' || pricingStatus === 'paid';
+  if (pricingStatus === 'completed' || pricingStatus === 'paid') return true;
+
+  // A delivery counts as "Completed" for the driver as soon as it has been
+  // delivered (status 'delivered'/'completed') — even while the payment is
+  // still pending. Payment clears separately (admin/payment flow)and must
+  // not gate the driver's own completed-delivery count (quick button).
+  const status = String(delivery.status || '').toLowerCase();
+  return status === 'delivered' || status === 'completed';
 };
 
 function TopNav() {
@@ -421,7 +434,7 @@ export default function ProfileScreen() {
   const [isLoadingStats, setIsLoadingStats] = React.useState(true);
   const hasLoadedProfileStatsRef = React.useRef(false);
   const router = useRouter();
-  const { alertModal } = useAppAlert();
+  const { alertModal, showAlert } = useAppAlert();
 
   const handleMenuPress = (rowId: string) => {
     if (rowId === 'documents') {
@@ -529,7 +542,18 @@ export default function ProfileScreen() {
         }
 
         try {
-          const { uid } = await getCurrentProfileSession();
+          const { uid, idToken, sessionExpired } = await refreshSession();
+
+          // Graceful session-expiry handling: notify and return to login.
+          if (sessionExpired) {
+            if (isActive) {
+              setAverageRating('0.0');
+              setCompletedDeliveryCount(0);
+            }
+            showAlert('Session expired', 'Please log in again to continue.');
+            router.replace('/phone-number');
+            return;
+          }
 
           if (!uid) {
             if (isActive) {
@@ -540,7 +564,10 @@ export default function ProfileScreen() {
           }
 
           const response = await fetch(
-            `${getApiBaseUrl()}/api/deliveries/driver/${encodeURIComponent(uid)}?type=all`
+            `${getApiBaseUrl()}/api/deliveries/driver/${encodeURIComponent(uid)}?type=all`,
+            {
+              headers: getDeliveryHeaders(idToken),
+            }
           );
           const body = (await response.json().catch(() => null)) as {
             success?: boolean;

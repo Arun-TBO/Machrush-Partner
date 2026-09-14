@@ -1,4 +1,5 @@
-import { Platform } from 'react-native';
+import { Platform, Image } from 'react-native';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 /**
  * Driver onboarding / profile service — backend-only (live MacrushBackend).
@@ -118,6 +119,56 @@ const localUriToDataUrl = async (uri: string) => {
   return blobToDataUrl(blob);
 };
 
+// ----------------------------------------------------------------------------
+// Native on-device image compression (Android / iOS).
+//
+// The backend enforces `express.json({ limit: '16mb' })`, and a single
+// full-resolution camera photo base64-encoded can exceed that cap on its own
+// (previously this surfaced as `request entity too large`, HTTP 413). We
+// downscale + re-encode to JPEG here so every asset stays small before upload.
+// ----------------------------------------------------------------------------
+const NATIVE_IMAGE_MAX_DIM = 1600; // longest edge in px
+const NATIVE_IMAGE_QUALITY = 0.7;
+
+const getImageDimensions = (uri: string) =>
+  new Promise<{ width: number; height: number }>((resolve, reject) => {
+    Image.getSize(
+      uri,
+      (width, height) => resolve({ width, height }),
+      (error) => reject(error)
+    );
+  });
+
+const nativeImageToDataUrl = async (uri: string): Promise<string | null> => {
+  try {
+    const size = await getImageDimensions(uri).catch(() => null);
+
+    const actions: ImageManipulator.Action[] = [];
+    if (size && Math.max(size.width, size.height) > NATIVE_IMAGE_MAX_DIM) {
+      // Downscale only the longest edge; expo keeps aspect ratio.
+      const isPortrait = size.height > size.width;
+      actions.push({
+        resize: {
+          [isPortrait ? 'height' : 'width']: NATIVE_IMAGE_MAX_DIM,
+        } as any,
+      });
+    }
+
+    const result = await ImageManipulator.manipulateAsync(uri, actions, {
+      compress: NATIVE_IMAGE_QUALITY,
+      format: ImageManipulator.SaveFormat.JPEG,
+      base64: true,
+    });
+
+    if (result.base64) return `data:image/jpeg;base64,${result.base64}`;
+    return localUriToDataUrl(result.uri || uri);
+  } catch (error) {
+    // Non-image files (e.g. PDF RCs) can't be processed — fall back to raw read.
+    console.warn('Native image compression failed, falling back to raw upload:', error);
+    return localUriToDataUrl(uri);
+  }
+};
+
 const resizeWebImageToDataUrl = async (
   imageUri: string,
   size = 256,
@@ -157,7 +208,9 @@ const resolveUploadDataUrl = async (uri: string, maxWebSize = 1024, webQuality =
   if (!uri) return null;
   if (uri.startsWith('data:')) return uri;
   if (Platform.OS === 'web') return resizeWebImageToDataUrl(uri, maxWebSize, webQuality);
-  return localUriToDataUrl(uri);
+  // Native: compress/resize on-device so the request stays well under the
+  // backend's JSON body limit (fixes `request entity too large` on Android).
+  return nativeImageToDataUrl(uri);
 };
 
 type OnboardingUploadAsset = {
@@ -166,34 +219,87 @@ type OnboardingUploadAsset = {
   index?: number;
 };
 
+/**
+ * Per-request ceiling for a single image asset.
+ *
+ * The backend enforces `express.json({ limit: '16mb' })` (see MachrushBackend/app.js),
+ * and it throws `request entity too large` (HTTP 413) when a request body exceeds it.
+ * We therefore upload ONE asset per request and keep each well under the cap instead
+ * of sending all base64-encoded images together in a single huge body.
+ */
+const MAX_SINGLE_UPLOAD_BYTES = 10 * 1024 * 1024; // ~10 MB < 16 MB server cap
+
 const uploadOnboardingAssetsViaBackend = async (
   uid: string,
   assets: OnboardingUploadAsset[],
   idToken: string
-) => {
-  const assetsToUpload = await Promise.all(
-    assets.map(async (asset) => ({
-      type: asset.type,
-      index: asset.index,
-      dataUrl: await resolveUploadDataUrl(asset.uri),
-    }))
-  );
+): Promise<{ type: string; index?: number; url: string }[]> => {
+  const uploaded: { type: string; index?: number; url: string }[] = [];
 
-  const response = await fetch(`${getApiBaseUrl()}/api/uploads/driver-onboarding-assets`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ uid, assets: assetsToUpload }),
-  });
+  for (const asset of assets) {
+    if (!asset.uri || isRemoteUrl(asset.uri)) continue; // already hosted / remote, skip
 
-  const responseBody = await response.json().catch(() => null);
-  if (!response.ok || !responseBody?.success) {
-    throw new Error(getApiErrorMessage(responseBody, 'Failed to upload onboarding files'));
+    const dataUrl = await resolveUploadDataUrl(asset.uri);
+    if (!dataUrl) continue;
+
+    if (dataUrl.length > MAX_SINGLE_UPLOAD_BYTES) {
+      throw new Error(
+        `The file for "${asset.type}" is too large to upload (${(
+          dataUrl.length /
+          1024 /
+          1024
+        ).toFixed(1)} MB). Please retake or choose a smaller image/document and try again.`
+      );
+    }
+
+    // Send this single asset in its OWN request so the body never grows past the cap.
+    const response = await fetch(`${getApiBaseUrl()}/api/uploads/driver-onboarding-assets`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ uid, assets: [{ type: asset.type, index: asset.index, dataUrl }] }),
+    });
+
+    const responseBody = await response.json().catch(() => null);
+    if (!response.ok || !responseBody?.success) {
+      throw new Error(getApiErrorMessage(responseBody, 'Failed to upload onboarding file'));
+    }
+
+    const uploadedAsset = (responseBody.assets || [])[0];
+    if (uploadedAsset?.url) uploaded.push(uploadedAsset);
   }
 
-  return (responseBody.assets || []) as Array<{ type: string; index?: number; url: string }>;
+  return uploaded;
+};
+
+/**
+ * Diagnostics helper — logs the approximate size of every onboarding field before
+ * the Firestore/MongoDB write. This lets you find which field is unexpectedly huge
+ * (e.g. an image stored as a Base64 `data:` string instead of a storage URL).
+ */
+export const logOnboardingFieldSizes = (
+  data: Record<string, any>,
+  label = 'onboarding'
+): void => {
+  const byteSize = (value: unknown): number => {
+    if (typeof value === 'string') return value.length; // Base64/utf8 bytes (approx)
+    if (Array.isArray(value)) return value.reduce((sum, item) => sum + byteSize(item), 0);
+    if (value && typeof value === 'object') return JSON.stringify(value).length;
+    return 0;
+  };
+
+  const total = byteSize(data);
+  console.log(
+    `📦 ${label} payload total: ${(total / 1024 / 1024).toFixed(2)} MB (${total.toLocaleString()} bytes)`
+  );
+  for (const key of Object.keys(data)) {
+    const size = byteSize(data[key]);
+    if (size > 512 * 1024) {
+      console.warn(`   • ${key}: ${(size / 1024 / 1024).toFixed(2)} MB (LARGE — should be a URL)`);
+    }
+  }
 };
 
 const uploadProfilePhotoViaBackend = async (
@@ -570,12 +676,46 @@ export const storeOnboardingData = async (
 
     const uploadedOnboardingData = await uploadOnboardingAssets(uid, onboardingData, idToken);
 
+    // Safety net: never write an oversized Base64 blob into a document. If an image
+    // could not be uploaded to storage, fail with a clear message instead of a 413.
+    for (const key of Object.keys(uploadedOnboardingData)) {
+      const field = (uploadedOnboardingData as Record<string, any>)[key];
+      if (typeof field === 'string' && field.startsWith('data:') && field.length > 512 * 1024) {
+        console.error(`Field "${key}" is still a large Base64 string — refusing oversized write.`);
+        return {
+          success: false,
+          error: `The "${key}" image could not be uploaded. Please use a smaller image and try again.`,
+        };
+      }
+    }
+
     const now = new Date().toISOString();
+
+    // A submission (first-time or a re-upload after a rejection) always puts the
+    // driver back into "under review". The backend merge-writes ($set) the
+    // payload, so every verification-related field must be explicitly reset
+    // here — otherwise stale admin-written fields (documentVerificationStatus,
+    // status, rejectionMessage, ...) survive the update and the driver stays
+    // stuck in "rejected" even though fresh documents were uploaded.
     const dataToStore: OnboardingData = {
       ...uploadedOnboardingData,
       phoneNumber,
       activeStatus: false,
-      verificationStatus: uploadedOnboardingData.verificationStatus || 'pending',
+
+      // Reset the verification decision back to "pending"
+      verificationStatus: 'pending',
+      documentVerificationStatus: 'pending',
+      status: 'pending',
+      verified: false,
+      verifiedDate: null as unknown as string,
+      verifiedAt: null as unknown as string,
+
+      // Clear the previous admin rejection details
+      rejectionMessage: null as unknown as string,
+      rejectionReason: null as unknown as string,
+      rejectedDocuments: null as unknown as string[],
+      verificationNotes: null as unknown as string,
+
       createdAt: now,
       updatedAt: now,
       submittedAt: now,

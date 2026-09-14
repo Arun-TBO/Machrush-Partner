@@ -44,7 +44,6 @@ export default function TabLayout() {
         tabBarLabelStyle: {
           fontSize: fs(12),
           fontWeight: '500',
-          maxFontSizeMultiplier: 1,
         },
       }}
     >
@@ -127,8 +126,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#eff2f6',
   },
   tabBar: {
-    borderTopWidth: 1,
-    borderTopColor: '#a4cbff',
+    borderTopWidth: 0,
     backgroundColor: '#eff2f6',
     paddingTop: vs(12),
     paddingHorizontal: rs(16),
