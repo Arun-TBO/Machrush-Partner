@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fs, hit, rs, vs } from '@/lib/responsive';
+import { refreshSession } from '@/lib/session';
 
 const paymentThumbImage = require('@/assets/images/delivery/payment-detail-thumb.png');
 const tablelocation = require('@/assets/images/profile/tablelocation.png')
@@ -70,6 +71,9 @@ type CustomerProfileResponse = {
   data?: {
     profilePhotoUrl?: string;
     photoUri?: string;
+    customerDocuments?: {
+      profilePhotoUrl?: string;
+    } | null;
   } | null;
 };
 
@@ -77,9 +81,24 @@ const getApiBaseUrl = () => {
   return (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
 };
 
-const getCustomerProfilePhotoUrl = async (senderId: string) => {
+/**
+ * Customer photos live in a private S3 bucket, so the API can only hand back a
+ * renderable (signed) `profilePhotoUrl` when the request carries the driver's
+ * Firebase ID token. This mirrors the exact call my-deliveries makes before it
+ * renders a customer avatar — without the token the API answers with an empty
+ * `profilePhotoUrl` (only `profilePhotoPath`), and the screen falls back to the
+ * placeholder thumbnail.
+ */
+const getDeliveryHeaders = (idToken?: string | null) => ({
+  ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+});
+
+const getCustomerProfilePhotoUrl = async (senderId: string, idToken?: string | null) => {
   const response = await fetch(
-    `${getApiBaseUrl()}/api/firestore/customers/${encodeURIComponent(senderId)}`
+    `${getApiBaseUrl()}/api/firestore/customers/${encodeURIComponent(senderId)}`,
+    {
+      headers: getDeliveryHeaders(idToken),
+    }
   );
   const body = (await response.json().catch(() => null)) as CustomerProfileResponse | null;
 
@@ -87,7 +106,11 @@ const getCustomerProfilePhotoUrl = async (senderId: string) => {
     return '';
   }
 
-  const photoUrl = body?.data?.profilePhotoUrl || body?.data?.photoUri || '';
+  const photoUrl =
+    body?.data?.profilePhotoUrl ||
+    body?.data?.photoUri ||
+    body?.data?.customerDocuments?.profilePhotoUrl ||
+    '';
   return photoUrl.startsWith('http') ? photoUrl : '';
 };
 
@@ -250,6 +273,32 @@ export default function PaymentPendingScreen() {
   React.useEffect(() => {
     let isActive = true;
 
+    // The customer-profile endpoint only returns a renderable (signed) photo
+    // when the request carries the driver's Firebase ID token, so the token is
+    // resolved once per visit and reused by the poll loop below instead of
+    // being force-refreshed on every tick. A failed attempt clears the cache so
+    // the next poll can retry.
+    let freshIdTokenPromise: Promise<string | null> | null = null;
+
+    const getFreshIdToken = () => {
+      if (!freshIdTokenPromise) {
+        freshIdTokenPromise = refreshSession()
+          .then((session) => {
+            const idToken = session?.idToken || null;
+            if (!idToken) {
+              freshIdTokenPromise = null;
+            }
+            return idToken;
+          })
+          .catch(() => {
+            freshIdTokenPromise = null;
+            return null;
+          });
+      }
+
+      return freshIdTokenPromise;
+    };
+
     const loadDelivery = async () => {
       if (!deliveryId) {
         setIsLoading(false);
@@ -276,8 +325,11 @@ export default function PaymentPendingScreen() {
         }
 
         const senderId = body?.data?.senderId;
+        // The photo lookup needs the driver's ID token (see
+        // getCustomerProfilePhotoUrl) so the API can return a signed URL.
+        const profileIdToken = await getFreshIdToken();
         const senderPhotoUrl = senderId
-          ? await getCustomerProfilePhotoUrl(senderId).catch((error) => {
+          ? await getCustomerProfilePhotoUrl(senderId, profileIdToken).catch((error) => {
               console.error('Error loading sender profile photo:', error);
               return '';
             })

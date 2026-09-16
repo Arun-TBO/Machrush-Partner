@@ -13,9 +13,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fs, hit, rs, vs } from '@/lib/responsive';
+import { refreshSession } from '@/lib/session';
 
 const deliveryThumbImage = require('@/assets/images/delivery/delivery-list-thumb.png');
 const tableLocationImage = require('@/assets/images/profile/tablelocation.png');
+const pickAndDropIcon = require('@/assets/images/pickAndDropIcon1.png');
 
 type DeliveryTimestamp =
   | string
@@ -76,6 +78,9 @@ type CustomerProfileResponse = {
   data?: {
     profilePhotoUrl?: string;
     photoUri?: string;
+    customerDocuments?: {
+      profilePhotoUrl?: string;
+    } | null;
   } | null;
 };
 
@@ -83,9 +88,24 @@ const getApiBaseUrl = () => {
   return (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
 };
 
-const getCustomerProfilePhotoUrl = async (senderId: string) => {
+/**
+ * Customer photos live in a private S3 bucket, so the API can only hand back a
+ * renderable (signed) `profilePhotoUrl` when the request carries the driver's
+ * Firebase ID token. This mirrors the exact call my-deliveries makes before it
+ * renders a customer avatar — without the token the API answers with an empty
+ * `profilePhotoUrl` (only `profilePhotoPath`), and the screen falls back to the
+ * placeholder thumbnail.
+ */
+const getDeliveryHeaders = (idToken?: string | null) => ({
+  ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+});
+
+const getCustomerProfilePhotoUrl = async (senderId: string, idToken?: string | null) => {
   const response = await fetch(
-    `${getApiBaseUrl()}/api/firestore/customers/${encodeURIComponent(senderId)}`
+    `${getApiBaseUrl()}/api/firestore/customers/${encodeURIComponent(senderId)}`,
+    {
+      headers: getDeliveryHeaders(idToken),
+    }
   );
   const body = (await response.json().catch(() => null)) as CustomerProfileResponse | null;
 
@@ -93,7 +113,11 @@ const getCustomerProfilePhotoUrl = async (senderId: string) => {
     return '';
   }
 
-  const photoUrl = body?.data?.profilePhotoUrl || body?.data?.photoUri || '';
+  const photoUrl =
+    body?.data?.profilePhotoUrl ||
+    body?.data?.photoUri ||
+    body?.data?.customerDocuments?.profilePhotoUrl ||
+    '';
   return photoUrl.startsWith('http') ? photoUrl : '';
 };
 
@@ -129,6 +153,29 @@ const formatDate = (value: DeliveryTimestamp | undefined) => {
     month: 'short',
     year: 'numeric',
   });
+};
+
+const formatDuration = (delivery: DeliveryDetails | null) => {
+  const deliveredAt = readTimestampMs(delivery?.timestamps?.deliveredAt);
+  const startedAt = readTimestampMs(
+    delivery?.timestamps?.inTransitAt ||
+      delivery?.timestamps?.assignedAt ||
+      delivery?.timestamps?.createdAt
+  );
+
+  if (!deliveredAt || !startedAt || deliveredAt <= startedAt) {
+    return delivery?.dropoffTime || 'Time unavailable';
+  }
+
+  const totalMinutes = Math.max(1, Math.round((deliveredAt - startedAt) / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours === 0) {
+    return `${minutes} mins`;
+  }
+
+  return minutes > 0 ? `${hours} h ${minutes} mins` : `${hours} h`;
 };
 
 const getAddressParts = (address: string) => {
@@ -283,8 +330,11 @@ export default function CancelledDeliveryScreen() {
         }
 
         const senderId = body?.data?.senderId;
+        // The photo lookup needs the driver's ID token (see
+        // getCustomerProfilePhotoUrl) so the API can return a signed URL.
+        const session = await refreshSession().catch(() => null);
         const senderPhotoUrl = senderId
-          ? await getCustomerProfilePhotoUrl(senderId).catch((error) => {
+          ? await getCustomerProfilePhotoUrl(senderId, session?.idToken || null).catch((error) => {
               console.error('Error loading sender profile photo:', error);
               return '';
             })
@@ -315,6 +365,8 @@ export default function CancelledDeliveryScreen() {
   const dropAddress = delivery?.locations?.dropoff?.address || 'Drop address unavailable';
   const pickupParts = getAddressParts(pickupAddress);
   const distance = toNumber(delivery?.pricing?.distanceKm ?? delivery?.pricing?.distance);
+  const distanceLabel = distance > 0 ? `Drop ${Math.round(distance)}km` : 'Drop';
+  const routeDuration = formatDuration(delivery);
   const tripFare = toNumber(delivery?.pricing?.tripFare ?? delivery?.pricing?.total);
   const requestedDate = formatDate(delivery?.timestamps?.createdAt);
   const cancelledAtMs = getCancellationTimestamp(delivery);
@@ -374,7 +426,7 @@ export default function CancelledDeliveryScreen() {
             <View style={styles.divider} />
 
             <View style={styles.paymentStatusRow}>
-              <Text style={styles.earnedTitle}>{formatCurrency(tripFare)} trip fare</Text>
+              <Text style={styles.earnedTitle}>Delivery cancelled</Text>
               <View style={styles.cancelledRow}>
                 <Ionicons name="close-circle" size={20} color="#d00416" />
                 <Text style={styles.cancelledText} numberOfLines={1}>
@@ -383,7 +435,7 @@ export default function CancelledDeliveryScreen() {
               </View>
             </View>
 
-            <View style={styles.cancellationCard}>
+            {/* <View style={styles.cancellationCard}>
               <View style={styles.cancellationHeader}>
                 <View style={styles.cancellationIconWrap}>
                   <Ionicons name="information-circle-outline" size={20} color="#d00416" />
@@ -398,7 +450,7 @@ export default function CancelledDeliveryScreen() {
                   {cancellationReason || 'No reason was provided for this cancellation.'}
                 </Text>
               </View>
-            </View>
+            </View> */}
 
             <View style={styles.routeCard}>
               <View style={styles.routeHeader}>
@@ -407,15 +459,23 @@ export default function CancelledDeliveryScreen() {
                   style={styles.headingTitleIcon}
                   resizeMode="contain"
                 />
-                <Text style={styles.routeTitle}>
-                  {distance > 0 ? `Total ${Math.round(distance)} km` : 'Route'}
-                </Text>
+                <Text style={styles.routeTitle}>Route</Text>
               </View>
 
               <View style={styles.routeBox}>
-                <RoutePoint title="Pickup" address={pickupAddress} />
-                <View style={styles.routeDivider} />
-                <RoutePoint title="Drop" address={dropAddress} />
+                <Image source={pickAndDropIcon} style={styles.routeIcon} />
+
+                <View>
+                  <RoutePoint title="Pickup" address={pickupAddress} />
+
+                  <View style={styles.routeSeparator} />
+
+                  <RoutePoint title={distanceLabel} address={dropAddress} />
+                  <Text style={styles.routeTotal} numberOfLines={1}>
+                    Total {distance > 0 ? `${Math.round(distance)} kms` : 'distance unavailable'}{' '}
+                    {'\u2022'} {routeDuration}
+                  </Text>
+                </View>
               </View>
             </View>
 
@@ -658,20 +718,29 @@ const styles = StyleSheet.create({
     color: '#1c1c1c',
   },
   routeBox: {
+    position: 'relative',
     backgroundColor: '#eff2f6',
     width: '100%',
     borderRadius: rs(12),
     padding: rs(12),
     overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: rs(14),
   },
   routePoint: {
     minHeight: vs(64),
     justifyContent: 'center',
+    flex: 1,
+    minWidth: 0,
+    marginTop: vs(5),
+    marginBottom: vs(5),
     width: '90%',
   },
   routeText: {
-    width: '100%',
+    flex: 1,
     minWidth: 0,
+    flexShrink: 1,
     padding: rs(4),
   },
   routePointTitle: {
@@ -699,6 +768,15 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderStyle: 'dotted',
     borderColor: '#0055cc',
+  },
+  routeTotal: {
+    minWidth: 0,
+    flexShrink: 1,
+    marginLeft: rs(5),
+    fontFamily: 'Poppins_400Regular',
+    fontSize: fs(12, 11, 13),
+    lineHeight: fs(18),
+    color: '#1c1c1c',
   },
   paymentSummaryCard: {
     width: '100%',
@@ -802,6 +880,16 @@ const styles = StyleSheet.create({
   headingTitleIcon: {
     width: 20,
     height: 20,
+  },
+  routeIcon: {
+    width: 30,
+    height: '70%',
+  },
+  routeSeparator: {
+    height: 1,
+    borderTopWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#d6d6d6',
   },
 });
 

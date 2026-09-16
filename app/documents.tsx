@@ -11,8 +11,14 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
 import { auth } from '@/lib/firebase';
-import { getDriverProfile, OnboardingData } from '@/lib/firestoreOnboardingService';
+import {
+  generateDriverDocumentPreview,
+  getDriverProfile,
+  OnboardingData,
+} from '@/lib/firestoreOnboardingService';
 
 const backImage = require('@/assets/images/profile/back.png');
 const verifiedStatusImage = require('@/assets/images/documents/verified-status.png');
@@ -28,9 +34,97 @@ const fallbackVehiclePhotos = [
   vehiclePhotoThreeImage,
 ];
 
-const toImageSource = (uri: string | undefined, fallback: ImageSourcePropType) => {
-  return uri ? { uri } : fallback;
+// ---------------------------------------------------------------------------
+// Non-image document helpers — PDFs (and other document formats) cannot be
+// rendered by RN's Image component. The backend generates a first-page PNG
+// preview for PDFs (`<field>PreviewUri`); until one exists we show a file
+// badge, and tapping it opens the document in the system viewer.
+// ---------------------------------------------------------------------------
+
+const DOCUMENT_EXTENSIONS = new Set([
+  'pdf',
+  'doc',
+  'docx',
+  'xls',
+  'xlsx',
+  'csv',
+  'txt',
+  'dwg',
+  'dxf',
+  'step',
+  'stp',
+]);
+
+const getPathExtension = (uri?: string | null) => {
+  if (!uri) return '';
+  const path = String(uri).split('?')[0];
+  const match = /\.([a-z0-9]+)$/i.exec(path);
+  return match ? match[1].toLowerCase() : '';
 };
+
+const openDocumentExternally = async (targetUri?: string | null) => {
+  if (!targetUri) return;
+  try {
+    await WebBrowser.openBrowserAsync(targetUri);
+  } catch (error) {
+    console.warn('Failed to open document:', error);
+  }
+};
+
+function DocumentFileBadge({ label, style }: { label: string; style?: object }) {
+  return (
+    <View style={[styles.fileBadge, style]}>
+      <Ionicons name="document-text" size={26} color="#e53935" />
+      <Text style={styles.fileBadgeLabel} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function DocumentThumbnail({
+  uri,
+  previewUri,
+  fallback,
+  style,
+}: {
+  uri?: string | null;
+  previewUri?: string | null;
+  fallback: ImageSourcePropType;
+  style?: object;
+}) {
+  const [loadFailed, setLoadFailed] = React.useState(false);
+  const extension = getPathExtension(uri);
+  const isDocumentFile = DOCUMENT_EXTENSIONS.has(extension);
+  const showFileBadge = isDocumentFile || (!!uri && loadFailed);
+
+  if (showFileBadge) {
+    const label = extension ? extension.toUpperCase().slice(0, 4) : 'FILE';
+    return <DocumentFileBadge label={label} style={style} />;
+  }
+
+  if (previewUri) {
+    return (
+      <Image
+        source={{ uri: previewUri }}
+        style={style}
+        resizeMode="cover"
+        onError={() => setLoadFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <Image
+      source={uri ? { uri } : fallback}
+      style={style}
+      resizeMode="cover"
+      onError={() => {
+        if (uri) setLoadFailed(true);
+      }}
+    />
+  );
+}
 
 function TopNav() {
   const router = useRouter();
@@ -65,11 +159,13 @@ function VerifiedStatus() {
 function DocumentRow({
   title,
   description,
-  image,
+  uri,
+  previewUri,
 }: {
   title: string;
   description: string;
-  image: ImageSourcePropType;
+  uri?: string | null;
+  previewUri?: string | null;
 }) {
   return (
     <View style={styles.documentRow}>
@@ -83,8 +179,15 @@ function DocumentRow({
         accessibilityRole="button"
         accessibilityLabel={`${title} document`}
         style={styles.uploadButton}
+        disabled={!uri}
+        onPress={() => openDocumentExternally(uri)}
       >
-        <Image source={image} style={styles.uploadImage} resizeMode="cover" />
+        <DocumentThumbnail
+          uri={uri}
+          previewUri={previewUri}
+          fallback={uploadFilesImage}
+          style={styles.uploadImage}
+        />
       </Pressable>
     </View>
   );
@@ -132,6 +235,44 @@ function VehiclePhotosDocument({ photos }: { photos: ImageSourcePropType[] }) {
 
 export default function DocumentsScreen() {
   const [driverProfile, setDriverProfile] = React.useState<OnboardingData | null>(null);
+  // Tracks which document fields we already asked the backend to backfill a
+  // first-page preview for, so the 5s polling loop never retries endlessly.
+  const previewBackfillAttemptedRef = React.useRef<Set<string>>(new Set());
+
+  const requestMissingPreviews = React.useCallback(async (profile: OnboardingData | null) => {
+    if (!profile) return;
+    const uid = auth.currentUser?.uid || (await AsyncStorage.getItem('firebaseUid'));
+    if (!uid) return;
+    const storedIdToken = await AsyncStorage.getItem('firebaseIdToken');
+
+    const documentFields: (
+      | ['drivingLicenseUri' | 'identityProofUri' | 'rcBookUri' | 'insuranceUri', string | undefined]
+    )[] = [
+      ['drivingLicenseUri', profile.drivingLicensePreviewUri],
+      ['identityProofUri', profile.identityProofPreviewUri],
+      ['rcBookUri', profile.rcBookPreviewUri],
+      ['insuranceUri', profile.insurancePreviewUri],
+    ];
+
+    let generatedAny = false;
+    for (const [field, previewUri] of documentFields) {
+      const documentUri = profile[field];
+      if (!documentUri || previewUri) continue;
+      // Only ask for previews of non-image files; images render directly.
+      if (!DOCUMENT_EXTENSIONS.has(getPathExtension(documentUri))) continue;
+      const backfillKey = `${uid}:${field}`;
+      if (previewBackfillAttemptedRef.current.has(backfillKey)) continue;
+      previewBackfillAttemptedRef.current.add(backfillKey);
+
+      const generatedPreviewUri = await generateDriverDocumentPreview(uid, field, storedIdToken);
+      if (generatedPreviewUri) generatedAny = true;
+    }
+
+    if (generatedAny) {
+      const refreshedProfile = await getDriverProfile(uid, storedIdToken);
+      setDriverProfile((current) => refreshedProfile || current);
+    }
+  }, []);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -155,6 +296,8 @@ export default function DocumentsScreen() {
 
         if (isActive) {
           setDriverProfile(profile);
+          // Fire-and-forget: backfill first-page previews for stored PDFs.
+          requestMissingPreviews(profile);
         }
       };
 
@@ -165,7 +308,7 @@ export default function DocumentsScreen() {
         isActive = false;
         clearInterval(interval);
       };
-    }, [])
+    }, [requestMissingPreviews])
   );
 
   const personalDocuments = React.useMemo(
@@ -174,13 +317,15 @@ export default function DocumentsScreen() {
         id: 'driving-license',
         title: 'Driving License',
         description: 'Your license is verified',
-        image: toImageSource(driverProfile?.drivingLicenseUri, uploadFilesImage),
+        uri: driverProfile?.drivingLicenseUri || '',
+        previewUri: driverProfile?.drivingLicensePreviewUri || '',
       },
       {
         id: 'identity-proof',
         title: 'Identity Proof',
         description: 'Your identity is verified',
-        image: toImageSource(driverProfile?.identityProofUri, uploadFilesImage),
+        uri: driverProfile?.identityProofUri || '',
+        previewUri: driverProfile?.identityProofPreviewUri || '',
       },
     ],
     [driverProfile]
@@ -192,13 +337,15 @@ export default function DocumentsScreen() {
         id: 'rc-book',
         title: 'RC Book',
         description: 'Your RC book is verified',
-        image: toImageSource(driverProfile?.rcBookUri, uploadFilesImage),
+        uri: driverProfile?.rcBookUri || '',
+        previewUri: driverProfile?.rcBookPreviewUri || '',
       },
       {
         id: 'insurance',
         title: 'Insurance',
         description: 'Your Insurance is verified',
-        image: toImageSource(driverProfile?.insuranceUri, uploadFilesImage),
+        uri: driverProfile?.insuranceUri || '',
+        previewUri: driverProfile?.insurancePreviewUri || '',
       },
     ],
     [driverProfile]
@@ -229,7 +376,8 @@ export default function DocumentsScreen() {
               key={document.id}
               title={document.title}
               description={document.description}
-              image={document.image}
+              uri={document.uri}
+              previewUri={document.previewUri}
             />
           ))}
         </Section>
@@ -240,7 +388,8 @@ export default function DocumentsScreen() {
               key={document.id}
               title={document.title}
               description={document.description}
-              image={document.image}
+              uri={document.uri}
+              previewUri={document.previewUri}
             />
           ))}
           <VehiclePhotosDocument photos={vehiclePhotos} />
@@ -379,6 +528,23 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 12,
+  },
+  fileBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  fileBadgeLabel: {
+    maxWidth: 56,
+    color: '#e53935',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 10,
+    fontWeight: '500',
+    letterSpacing: 0.5,
   },
   vehiclePhotosDocument: {
     width: '100%',

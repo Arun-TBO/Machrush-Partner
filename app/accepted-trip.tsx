@@ -33,14 +33,13 @@ import { getDriverProfile } from '@/lib/firestoreOnboardingService';
 import { useAppAlert } from '@/components/AppAlertModal';
 import { fs, rs, vs } from '@/lib/responsive';
 
-const pickAndDropIcon = require('@/assets/images/pickAndDropIcon1.png');
+const tableLocationImage = require('@/assets/images/profile/tablelocation.png');
 const customerAvatarImage = require('@/assets/images/delivery/customer-avatar.jpg');
 const tripCompletedBanknoteImage = require('@/assets/images/delivery/trip-completed-banknote.png');
 const tripCompletedTickImage = require('@/assets/images/delivery/trip-completed-tick.png');
 const trackingLocationImage = require('@/assets/images/profile/Location.png');
 const helpImage = require('@/assets/images/profile/help.png');
 const supportCallImage = require('@/assets/images/profile/phone.png');
-const tableLocationImage = require('@/assets/images/profile/tablelocation.png');
 const otpResetImage = require('@/assets/images/profile/mdi_password-reset.png');
 const BYPASS_PICKUP_GEOFENCE_FOR_TESTING = false;
 const BYPASS_DROP_GEOFENCE_FOR_TESTING = false;
@@ -809,36 +808,21 @@ function TopNav({
   );
 }
 
-function RouteRow({
-  title,
-  time,
-  address,
-  variant,
-}: {
-  title: string;
-  time: string;
-  address: string;
-  variant: 'pickup' | 'drop';
-}) {
+function RouteRow({ title, address }: { title: string; address: string }) {
   const { primaryAddress, secondaryAddress } = getAddressParts(address);
 
   return (
     <View style={styles.routeRow}>
   
-      <View style={styles.routeCopy}>
-        <View style={styles.routeMeta}>
-          <Text style={styles.routeTitle}>{title}</Text>
-          {time ? <Text style={styles.routeTime}>{time}</Text> : null}
-        </View>
-        <Text style={styles.routeAddress} numberOfLines={2}>
-          {primaryAddress}
+      <Text style={styles.routeTitle}>{title}</Text>
+      <Text style={styles.routeAddress} numberOfLines={2}>
+        {primaryAddress}
+      </Text>
+      {secondaryAddress ? (
+        <Text style={styles.routeSubAddress} numberOfLines={2}>
+          {secondaryAddress}
         </Text>
-        {secondaryAddress ? (
-          <Text style={styles.routeSubAddress} numberOfLines={2}>
-            {secondaryAddress}
-          </Text>
-        ) : null}
-      </View>
+      ) : null}
     </View>
   );
 }
@@ -2107,12 +2091,13 @@ function SlideAcceptButton({
       <Animated.View
         {...slidePanResponder.panHandlers}
         style={[
-          styles.acceptIconBox,
           styles.acceptSlideIconBox,
           { transform: [{ translateX: slideX }] },
         ]}
       >
-        <Ionicons name="arrow-forward" size={20} color="#ffffff" />
+        <View style={styles.acceptIconBox}>
+          <Ionicons name="arrow-forward" size={20} color="#ffffff" />
+        </View>
       </Animated.View>
     </View>
   );
@@ -2248,31 +2233,9 @@ export default function AcceptedTripScreen() {
   const isDetailsView = view === 'details';
   const showTrackingView =
     (isAccepted || isCancelledDelivery) && !isCompletedDelivery && !isDetailsView;
-  const pickupEtaParam = getParamValue(pickupEta);
-  const dropEtaParam = getParamValue(dropEta);
-  const pickupDetailTitle = pickupRouteSummary?.distanceText
-    ? `To Pickup ${pickupRouteSummary.distanceText}`
-    : 'To Pickup';
-  const pickupFallbackDuration =
-    delivery?.pickupTime ||
-    pickupEtaParam ||
-    getEstimatedDurationFromKm(
-      Number.isFinite(pickupDistanceKm) && pickupDistanceKm > 0 ? pickupDistanceKm : null
-    );
-  const pickupDetailTime = getApproxDurationLabel(
-    pickupRouteSummary?.durationText,
-    pickupFallbackDuration,
-  );
   const dropDetailTitle = dropRouteSummary?.distanceText
     ? `Drop ${dropRouteSummary.distanceText}`
     : 'Drop';
-  const dropFallbackDistanceKm = getDistanceKm(delivery);
-  const dropFallbackDuration =
-    delivery?.dropoffTime || dropEtaParam || getEstimatedDurationFromKm(dropFallbackDistanceKm);
-  const dropDetailTime = getApproxDurationLabel(
-    dropRouteSummary?.durationText,
-    dropFallbackDuration,
-  );
 
   React.useEffect(() => {
     let isActive = true;
@@ -2671,33 +2634,29 @@ export default function AcceptedTripScreen() {
         <View style={styles.routeCard}>
           <View style={styles.routeHeader}>
             <Image source={tableLocationImage} style={styles.routeHeaderIcon} resizeMode="contain" />
-            <Text style={styles.sectionTitle}>Route</Text>
+            <Text style={styles.routeHeaderLabel}>Route</Text>
           </View>
 
           <View style={styles.routeBox}>
-          {/* <View style={styles.routeConnector} /> */}
-            
-               <Image source={ pickAndDropIcon } style={styles.routeIcon}  />
-        
-        
-           <View>
-                
-              <RouteRow
-              variant="pickup"
-              title={pickupDetailTitle}
-              time={pickupDetailTime}
-              address={pickupAddress}
-            />
-            <View style={styles.routeSeparator} />
-            <RouteRow
-              variant="drop"
-              title={dropDetailTitle}
-              time={dropDetailTime}
-              address={dropAddress}
-            />
+            <View style={styles.routeTimeline}>
+              <View style={styles.routeMarkerWrap}>
+                <View style={styles.routeMarkerHalo}>
+                  <View style={styles.routeMarkerDot} />
+                </View>
+              </View>
+              <View style={styles.routeConnector} />
+              <View style={styles.routeMarkerWrap}>
+                <View style={styles.routeMarkerHalo}>
+                  <Ionicons name="caret-down" size={rs(16)} color="#1565d9" />
+                </View>
+              </View>
+            </View>
 
-           </View>
-            
+            <View style={styles.routeContent}>
+              <RouteRow title="Pickup" address={pickupAddress} />
+              <View style={styles.routeSeparator} />
+              <RouteRow title={dropDetailTitle} address={dropAddress} />
+            </View>
           </View>
         </View>
 
@@ -3585,6 +3544,12 @@ otpBox: {
     width: rs(20),
     height: rs(20),
   },
+  routeHeaderLabel: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: fs(16),
+    color: '#1c1c1c',
+    letterSpacing: -0.5,
+  },
   sectionTitle: {
     fontFamily: 'Poppins_500Medium',
     fontSize: fs(16),
@@ -3601,6 +3566,17 @@ otpBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: rs(24),
+  },
+  routeTimeline: {
+    width: rs(20),
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: vs(22),
+  },
+  routeContent: {
+    flex: 1,
+    minWidth: 0,
   },
   routeRow: {
     minHeight: vs(64),
@@ -3632,11 +3608,12 @@ otpBox: {
     position: 'absolute',
   },
   routeConnector: {
-    position: 'absolute',
-    left: rs(21),
-    top: vs(45),
-    height: vs(90),
-   
+    flex: 1,
+    width: rs(2),
+    minHeight: vs(24),
+    marginVertical: vs(2),
+    borderRadius: rs(1),
+    backgroundColor: '#9fc9ff',
   },
   routeCopy: {
    
@@ -3767,8 +3744,11 @@ otpBox: {
   acceptSlideIconBox: {
     position: 'absolute',
     left: 4,
-    top: 6,
+    top: 0,
+    bottom: 0,
     zIndex: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   acceptIconGhost: {
     height: rs(44),

@@ -35,6 +35,19 @@ const pickAndDropIcon = require('@/assets/images/pickAndDropIcon.png');
 const profileImage = require('@/assets/images/home-profile.jpg');
 const mapPinImage = require('@/assets/images/home-map-pin.png');
 const pickupImage = require('@/assets/images/home-pickup.png');
+/**
+ * Strips the query string from a signed S3 URL so that two presigned URLs for
+ * the same object compare equal. The backend re-signs image URLs on every API
+ * response (fresh X-Amz-Signature/X-Amz-Date), so the full URL string changes
+ * constantly even when the photo itself has not — comparing only the object
+ * path keeps the RN image cache warm and avoids re-downloading the photo.
+ */
+const getPhotoObjectKey = (url?: string | null) => {
+  if (!url) return '';
+  return url.split('?')[0];
+};
+
+
 const dropImage = require('@/assets/images/home-drop.png');
 const onlineImportantImage = require('@/assets/images/driver-online-important.png');
 const offlineImportantImage = require('@/assets/images/driver-offline-important.png');
@@ -1030,7 +1043,15 @@ export default function HomeScreen() {
             : cachedStatus;
 
           if (isActive && cachedPhotoUrl) {
-            setProfilePhotoUrl(cachedPhotoUrl);
+            // Keep the current URL when it points at the same S3 object. The
+            // backend re-signs URLs on every response, and swapping the URI
+            // would bypass React Native's URL-keyed image cache (re-download).
+            setProfilePhotoUrl((prev) => {
+              if (!prev) return cachedPhotoUrl;
+              return getPhotoObjectKey(prev) === getPhotoObjectKey(cachedPhotoUrl)
+                ? prev
+                : cachedPhotoUrl;
+            });
           }
           if (hasActiveDriverDelivery) {
             const changedAtMs = cachedChangedAtMs || Date.now();
@@ -1110,7 +1131,16 @@ export default function HomeScreen() {
           }
 
           if (isActive) {
-            setProfilePhotoUrl(savedPhotoUrl || cachedPhotoUrl || null);
+            const nextPhotoUrl = savedPhotoUrl || cachedPhotoUrl || null;
+            setProfilePhotoUrl((prev) => {
+              const prevKey = getPhotoObjectKey(prev);
+              const nextKey = getPhotoObjectKey(nextPhotoUrl);
+              // Preserve the previously signed URL while it still points at
+              // the same object — every API response returns a freshly signed
+              // S3 URL (new X-Amz-Signature), and changing the URI each cycle
+              // forces the Image component to re-download the photo.
+              return prev && nextKey && prevKey === nextKey ? prev : nextPhotoUrl;
+            });
             setDriverStatus(resolvedStatus);
             setDriverStatusChangedAtMs(resolvedStatus === 'online' ? changedAtMs : 0);
           }

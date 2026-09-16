@@ -1,4 +1,4 @@
-import React, { useEffect, useState , useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -98,6 +98,61 @@ const isPdfFile = (uri: string | null) => {
   return Boolean(uri && /\.pdf($|\?)/i.test(uri));
 };
 
+// Matches names like "   edrtj (Open)" / "Tata Ace (Closed)" — base name + parenthesised variant.
+const VEHICLE_VARIANT_PATTERN = /^(.*?)\s*\(([^)]+)\)\s*$/;
+
+interface VehicleGroup {
+  id: string;
+  name: string;
+  capacity: string;
+  imageKey?: string | null;
+  imageUrl?: string | null;
+  variants: VehicleOption[];
+}
+
+/**
+ * Groups flat vehicle options into parent entries with variants.
+ * "Tata Ace (Open)" + "Tata Ace (Closed)" collapse into one "Tata Ace" row
+ * whose tap opens a nested popup. Everything else stays a direct option.
+ */
+const buildVehicleGroups = (options: VehicleOption[]): VehicleGroup[] => {
+  const groups: VehicleGroup[] = [];
+  const groupByName = new Map<string, VehicleGroup>();
+
+  for (const option of options) {
+    const match = option.name.match(VEHICLE_VARIANT_PATTERN);
+    const isVariant = Boolean(match && match[1].trim());
+    const baseName = isVariant && match ? match[1].trim() : option.name;
+
+    let group = groupByName.get(baseName);
+    if (!group) {
+      group = {
+        id: isVariant ? `${baseName}__group` : option.id,
+        name: baseName,
+        capacity: option.capacity,
+        imageKey: option.imageKey,
+        imageUrl: option.imageUrl,
+        variants: [],
+      };
+      groupByName.set(baseName, group);
+      groups.push(group);
+    }
+
+    if (isVariant) {
+      group.variants.push(option);
+    }
+  }
+
+  return groups.map((group) => {
+    // A lone variant has no one to be grouped with — flatten it back into a direct option.
+    if (group.variants.length === 1) {
+      const only = group.variants[0];
+      return { ...group, id: only.id, name: only.name, capacity: only.capacity, imageKey: only.imageKey, imageUrl: only.imageUrl, variants: [] };
+    }
+    return group;
+  });
+};
+
 export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   onContinue,
   onBack,
@@ -112,6 +167,7 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
   const [vehicleCapacity, setVehicleCapacity] = useState(initialData?.vehicleCapacity || '');
   const [selectedBodyType, setSelectedBodyType] = useState(initialData?.bodyType || '');
   const [showVehicleTypeModal, setShowVehicleTypeModal] = useState(false);
+  const [variantGroup, setVariantGroup] = useState<VehicleGroup | null>(null);
   const [vehicleOptions, setVehicleOptions] = useState<VehicleOption[]>([]);
   const [isLoadingVehicles, setIsLoadingVehicles] = useState(true);
   const [vehicleImageUrls, setVehicleImageUrls] = useState<Record<string, string>>({});
@@ -318,12 +374,46 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
     });
   };
 
-  const handleVehicleTypeSelect = (vehicle: VehicleOption) => {
+  const applyVehicleSelection = (vehicle: VehicleOption) => {
     setVehicleType(vehicle.name);
     setVehicleCapacity(vehicle.capacity);
     setSelectedVehicleImageUrl(vehicleImageUrls[vehicle.id] || null);
-    setShowVehicleTypeModal(false);
   };
+
+  const handleVehicleTypeSelect = (vehicle: VehicleOption) => {
+    applyVehicleSelection(vehicle);
+
+    // Auto-select the matching body type for variant names like "Tata Ace (Open)".
+    const variantMatch = vehicle.name.match(VEHICLE_VARIANT_PATTERN);
+    const variantLabel = (variantMatch?.[2] || '').toLowerCase();
+    if (variantLabel.includes('open')) {
+      setSelectedBodyType('open');
+    } else if (variantLabel.includes('clos')) {
+      setSelectedBodyType('closed');
+    }
+
+    setShowVehicleTypeModal(false);
+    setVariantGroup(null);
+  };
+
+  const handleVehicleGroupPress = (group: VehicleGroup) => {
+    if (group.variants.length > 0) {
+      setVariantGroup(group);
+      return;
+    }
+    handleVehicleTypeSelect({
+      id: group.id,
+      name: group.name,
+      capacity: group.capacity,
+      imageKey: group.imageKey || undefined,
+      imageUrl: group.imageUrl || undefined,
+    });
+  };
+
+  const vehicleGroups = useMemo(
+    () => buildVehicleGroups(vehicleOptions),
+    [vehicleOptions]
+  );
 
   const trimmedVehicleNumber = vehicleNumber.trim();
   const trimmedVehicleType = vehicleType.trim();
@@ -735,36 +825,111 @@ export const VehicleDetailsScreen: React.FC<VehicleDetailsScreenProps> = ({
                 contentContainerStyle={styles.modalOptionsContent}
                 showsVerticalScrollIndicator={false}
               >
-                {vehicleOptions.map((item) => (
-                  <Pressable
-                    key={item.id}
-                    style={styles.modalOption}
-                    onPress={() => handleVehicleTypeSelect(item)}
-                  >
-                    {vehicleImageUrls[item.id] ? (
-                      <Image
-                        source={{ uri: vehicleImageUrls[item.id] }}
-                        style={styles.modalOptionImage}
-                        resizeMode="contain"
-                      />
-                    ) : (
-                      <View style={styles.modalOptionImagePlaceholder}>
-                        <Text style={styles.modalOptionImagePlaceholderText}>
-                          {item.name.charAt(0).toUpperCase()}
-                        </Text>
+                {vehicleGroups.map((group) => {
+                  const groupImage =
+                    group.variants.length > 0
+                      ? vehicleImageUrls[group.variants[0].id]
+                      : vehicleImageUrls[group.id];
+                  return (
+                    <Pressable
+                      key={group.id}
+                      style={styles.modalOption}
+                      onPress={() => handleVehicleGroupPress(group)}
+                    >
+                      {groupImage ? (
+                        <Image
+                          source={{ uri: groupImage }}
+                          style={styles.modalOptionImage}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <View style={styles.modalOptionImagePlaceholder}>
+                          <Text style={styles.modalOptionImagePlaceholderText}>
+                            {group.name.charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.modalOptionTextGroup}>
+                        <Text style={styles.modalOptionText}>{group.name}</Text>
+                        {group.variants.length > 0 ? (
+                          <Text style={styles.modalOptionSubtext}>
+                            Tap to select body type
+                          </Text>
+                        ) : group.capacity ? (
+                          <Text style={styles.modalOptionSubtext}>{group.capacity}</Text>
+                        ) : null}
                       </View>
-                    )}
-                    <View style={styles.modalOptionTextGroup}>
-                      <Text style={styles.modalOptionText}>{item.name}</Text>
-                      {item.capacity ? (
-                        <Text style={styles.modalOptionSubtext}>{item.capacity}</Text>
+                      {group.variants.length > 0 ? (
+                        <Text style={styles.modalGroupChevron}>›</Text>
                       ) : null}
-                    </View>
-                  </Pressable>
-                ))}
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
             )}
          </Animated.View>
+        </Pressable>
+      </Modal>
+
+      {/* Vehicle Body Type Variant Modal (nested popup) */}
+      <Modal
+        visible={variantGroup !== null}
+        statusBarTranslucent
+        transparent
+        onRequestClose={() => setVariantGroup(null)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setVariantGroup(null)}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              { paddingBottom: Math.max(insets.bottom + 16, 32) },
+            ]}
+          >
+            <View style={styles.sheetHeader}>
+              <View style={styles.dragHandle} />
+            </View>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {variantGroup?.name || 'Select Body Type'}
+              </Text>
+            </View>
+            <ScrollView
+              style={styles.modalOptionsScroll}
+              contentContainerStyle={styles.modalOptionsContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {(variantGroup?.variants || []).map((variant) => (
+                <Pressable
+                  key={variant.id}
+                  style={styles.modalOption}
+                  onPress={() => handleVehicleTypeSelect(variant)}
+                >
+                  {vehicleImageUrls[variant.id] ? (
+                    <Image
+                      source={{ uri: vehicleImageUrls[variant.id] }}
+                      style={styles.modalOptionImage}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <View style={styles.modalOptionImagePlaceholder}>
+                      <Text style={styles.modalOptionImagePlaceholderText}>
+                        {variant.name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.modalOptionTextGroup}>
+                    <Text style={styles.modalOptionText}>{variant.name}</Text>
+                    {variant.capacity ? (
+                      <Text style={styles.modalOptionSubtext}>{variant.capacity}</Text>
+                    ) : null}
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
         </Pressable>
       </Modal>
       {alertModal}
@@ -1265,6 +1430,11 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     color: '#606060',
     lineHeight: 18,
+  },
+  modalGroupChevron: {
+    fontSize: 24,
+    color: Colors.neutral600,
+    marginLeft: 'auto',
   },
   modalEmptyText: {
     paddingVertical: Spacing.lg,

@@ -126,7 +126,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
     }
   };
 
-  const handleOTPVerify = async (result: { uid: string; phoneNumber: string; idToken: string; otp: string }) => {
+  const handleOTPVerify = async (result: { uid: string; phoneNumber: string; idToken: string; refreshToken?: string; otp: string }) => {
     // OTP verified successfully with Firebase
     console.log('✅ OTP verified with Firebase');
     console.log('User UID:', result.uid);
@@ -144,6 +144,9 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
         ['firebasePhoneNumber', result.phoneNumber || `+91${mobileNumber}`],
         ['firebaseIdToken', result.idToken],
       ]);
+      if (result.refreshToken) {
+        await AsyncStorage.setItem('firebaseRefreshToken', result.refreshToken);
+      }
       
       console.log('✅ Firebase UID stored in state');
       // Fetch the logged-in user's data from MongoDB (via backend) and log it as JSON.

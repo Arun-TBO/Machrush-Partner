@@ -59,6 +59,7 @@ type DeliveryRecord = {
   timestamps?: {
     createdAt?: DeliveryTimestamp;
     assignedAt?: DeliveryTimestamp;
+    arrivedAt?: DeliveryTimestamp;
     inTransitAt?: DeliveryTimestamp;
     deliveredAt?: DeliveryTimestamp;
   };
@@ -238,15 +239,41 @@ const getDeliveryCompletedMs = (delivery: DeliveryRecord) => {
   );
 };
 
+// A single delivery can legitimately keep a driver busy for a while, but a
+// span longer than this means the record is stale (a trip that sat assigned
+// for days), so the calculation falls back to the tightest marker instead of
+// inflating the week.
+const MAX_ACTIVE_DELIVERY_MS = 6 * 60 * 60 * 1000;
+
+// Active hours = the time the driver actually spent working on the trips that
+// count towards the weekly breakdown: from the earliest driver touchpoint of
+// the trip (booking created / trip accepted / reached pickup) through to
+// delivery. Measuring only the final in-transit leg under-counted the work
+// that goes into a delivery, so short trips rounded down to "0 m" even
+// though the driver had been working on them for minutes.
 const getActiveDurationMs = (delivery: DeliveryRecord) => {
   const deliveredAt = readTimestampMs(delivery.timestamps?.deliveredAt);
-  const startedAt = readTimestampMs(delivery.timestamps?.inTransitAt);
 
-  if (!deliveredAt || !startedAt || deliveredAt <= startedAt) {
+  if (!deliveredAt) {
     return 0;
   }
 
-  return deliveredAt - startedAt;
+  const startCandidates = [
+    readTimestampMs(delivery.timestamps?.createdAt),
+    readTimestampMs(delivery.timestamps?.assignedAt),
+    readTimestampMs(delivery.timestamps?.arrivedAt),
+  ].filter((value) => value > 0 && value < deliveredAt);
+
+  if (!startCandidates.length) {
+    return 0;
+  }
+
+  const earliest = Math.min(...startCandidates);
+  const latest = Math.max(...startCandidates);
+  const startedAt =
+    deliveredAt - earliest <= MAX_ACTIVE_DELIVERY_MS ? earliest : latest;
+
+  return Math.min(deliveredAt - startedAt, MAX_ACTIVE_DELIVERY_MS);
 };
 
 const formatDuration = (durationMs: number) => {
@@ -848,7 +875,12 @@ export default function MyDeliveriesScreen() {
       : listItems.filter((item) => item.status === filter);
 
   return (
-    <SafeAreaView style={styles.container}>
+    // Only the top inset belongs to this screen. The bottom inset is already
+    // consumed by the tab bar in `(tabs)/_layout.tsx` (its height includes
+    // `insets.bottom`), so letting SafeAreaView pad the bottom too painted a
+    // strip of the container colour (#dbe6f7) between the last delivery row and
+    // the tab bar.
+    <SafeAreaView style={styles.container} edges={['top']}>
       <TopSummary
         weekLabel={weekLabel}
         totalEarned={isLoading ? "..." : formatCurrency(weeklyTotalEarnings)}

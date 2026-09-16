@@ -17,6 +17,41 @@ let sessionInfo: string | null = null; // For Firebase REST API fallback
 declare const require: any;
 declare const __DEV__: boolean;
 
+/**
+ * Safely read the long-lived refresh token off a Firebase user object.
+ *
+ * IMPORTANT: on the native Firebase SDKs (@react-native-firebase/auth) the
+ * `User` object THROWS when you access `user.refreshToken`
+ * ("firebase.auth.User.refreshToken is unsupported by the native Firebase
+ * SDKs") — and being a throwing getter, optional chaining (`?.`) does NOT
+ * protect against it. So every access must be wrapped in try/catch.
+ *
+ * - Web SDK: exposes `user.refreshToken` directly.
+ * - Native SDK: no public refresh-token API; `toJSON()` is attempted as a
+ *   best-effort fallback and otherwise returns '' (the native SDK persists
+ *   and refreshes the session itself, so the missing token is harmless).
+ */
+const readUserRefreshToken = (user: any): string => {
+  try {
+    if (!user) return '';
+    if (typeof user.refreshToken === 'string' && user.refreshToken) {
+      return user.refreshToken;
+    }
+  } catch {
+    // Native RNFB User throws on `.refreshToken` — fall through to toJSON().
+  }
+  try {
+    if (user && typeof user.toJSON === 'function') {
+      const json = user.toJSON();
+      const rt = json?.stsTokenManager?.refreshToken;
+      if (typeof rt === 'string' && rt) return rt;
+    }
+  } catch {
+    // ignore
+  }
+  return '';
+};
+
 const EXPO_DEV_SESSION_INFO = 'expo-dev-otp-session';
 const EXPO_DEV_OTP = process.env.EXPO_PUBLIC_EXPO_DEV_OTP || '123456';
 
@@ -97,6 +132,7 @@ const verifyOTPViaExpoDev = async (otp: string): Promise<any> => {
     uid: user.uid,
     phoneNumber: currentPhoneNumber,
     idToken,
+    refreshToken: readUserRefreshToken(user),
     user,
   };
 };
@@ -296,6 +332,7 @@ export const verifyOTP = async (otp: string): Promise<any> => {
         uid: user.uid,
         phoneNumber: user.phoneNumber || currentPhoneNumber,
         idToken,
+        refreshToken: readUserRefreshToken(user),
         user,
       };
     }
@@ -332,6 +369,7 @@ export const verifyOTP = async (otp: string): Promise<any> => {
       uid: user.uid,
       phoneNumber: user.phoneNumber,
       idToken: idToken,
+      refreshToken: readUserRefreshToken(user),
       user: user,
     };
   } catch (error: any) {
