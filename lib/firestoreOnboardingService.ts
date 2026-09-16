@@ -1,5 +1,6 @@
 import { Platform, Image } from 'react-native';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { fetchWithTimeout } from './fetchWithTimeout';
 
 /**
  * Driver onboarding / profile service — backend-only (live MacrushBackend).
@@ -121,7 +122,7 @@ const blobToDataUrl = (blob: Blob) =>
 
 const localUriToDataUrl = async (uri: string) => {
   if (uri.startsWith('data:')) return uri;
-  const response = await fetch(uri);
+  const response = await fetchWithTimeout(uri);
   const blob = await response.blob();
   return blobToDataUrl(blob);
 };
@@ -272,7 +273,7 @@ const uploadOnboardingAssetsViaBackend = async (
     }
 
     // Send this single asset in its OWN request so the body never grows past the cap.
-    const response = await fetch(`${getApiBaseUrl()}/api/uploads/driver-onboarding-assets`, {
+    const response = await fetchWithTimeout(`${getApiBaseUrl()}/api/uploads/driver-onboarding-assets`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${idToken}`,
@@ -326,7 +327,7 @@ const uploadProfilePhotoViaBackend = async (
   imageData: string,
   idToken: string
 ) => {
-  const response = await fetch(`${getApiBaseUrl()}/api/uploads/profile-photo`, {
+  const response = await fetchWithTimeout(`${getApiBaseUrl()}/api/uploads/profile-photo`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${idToken}`,
@@ -354,7 +355,7 @@ const submitDriverReportViaBackend = async (
     )
   ).filter(Boolean) as string[];
 
-  const response = await fetch(`${getApiBaseUrl()}/api/uploads/driver-report`, {
+  const response = await fetchWithTimeout(`${getApiBaseUrl()}/api/uploads/driver-report`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${idToken}`,
@@ -386,7 +387,7 @@ const storeDriverViaBackend = async (
   data: Record<string, any>,
   idToken?: string | null
 ) => {
-  const response = await fetch(`${getApiBaseUrl()}/api/firestore/drivers`, {
+  const response = await fetchWithTimeout(`${getApiBaseUrl()}/api/firestore/drivers`, {
     method: 'POST',
     headers: {
       ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
@@ -407,7 +408,7 @@ const updateDriverViaBackend = async (
   patch: Record<string, unknown>,
   idToken?: string | null
 ) => {
-  const response = await fetch(`${getApiBaseUrl()}/api/firestore/drivers/${encodeURIComponent(uid)}`, {
+  const response = await fetchWithTimeout(`${getApiBaseUrl()}/api/firestore/drivers/${encodeURIComponent(uid)}`, {
     method: 'PUT',
     headers: {
       ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
@@ -433,7 +434,7 @@ const setDriverAvailabilityStateViaBackend = async (
   changedAt: string,
   idToken: string
 ) => {
-  const response = await fetch(`${getApiBaseUrl()}/api/drivers/${encodeURIComponent(uid)}/availability-state`, {
+  const response = await fetchWithTimeout(`${getApiBaseUrl()}/api/drivers/${encodeURIComponent(uid)}/availability-state`, {
     method: 'PATCH',
     headers: {
       Authorization: `Bearer ${idToken}`,
@@ -454,7 +455,7 @@ const createDriverAvailabilityLogViaBackend = async (
   changedAt: string,
   idToken: string
 ) => {
-  const response = await fetch(`${getApiBaseUrl()}/api/drivers/${encodeURIComponent(uid)}/availability-logs`, {
+  const response = await fetchWithTimeout(`${getApiBaseUrl()}/api/drivers/${encodeURIComponent(uid)}/availability-logs`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${idToken}`,
@@ -473,7 +474,7 @@ const getDriverAvailabilityStateViaBackend = async (
   uid: string,
   idToken: string
 ): Promise<DriverAvailabilityState | null> => {
-  const response = await fetch(`${getApiBaseUrl()}/api/drivers/${encodeURIComponent(uid)}/availability-state`, {
+  const response = await fetchWithTimeout(`${getApiBaseUrl()}/api/drivers/${encodeURIComponent(uid)}/availability-state`, {
     headers: {
       Authorization: `Bearer ${idToken}`,
     },
@@ -815,7 +816,7 @@ export const generateDriverDocumentPreview = async (
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
-    const response = await fetch(`${getApiBaseUrl()}/api/uploads/driver-doc-preview`, {
+    const response = await fetchWithTimeout(`${getApiBaseUrl()}/api/uploads/driver-doc-preview`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ uid, field }),
@@ -843,7 +844,7 @@ export const getDriverProfile = async (
       ? `${apiBase}/api/drivers/by-phone/${encodeURIComponent(uidOrPhone)}`
       : `${apiBase}/api/firestore/drivers/${encodeURIComponent(uidOrPhone)}`;
 
-    const response = await fetch(url, { headers, cache: 'no-cache' });
+    const response = await fetchWithTimeout(url, { headers, cache: 'no-cache' });
     if (response.ok) {
       const body = await response.json().catch(() => null);
       if (body?.success && body.data) {
