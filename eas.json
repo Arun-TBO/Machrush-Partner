@@ -8,11 +8,11 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "http://machrush-alb-1112349470.us-east-1.elb.amazonaws.com",
+        "EXPO_PUBLIC_API_BASE_URL": "https://d1u6yapqtcrtji.cloudfront.net",
         "EXPO_PUBLIC_API_TIMEOUT": "30000",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "machrush-01",
         "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDdiLRU5n5V1tmZLdebtCnQmWmmgqxkU5I",
-        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:698880636699:android:c63af1a3ec36067c27c5be",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:698880636699:android:a170da7db45f6c0b27c5be",
         "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "698880636699",
         "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDdiLRU5n5V1tmZLdebtCnQmWmmgqxkU5I",
         "EXPO_PUBLIC_APP_ENV": "development",
@@ -22,11 +22,11 @@
     },
     "preview": {
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "http://machrush-alb-1112349470.us-east-1.elb.amazonaws.com",
+        "EXPO_PUBLIC_API_BASE_URL": "https://d1u6yapqtcrtji.cloudfront.net",
         "EXPO_PUBLIC_API_TIMEOUT": "30000",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "machrush-01",
         "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDdiLRU5n5V1tmZLdebtCnQmWmmgqxkU5I",
-        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:698880636699:android:c63af1a3ec36067c27c5be",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:698880636699:android:a170da7db45f6c0b27c5be",
         "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "698880636699",
         "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDdiLRU5n5V1tmZLdebtCnQmWmmgqxkU5I",
         "EXPO_PUBLIC_APP_ENV": "development",
@@ -41,11 +41,11 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "http://machrush-alb-1112349470.us-east-1.elb.amazonaws.com",
+        "EXPO_PUBLIC_API_BASE_URL": "https://d1u6yapqtcrtji.cloudfront.net",
         "EXPO_PUBLIC_API_TIMEOUT": "30000",
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "machrush-01",
         "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDdiLRU5n5V1tmZLdebtCnQmWmmgqxkU5I",
-        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:698880636699:android:c63af1a3ec36067c27c5be",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:698880636699:android:a170da7db45f6c0b27c5be",
         "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "698880636699",
         "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDdiLRU5n5V1tmZLdebtCnQmWmmgqxkU5I",
         "EXPO_PUBLIC_APP_ENV": "production",
