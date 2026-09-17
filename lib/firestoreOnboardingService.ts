@@ -833,7 +833,8 @@ export const generateDriverDocumentPreview = async (
 
 export const getDriverProfile = async (
   uidOrPhone: string,
-  idToken?: string | null
+  idToken?: string | null,
+  throwOnError = false
 ): Promise<OnboardingData | null> => {
   try {
     const apiBase = getApiBaseUrl();
@@ -851,9 +852,13 @@ export const getDriverProfile = async (
         return body.data as OnboardingData;
       }
     }
+    if (throwOnError && response.status !== 404) {
+      throw new Error('Unable to load driver profile');
+    }
     return null;
   } catch (error) {
     console.error('Error fetching driver profile:', error);
+    if (throwOnError) throw error;
     return null;
   }
 };

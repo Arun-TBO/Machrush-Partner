@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const verifiedImage = require('@/assets/images/verified.png');
 const docRejectImage = require('@/assets/images/DocReject.png');
+const underReviewImage = require('@/assets/images/under-review.png');
 const backImage = require('@/assets/images/profile/back.png');
 const supportCallImage = require('@/assets/images/profile/support-call.png');
 
@@ -233,7 +234,11 @@ export const DocumentsVerificationScreen: React.FC<DocumentsVerificationScreenPr
                   resizeMode="contain"
                 />
               ) : (
-                <MaterialIcons name="plagiarism" size={120} color="#1b7cff" />
+                <Image
+                  source={underReviewImage}
+                  style={styles.underReviewImage}
+                  resizeMode="contain"
+                />
               )}
               <Text style={styles.mainTitle}>{title}</Text>
               <Text style={styles.mainDescription}>{description}</Text>
@@ -425,6 +430,10 @@ const styles = StyleSheet.create({
     height: 80,
   },
   rejectedImage: {
+    width: 96,
+    height: 96,
+  },
+  underReviewImage: {
     width: 96,
     height: 96,
   },

@@ -38,6 +38,7 @@ const customerAvatarImage = require('@/assets/images/delivery/customer-avatar.jp
 const tripCompletedBanknoteImage = require('@/assets/images/delivery/trip-completed-banknote.png');
 const tripCompletedTickImage = require('@/assets/images/delivery/trip-completed-tick.png');
 const trackingLocationImage = require('@/assets/images/profile/Location.png');
+const pickAndDropIcon = require('@/assets/images/pickAndDropIcon.png');
 const helpImage = require('@/assets/images/profile/help.png');
 const supportCallImage = require('@/assets/images/profile/phone.png');
 const otpResetImage = require('@/assets/images/profile/mdi_password-reset.png');
@@ -808,21 +809,26 @@ function TopNav({
   );
 }
 
-function RouteRow({ title, address }: { title: string; address: string }) {
-  const { primaryAddress, secondaryAddress } = getAddressParts(address);
-
+function RoutePoint({
+  title,
+  time,
+  address,
+}: {
+  title: string;
+  time: string;
+  address: string;
+}) {
   return (
-    <View style={styles.routeRow}>
-  
-      <Text style={styles.routeTitle}>{title}</Text>
-      <Text style={styles.routeAddress} numberOfLines={2}>
-        {primaryAddress}
-      </Text>
-      {secondaryAddress ? (
-        <Text style={styles.routeSubAddress} numberOfLines={2}>
-          {secondaryAddress}
+    <View style={styles.routePoint}>
+      <View style={styles.routeTextWrap}>
+        <View style={styles.routeMetaRow}>
+          <Text style={styles.routeTitle}>{title}</Text>
+          <Text style={styles.routeTime}>{time}</Text>
+        </View>
+        <Text style={styles.routeAddress} numberOfLines={1}>
+          {address}
         </Text>
-      ) : null}
+      </View>
     </View>
   );
 }
@@ -2236,6 +2242,14 @@ export default function AcceptedTripScreen() {
   const dropDetailTitle = dropRouteSummary?.distanceText
     ? `Drop ${dropRouteSummary.distanceText}`
     : 'Drop';
+  const pickupDetailTimeLabel = getApproxDurationLabel(
+    pickupRouteSummary?.durationText,
+    pickupEta
+  );
+  const dropDetailTimeLabel = getApproxDurationLabel(
+    dropRouteSummary?.durationText,
+    dropEta
+  );
 
   React.useEffect(() => {
     let isActive = true;
@@ -2638,24 +2652,20 @@ export default function AcceptedTripScreen() {
           </View>
 
           <View style={styles.routeBox}>
-            <View style={styles.routeTimeline}>
-              <View style={styles.routeMarkerWrap}>
-                <View style={styles.routeMarkerHalo}>
-                  <View style={styles.routeMarkerDot} />
-                </View>
-              </View>
-              <View style={styles.routeConnector} />
-              <View style={styles.routeMarkerWrap}>
-                <View style={styles.routeMarkerHalo}>
-                  <Ionicons name="caret-down" size={rs(16)} color="#1565d9" />
-                </View>
-              </View>
-            </View>
+            <Image source={pickAndDropIcon} style={styles.routeIcon} />
 
-            <View style={styles.routeContent}>
-              <RouteRow title="Pickup" address={pickupAddress} />
+            <View style={styles.routeLineGroup}>
+              <RoutePoint
+                title="To Pickup"
+                time={pickupDetailTimeLabel}
+                address={pickupAddress}
+              />
               <View style={styles.routeSeparator} />
-              <RouteRow title={dropDetailTitle} address={dropAddress} />
+              <RoutePoint
+                title={dropDetailTitle}
+                time={dropDetailTimeLabel}
+                address={dropAddress}
+              />
             </View>
           </View>
         </View>
@@ -3557,63 +3567,48 @@ otpBox: {
     letterSpacing: -0.5,
   },
   routeBox: {
-    position: 'relative',
-    backgroundColor: '#eff2f6',
+
     width: '100%',
+    borderWidth: 1,
+    borderColor: '#bbbbbb',
     borderRadius: rs(12),
-    padding: rs(12),
-    overflow: 'hidden',
+    backgroundColor: '#eff2f6',
+    padding : rs(2),
     flexDirection: 'row',
     alignItems: 'center',
-    gap: rs(24),
+    justifyContent: 'flex-start',
+    gap : rs(14)
   },
-  routeTimeline: {
-    width: rs(20),
-    alignSelf: 'stretch',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: vs(22),
-  },
-  routeContent: {
+  routeLineGroup: {
     flex: 1,
     minWidth: 0,
+    flexShrink: 1,
   },
-  routeRow: {
-    minHeight: vs(64),
-    justifyContent: 'center',
-    width: '90%'
+  routePoint: {
+    marginBottom : vs(5),
+    minHeight: vs(54),
+    marginTop : vs(5),
+    flexShrink: 1,
+    width: '100%',
   },
-  routeMarkerWrap: {
-    width: rs(20),
-    height: rs(20),
+  routeIcon: {
+    width: rs(30, 24, 32),
+    height : '65%',
+    paddingRight : 30
+  },
+  routeTextWrap: {
+    padding : rs(2),
+    minWidth: 0,
+    overflow: 'hidden',
+    borderColor : '#0000',
+    borderWidth : 1
+  },
+  routeMetaRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-  },
-  routeMarkerHalo: {
-    width: rs(20),
-    height: rs(20),
-    borderRadius: rs(10),
-    backgroundColor: '#9fc9ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  routeMarkerDot: {
-    width: rs(10),
-    height: rs(10),
-    borderRadius: rs(5),
-    backgroundColor: '#0055cc',
-  },
-  dropChevron: {
-    position: 'absolute',
-  },
-  routeConnector: {
-    flex: 1,
-    width: rs(2),
-    minHeight: vs(24),
-    marginVertical: vs(2),
-    borderRadius: rs(1),
-    backgroundColor: '#9fc9ff',
+    gap: rs(10),
+    flexWrap: 'wrap',
+    minWidth: 0,
   },
   routeCopy: {
    
@@ -3631,36 +3626,36 @@ otpBox: {
   routeTitle: {
     minWidth: 0,
     flexShrink: 1,
-    fontFamily: 'Poppins_500Medium',
-    fontSize: fs(16),
     color: '#1c1c1c',
-    letterSpacing: -0.5,
-  },
-  routeTime: {
-    flexShrink: 1,
     fontFamily: 'Poppins_500Medium',
-    fontSize: fs(12, 11, 13),
-    color: '#05c',
-  },
-  routeAddress: {
-    fontFamily: 'Poppins_400Regular',
-    fontSize: fs(16),
-    color: '#616161',
-    lineHeight: fs(24),
-   
-  },
-  routeSubAddress: {
-    fontFamily: 'Poppins_400Regular',
-    fontSize: fs(12, 11, 13),
-    color: '#616161',
+    fontSize: fs(12),
+    fontWeight: '500',
     lineHeight: fs(18),
   },
+  routeTime: {
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#0055cc',
+    fontFamily: 'Poppins_500Medium',
+    fontSize: fs(12),
+    fontWeight: '500',
+    lineHeight: fs(14),
+  },
+  routeAddress: {
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#616161',
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 16,
+    fontWeight: '400',
+  },
   routeSeparator: {
-    height: vs(1),
+    height: 1,
     borderTopWidth: 1,
     borderStyle: 'dashed',
     borderColor: '#d6d6d6',
-    width : '95%'
+     width: '100%',
   },
   fareSection: {
     paddingHorizontal: rs(8),
@@ -3809,11 +3804,7 @@ otpBox: {
     color: '#d00416',
     textAlign: 'center',
   },
-  routeIcon: {
-    width: rs(30),
-    height: '75%',
-  },
- cursor: {
+  cursor: {
   width: rs(2),
   height: vs(24),
   backgroundColor: '#1565D9',

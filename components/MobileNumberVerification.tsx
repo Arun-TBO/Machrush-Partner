@@ -19,42 +19,45 @@ import { DocumentsVerificationScreen } from './DocumentsVerificationScreen';
 import { SuspendedScreen } from './SuspendedScreen';
 import {
   storeOnboardingData,
-  getVerificationStatus,
   getDriverProfile,
   OnboardingData,
   logOnboardingFieldSizes,
 } from '@/lib/firestoreOnboardingService'; // Real Firebase Firestore
 
 import { sendOTP } from '@/lib/firebaseAuthService'; // Real Firebase Auth
+import { getDriverEntryScreen, OnboardingSession } from '@/lib/driverEntry';
+import { refreshSession } from '@/lib/session';
 
 import { fs, hit, rs, vs } from '@/lib/responsive';
 
 interface MobileNumberVerificationProps {
   onVerify?: (mobileNumber: string) => void;
   onBack?: () => void;
+  initialSession?: OnboardingSession;
 }
 
 export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> = ({
   onVerify,
   onBack,
+  initialSession,
 }) => {
-  const [mobileNumber, setMobileNumber] = useState('');
+  const [mobileNumber, setMobileNumber] = useState(initialSession?.phoneNumber.replace(/^\+91/, '') || '');
   const [isLoading, setIsLoading] = useState(false);
   const [showOTP, setShowOTP] = useState(false);
-  const [showDriverDetails, setShowDriverDetails] = useState(false);
+  const [showDriverDetails, setShowDriverDetails] = useState(initialSession?.screen === 'details');
   const [showVehicleDetails, setShowVehicleDetails] = useState(false);
   const [showBankDetails, setShowBankDetails] = useState(false);
-  const [showVerification, setShowVerification] = useState(false);
-  const [showSuspended, setShowSuspended] = useState(false);
+  const [showVerification, setShowVerification] = useState(initialSession?.screen === 'review');
+  const [showSuspended, setShowSuspended] = useState(initialSession?.screen === 'suspended');
 
   // Collect data from all screens
   const [driverData, setDriverData] = useState<any>(null);
   const [vehicleData, setVehicleData] = useState<any>(null);
   const [bankData, setBankData] = useState<any>(null);
-  
+
   // Firebase UID after OTP verification
-  const [firebaseUid, setFirebaseUid] = useState<string | null>(null);
-  const [firebaseIdToken, setFirebaseIdToken] = useState<string | null>(null);
+  const [firebaseUid, setFirebaseUid] = useState<string | null>(initialSession?.uid || null);
+  const [firebaseIdToken, setFirebaseIdToken] = useState<string | null>(initialSession?.idToken || null);
 
   const insets = useSafeAreaInsets();
   const { alertModal, showAlert } = useAppAlert();
@@ -86,22 +89,22 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
       // Send OTP via Firebase
       const phoneNumberWithCode = `+91${mobileNumber}`;
       console.log('🔄 Sending OTP to:', phoneNumberWithCode);
-      
+
       await sendOTP(phoneNumberWithCode);
-      
+
       console.log('✅ OTP sent successfully, showing verification screen');
       // Show OTP verification screen
       setShowOTP(true);
     } catch (error: any) {
       console.error('❌ Error sending OTP:', error);
-      
+
       // Show user-friendly error message
       let errorMessage = 'Failed to send verification code. Please try again.';
-      
+
       if (error.message) {
         errorMessage = error.message;
       }
-      
+
       showAlert(
         'Verification Failed',
         errorMessage,
@@ -135,7 +138,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
 
     try {
       setIsLoading(false);
-      
+
       // Store Firebase UID for later use
       setFirebaseUid(result.uid);
       setFirebaseIdToken(result.idToken);
@@ -147,22 +150,8 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
       if (result.refreshToken) {
         await AsyncStorage.setItem('firebaseRefreshToken', result.refreshToken);
       }
-      
-      console.log('✅ Firebase UID stored in state');
-      // Fetch the logged-in user's data from MongoDB (via backend) and log it as JSON.
-      // Requires EXPO_PUBLIC_API_BASE_URL to point at the MachrushBackend (MongoDB).
-      try {
-        const mongoApiBase = (process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
-        const phoneForMongo = result.phoneNumber || `+91${mobileNumber}`;
-        const mongoResponse = await fetch(
-          `${mongoApiBase}/api/drivers/by-phone/${encodeURIComponent(phoneForMongo)}`,
-          { headers: { Authorization: `Bearer ${result.idToken}` } }
-        );
-        const mongoBody = await mongoResponse.json().catch(() => null);
-        console.log('MongoDB driver data (on OTP verify):', JSON.stringify(mongoBody, null, 2));
-      } catch (mongoError) {
-        console.warn('Could not fetch MongoDB driver data on OTP:', mongoError);
-      }
+
+      // Resolve the saved driver profile before allowing access to Home.
 
 
       const lookupIds = Array.from(
@@ -179,23 +168,19 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
 
       console.log('Checking existing driver with:', lookupIds);
 
-      let verificationStatus = null;
+      let profile: OnboardingData | null = null;
       for (const lookupId of lookupIds) {
-        verificationStatus = await getVerificationStatus(lookupId, result.idToken);
-        if (verificationStatus) {
-          console.log(`Existing driver found using: ${lookupId}`);
-          break;
-        }
+        profile = await getDriverProfile(lookupId, result.idToken, true);
+        if (profile) break;
       }
+      const entryScreen = getDriverEntryScreen(profile);
 
-      if (verificationStatus?.status === 'verified') {
-        console.log('✅ Existing driver already verified, going to app');
+      if (entryScreen === 'home') {
         onVerify?.(result.phoneNumber);
         return;
       }
 
-      if (verificationStatus?.status === 'suspended') {
-        console.log('Blocked driver account detected; showing suspended screen');
+      if (entryScreen === 'suspended') {
         setShowSuspended(true);
         setShowOTP(false);
         setShowVerification(false);
@@ -205,19 +190,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
         return;
       }
 
-      if (verificationStatus?.status === 'pending') {
-        console.log('⏳ Existing driver verification pending, showing review screen');
-        setShowVerification(true);
-        setShowOTP(false);
-        return;
-      }
-
-      if (verificationStatus?.status === 'rejected') {
-        console.log('Existing driver rejected, showing review screen with admin message');
-        // Silently prefetch the previously submitted data so that when the
-        // driver taps "Re-upload Documents", the forms come prefilled and
-        // only the rejected details need to be corrected.
-        loadExistingProfileData(result.uid, result.idToken, true);
+      if (entryScreen === 'review') {
         setShowVerification(true);
         setShowOTP(false);
         return;
@@ -271,7 +244,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
         'createdAt' | 'updatedAt' | 'submittedAt'
       > = {
         phoneNumber: `+91${mobileNumber}`,
-        
+
         // Driver details
         fullName: driverData?.fullName || '',
         photoUri: driverData?.photoUri || '',
@@ -303,12 +276,17 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
 
       console.log(`📝 Storing onboarding data to Firestore using UID: ${firebaseUid}`);
 
-      // Store to Firestore using Firebase UID
+      // Onboarding may stay open longer than the one-hour ID token lifetime.
+      const session = await refreshSession();
+      if (session.uid !== firebaseUid || session.sessionExpired || !session.idToken) {
+        throw new Error('Your session could not be refreshed. Please verify your phone again.');
+      }
+      setFirebaseIdToken(session.idToken);
       const result = await storeOnboardingData(
         firebaseUid,
         `+91${mobileNumber}`,
         onboardingData,
-        firebaseIdToken || undefined
+        session.idToken
       );
 
       if (!result.success) {
@@ -467,7 +445,9 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
         onContinue={handleDriverDetailsSubmit}
         onBack={() => {
           setShowDriverDetails(false);
-          setShowOTP(true);
+          // A restored session has no active OTP challenge. Return to phone
+          // entry if the driver wants to change their number.
+          setShowOTP(!initialSession);
         }}
       />
     ) : showOTP ? (
@@ -533,7 +513,7 @@ export const MobileNumberVerification: React.FC<MobileNumberVerificationProps> =
         </View>
 
         <View style={styles.navigation}>
-         
+
         </View>
       </Animated.View>
     );
@@ -551,7 +531,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#eff2f6', // neutral bg-color from design
     paddingBottom: 0,
-    
+
   },
 
   // Status Bar
@@ -564,7 +544,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
   },
- 
+
   // Content Container
   contentContainer: {
     flex: 1,

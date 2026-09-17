@@ -28,7 +28,7 @@ const fs = rf;
 
 interface OTPVerificationProps {
   mobileNumber: string;
-  onVerify?: (result: { uid: string; phoneNumber: string; idToken: string; otp: string }) => void;
+  onVerify?: (result: { uid: string; phoneNumber: string; idToken: string; refreshToken?: string; otp: string }) => void;
   onChangeNumber?: () => void;
   onResendOTP?: () => void;
 }
@@ -117,20 +117,21 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
     setIsLoading(true);
     try {
       console.log('🔐 Verifying OTP with Firebase:', otpString);
-      
+
       // Verify OTP with Firebase
       const result = await verifyOTP(otpString);
-      
+
       console.log('✅ OTP verified successfully');
       console.log('User UID:', result.uid);
       console.log('Phone Number:', result.phoneNumber);
-      
+
       // Call the parent's onVerify callback with complete result
       if (onVerify) {
         onVerify({
           uid: result.uid,
           phoneNumber: result.phoneNumber,
           idToken: result.idToken,
+          refreshToken: result.refreshToken,
           otp: otpString,
         });
       }
@@ -151,19 +152,19 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
   const handleResendOTP = async () => {
     setCanResend(false);
     setResendCount(resendCount + 1);
-    
+
     try {
       console.log('📱 Resending OTP...');
-      
+
       // Call resendOTP function from Firebase service
       await resendOTP();
-      
+
       console.log('✅ OTP resent successfully');
-      
+
       // Reset OTP input
       setOtp(['', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
-      
+
       if (onResendOTP) {
         onResendOTP();
       }
@@ -212,7 +213,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
                   styles.otpInput,
                   { width: otpInputSize },
                   digit && styles.otpInputFilled,
-                  
+
                 ]}
                 value={digit}
                 onChangeText={(value) => handleOtpInput(index, value)}
@@ -224,11 +225,11 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
                 keyboardType="number-pad"
                 maxLength={1}
                 editable={!isLoading}
-                
+
                 placeholderTextColor={Colors.neutral700}
                  textAlign = 'center'
                  textAlignVertical = 'center' // Android
-               
+
 
               />
             ))}
@@ -270,7 +271,7 @@ export const OTPVerification: React.FC<OTPVerificationProps> = ({
         </View>
       </View>
 
-     
+
       {alertModal}
     </Animated.View>
   );
@@ -280,7 +281,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#eff2f6', // neutral bg-color from design
-   
+
   },
 
   // Content Container
@@ -296,7 +297,7 @@ const styles = StyleSheet.create({
   },
   compactContent: {
     gap: 32,
-   
+
   },
 
   // Header Container
@@ -320,7 +321,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    
+
   },
   description: {
     flexShrink: 1,
@@ -349,7 +350,7 @@ const styles = StyleSheet.create({
     gap: 8,
     justifyContent: 'flex-start',
     alignItems: 'center',
-    
+
   },
 
   // OTP Input Fields

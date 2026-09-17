@@ -5,14 +5,17 @@ import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import 'react-native-reanimated';
 import { useEffect, useState } from 'react';
-import { Text, TextInput } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { WalkthroughScreen } from '@/components/WalkthroughScreen';
 import { SuspendedScreen } from '@/components/SuspendedScreen';
-import { getVerificationStatus } from '@/lib/firestoreOnboardingService';
+import { MobileNumberVerification } from '@/components/MobileNumberVerification';
+import { getDriverEntryScreen, OnboardingSession } from '@/lib/driverEntry';
+import { refreshSession } from '@/lib/session';
+import { getDriverProfile, getVerificationStatus } from '@/lib/firestoreOnboardingService';
 
 
 
@@ -70,6 +73,8 @@ export default function RootLayout() {
     Poppins_900Black: require('../Poppins/Poppins-Black.ttf'),
   });
   const [showWalkthrough, setShowWalkthrough] = useState(true);
+  const [resumeSession, setResumeSession] = useState<OnboardingSession | null>(null);
+  const [startupError, setStartupError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isAccountSuspended, setIsAccountSuspended] = useState(false);
 
@@ -114,41 +119,43 @@ export default function RootLayout() {
   }, [isLoading, pathname, showWalkthrough]);
 
   const checkWalkthroughStatus = async () => {
+    setIsLoading(true);
+    setStartupError(false);
+    setShowWalkthrough(true);
+    setResumeSession(null);
     try {
-      // Show the walkthrough only the first time — after that the saved flag
-      // in AsyncStorage keeps returning drivers straight into the app so a
-      // restart never looks like an automatic logout.
-      const completed = await AsyncStorage.getItem('walkthroughCompleted');
-      if (completed === 'true') {
+      // Firebase proves phone ownership, not completion of driver onboarding.
+      // Ignore legacy walkthroughCompleted values (Skip used to set this flag).
+      const session = await refreshSession();
+      if (!session.uid || session.sessionExpired) return;
+      if (!session.idToken) throw new Error('Unable to restore driver session');
+      const phoneNumber = await AsyncStorage.getItem('firebasePhoneNumber') || '';
+      let profile = await getDriverProfile(session.uid, session.idToken, true);
+      if (!profile && phoneNumber) {
+        profile = await getDriverProfile(phoneNumber, session.idToken, true);
+      }
+      const screen = getDriverEntryScreen(profile);
+      setIsAccountSuspended(screen === 'suspended');
+      if (screen === 'home') {
         setShowWalkthrough(false);
-      } else {
-        setShowWalkthrough(true);
+      } else if (phoneNumber || profile?.phoneNumber) {
+        setResumeSession({
+          uid: session.uid,
+          idToken: session.idToken,
+          phoneNumber: profile?.phoneNumber || phoneNumber,
+          screen,
+        });
       }
     } catch (error) {
-      console.error('Error checking walkthrough status:', error);
-      setShowWalkthrough(true);
+      console.error('Error checking driver onboarding:', error);
+      setStartupError(true);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleWalkthroughComplete = async () => {
-    try {
-      await AsyncStorage.setItem('walkthroughCompleted', 'true');
-      setShowWalkthrough(false);
-    } catch (error) {
-      console.error('Error saving walkthrough status:', error);
-      setShowWalkthrough(false);
-    }
-  };
-
-  const handleWalkthroughSkip = async () => {
-    try {
-      await AsyncStorage.setItem('walkthroughCompleted', 'true');
-    } catch (error) {
-      console.error('Error saving walkthrough status:', error);
-    }
-  };
+  // Recheck the backend even when a child requests access to the app.
+  const handleWalkthroughComplete = () => checkWalkthroughStatus();
 
   if (isLoading || !fontsLoaded) {
     return null; // Or show a loading screen
@@ -162,13 +169,30 @@ export default function RootLayout() {
     );
   }
 
+  if (startupError) {
+    return (
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: APP_BACKGROUND }}>
+          <Text>Unable to check your onboarding status. Please check your connection and try again.</Text>
+          <Pressable accessibilityRole="button" onPress={checkWalkthroughStatus} style={{ paddingVertical: 20 }}>
+            <Text style={{ color: '#0055cc' }}>Try again</Text>
+          </Pressable>
+        </View>
+      </SafeAreaProvider>
+    );
+  }
+
   if (showWalkthrough) {
     return (
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-        <WalkthroughScreen
-          onComplete={handleWalkthroughComplete}
-          onSkip={handleWalkthroughSkip}
-        />
+        {resumeSession ? (
+          <MobileNumberVerification
+            initialSession={resumeSession}
+            onVerify={handleWalkthroughComplete}
+          />
+        ) : (
+          <WalkthroughScreen onComplete={handleWalkthroughComplete} />
+        )}
       </SafeAreaProvider>
     );
   }
